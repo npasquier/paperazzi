@@ -23,12 +23,15 @@ export interface Paper {
   authors: string[];
   publication_year: number;
   journal_name: string;
+  cited_by_count: number;
+  doi?: string;
+  pdf_url?: string;
+  abstract?: any;
 }
 
-
 export interface SelectedAuthor {
-  id: string;          
-  name: string;        
+  id: string;
+  name: string;
   orcid?: string;
   worksCount?: number;
   institution?: string;

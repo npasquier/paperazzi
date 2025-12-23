@@ -56,6 +56,17 @@ export default function AuthorModal({
       onRequestClose={onClose}
       contentLabel='Select authors'
       ariaHideApp={false}
+      style={{
+        content: {
+          top: '50%',
+          left: '50%',
+          right: 'auto',
+          bottom: 'auto',
+          marginRight: '-50%',
+          transform: 'translate(-50%, -50%)',
+          width: '600px',
+        },
+      }}
     >
       <h2 className='font-semibold mb-2'>Add authors</h2>
 
