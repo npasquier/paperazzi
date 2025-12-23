@@ -24,3 +24,19 @@ export interface Paper {
   publication_year: number;
   journal_name: string;
 }
+
+
+export interface SelectedAuthor {
+  id: string;          
+  name: string;        
+  orcid?: string;
+  worksCount?: number;
+  institution?: string;
+}
+
+export interface Filters {
+  journals: SelectedJournal[];
+  authors: SelectedAuthor[];
+  dateFrom: string;
+  dateTo: string;
+}

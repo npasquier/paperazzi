@@ -6,6 +6,7 @@ import SearchBar from './SearchBar';
 import SearchResults from './SearchResults';
 import JournalModal from './JournalModal';
 import { Filters } from '../types/interfaces';
+import AuthorModal from './AuthorModal';
 
 export default function PaperazziApp() {
   const [query, setQuery] = useState('');
@@ -16,6 +17,7 @@ export default function PaperazziApp() {
     dateTo: '',
   });
   const [showJournalModal, setShowJournalModal] = useState(false);
+  const [showAuthorModal, setShowAuthorModal] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState(0);
 
   return (
@@ -24,6 +26,7 @@ export default function PaperazziApp() {
         filters={filters}
         setFilters={setFilters}
         openJournalModal={() => setShowJournalModal(true)}
+        openAuthorModal={() => setShowAuthorModal(true)}
       />
 
       <div className='flex-1 p-4'>
@@ -39,6 +42,21 @@ export default function PaperazziApp() {
           trigger={triggerSearch}
         />
       </div>
+
+      <AuthorModal
+        isOpen={showAuthorModal}
+        selectedAuthors={filters.authors}
+        onClose={() => setShowAuthorModal(false)}
+        onAddAuthor={(author) =>
+          setFilters((prev) => ({
+            ...prev,
+            authors: [
+              ...prev.authors.filter((a) => a.id !== author.id),
+              author,
+            ],
+          }))
+        }
+      />
 
       <JournalModal
         isOpen={showJournalModal}

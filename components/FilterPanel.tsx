@@ -21,22 +21,21 @@ interface FilterPanelProps {
     }>
   >;
   openJournalModal: () => void;
+  openAuthorModal: () => void;
 }
-
-
 
 export default function FilterPanel({
   filters,
   setFilters,
   openJournalModal,
+  openAuthorModal,
 }: FilterPanelProps) {
-
   const removeJournal = (issn: string) => {
-  setFilters((prev) => ({
-    ...prev,
-    journals: prev.journals.filter((j) => j.issn !== issn),
-  }));
-};
+    setFilters((prev) => ({
+      ...prev,
+      journals: prev.journals.filter((j) => j.issn !== issn),
+    }));
+  };
 
   return (
     <div className='w-64 border-r border-gray-300 p-4 flex flex-col'>
@@ -72,26 +71,42 @@ export default function FilterPanel({
 
       {/* Authors */}
       <div className='mb-4'>
-        <strong>Authors:</strong>
-        <input
-          type='text'
-          value={filters.authors.join(', ')}
-          onChange={(e) =>
-            setFilters((prev) => ({
-              ...prev,
-              authors: e.target.value.split(',').map((a) => a.trim()),
-            }))
-          }
-          placeholder='Comma-separated'
-          className='mt-1 p-1 w-full border rounded'
-        />
+        <h3 className='font-semibold mt-4 mb-2'>Authors</h3>
+
+        <div className='flex flex-wrap gap-1'>
+          {filters.authors.map((a) => (
+            <span
+              key={a.id}
+              className='flex items-center gap-1 bg-gray-200 px-2 py-1 rounded text-sm'
+            >
+              {a.name}
+              <button
+                onClick={() =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    authors: prev.authors.filter((x) => x.id !== a.id),
+                  }))
+                }
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+
+        <button
+          onClick={openAuthorModal}
+          className='mt-2 px-2 py-1 border rounded bg-white hover:bg-gray-100'
+        >
+          + Add authors
+        </button>
       </div>
 
       {/* Dates */}
       <div className='mb-4'>
         <strong>From:</strong>
         <input
-          type='date'
+          type='number'
           value={filters.dateFrom}
           onChange={(e) =>
             setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
@@ -102,7 +117,7 @@ export default function FilterPanel({
       <div className='mb-4'>
         <strong>To:</strong>
         <input
-          type='date'
+          type='number'
           value={filters.dateTo}
           onChange={(e) =>
             setFilters((prev) => ({ ...prev, dateTo: e.target.value }))

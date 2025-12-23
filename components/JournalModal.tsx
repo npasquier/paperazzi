@@ -39,7 +39,6 @@ export default function JournalModal({
   onClose,
   onApply,
 }: Props) {
-  // ✅ derive initial value ONCE
   const initialOptions = useMemo(
     () =>
       selectedJournals.map((j) => ({
@@ -51,7 +50,6 @@ export default function JournalModal({
 
   const [selectedOptions, setSelectedOptions] = useState(initialOptions);
 
-  // ✅ effect ONLY for external system
   useEffect(() => {
     Modal.setAppElement('body');
   }, []);
