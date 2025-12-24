@@ -1,21 +1,18 @@
 'use client';
 
-interface SelectedJournal {
-  name: string;
-  issn: string;
-}
+import { SelectedJournal, SelectedAuthor } from '../types/interfaces';
 
 interface FilterPanelProps {
   filters: {
     journals: SelectedJournal[];
-    authors: string[];
+    authors: SelectedAuthor[];
     dateFrom: string;
     dateTo: string;
   };
   setFilters: React.Dispatch<
     React.SetStateAction<{
       journals: SelectedJournal[];
-      authors: string[];
+      authors: SelectedAuthor[];
       dateFrom: string;
       dateTo: string;
     }>
@@ -38,8 +35,10 @@ export default function FilterPanel({
   };
 
   return (
-    <div className='w-64 border-r border-gray-300 p-4 flex flex-col'>
-      <h3 className='text-lg font-semibold mb-4'>Filters</h3>
+    <div className='w-72 border-r bg-white shadow-sm p-4 flex flex-col'>
+      <h3 className='text-xs uppercase tracking-wide text-slate-500 mb-2'>
+        Filters
+      </h3>
 
       {/* Journals */}
       <div className='mb-4'>
@@ -63,7 +62,7 @@ export default function FilterPanel({
         </div>
         <button
           onClick={openJournalModal}
-          className='mt-2 px-2 py-1 border rounded bg-white hover:bg-gray-100'
+          className='px-2 py-1 bg-slate-100 hover:bg-slate-200 transition rounded-full text-xs flex items-center gap-1'
         >
           + Add Journals
         </button>
@@ -96,7 +95,7 @@ export default function FilterPanel({
 
         <button
           onClick={openAuthorModal}
-          className='mt-2 px-2 py-1 border rounded bg-white hover:bg-gray-100'
+          className='px-2 py-1 bg-slate-100 hover:bg-slate-200 transition rounded-full text-xs flex items-center gap-1'
         >
           + Add authors
         </button>
@@ -111,7 +110,7 @@ export default function FilterPanel({
           onChange={(e) =>
             setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
           }
-          className='mt-1 p-1 w-full border rounded'
+          className='px-2 py-1 bg-slate-100 hover:bg-slate-200 transition rounded-full text-xs flex items-center gap-1'
         />
       </div>
       <div className='mb-4'>
@@ -122,7 +121,7 @@ export default function FilterPanel({
           onChange={(e) =>
             setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
           }
-          className='mt-1 p-1 w-full border rounded'
+          className='px-2 py-1 bg-slate-100 hover:bg-slate-200 transition rounded-full text-xs flex items-center gap-1'
         />
       </div>
     </div>

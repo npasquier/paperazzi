@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Filters, Paper } from '../types/interfaces';
 import Link from 'next/link';
+import { FileText, ExternalLink, Download } from 'lucide-react';
 
 interface Props {
   query: string;
@@ -14,7 +15,6 @@ interface Props {
 export default function SearchResults({ query, filters, trigger }: Props) {
   const [results, setResults] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
 
   useEffect(() => {
     if (trigger === 0) return;
@@ -95,9 +95,13 @@ export default function SearchResults({ query, filters, trigger }: Props) {
     fetchData();
   }, [trigger]);
 
-  if (loading) return <div>Loading...</div>;
+  if (loading)
+    return (
+      <div className='text-slate-500 animate-pulse'>Searching papers…</div>
+    );
   if (trigger === 0) return <div>Please fill in query or filters.</div>;
-  if (results.length === 0) return <div>No results found</div>;
+  if (results.length === 0)
+    return <div className='text-slate-500'>No papers found.</div>;
 
   return (
     <div>
@@ -105,47 +109,55 @@ export default function SearchResults({ query, filters, trigger }: Props) {
         const paperId = p.id.split('/').pop();
 
         return (
-          <div key={p.id} className='border-b py-2 hover:bg-gray-50'>
-            {/* TITLE NAVIGATION */}
-            <Link
-              href={`/paper/${paperId}`}
-              className='font-semibold text-blue-600 block'
-            >
-              {p.title}
-            </Link>
+          <div
+            key={p.id}
+            className='bg-white rounded-xl shadow-sm p-4 mb-3 hover:shadow-md transition border'
+          >
+            <div className='flex items-start gap-3'>
+              <FileText className='w-5 h-5 text-blue-500 mt-1' />
 
-            <div>{p.authors.join(', ')}</div>
-            <div>
-              {p.journal_name} ({p.publication_year})
-            </div>
-
-            <div className='text-sm text-gray-600'>
-              Citations: {p.cited_by_count}
-            </div>
-
-            {/* EXTERNAL LINKS */}
-            <div className='flex gap-3 text-sm text-blue-600'>
-              {p.doi && (
-                <a
-                  href={`https://doi.org/${p.doi}`}
-                  target='_blank'
-                  onClick={(e) => e.stopPropagation()}
-                  className='underline'
+              <div className='flex-1'>
+                <Link
+                  href={`/paper/${paperId}`}
+                  className='font-semibold text-blue-700 hover:underline block'
                 >
-                  DOI
-                </a>
-              )}
+                  {p.title}
+                </Link>
 
-              {p.pdf_url && (
-                <a
-                  href={p.pdf_url}
-                  target='_blank'
-                  onClick={(e) => e.stopPropagation()}
-                  className='underline'
-                >
-                  PDF
-                </a>
-              )}
+                <div className='text-sm text-slate-600'>
+                  {p.authors.join(', ')}
+                </div>
+
+                <div className='text-xs text-slate-500 mt-1'>
+                  {p.journal_name} • {p.publication_year}
+                </div>
+
+                <div className='text-xs text-slate-500 mt-1'>
+                  Citations: {p.cited_by_count}
+                </div>
+
+                <div className='flex gap-4 mt-2 text-sm text-blue-600'>
+                  {p.doi && (
+                    <a
+                      href={`https://doi.org/${p.doi}`}
+                      target='_blank'
+                      className='flex items-center gap-1 hover:underline'
+                    >
+                      <ExternalLink size={14} /> DOI
+                    </a>
+                  )}
+
+                  {p.pdf_url && (
+                    <a
+                      href={p.pdf_url}
+                      target='_blank'
+                      className='flex items-center gap-1 hover:underline'
+                    >
+                      <Download size={14} /> PDF
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         );

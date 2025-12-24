@@ -1,11 +1,10 @@
 'use client';
-
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Modal from 'react-modal';
 import Select from 'react-select';
 import journals from '../data/journals';
 import domains from '../data/domains';
-import { SelectedJournal } from '../types';
+import { SelectedJournal } from '../types/interfaces';
 
 interface Props {
   isOpen: boolean;
@@ -20,10 +19,20 @@ export default function JournalModal({
   onApply,
   onClose,
 }: Props) {
-  const [selectedOptions, setSelectedOptions] =
-    useState<SelectedJournal[]>(selectedJournals);
-  const [domainFilter, setDomainFilter] = useState<string>(''); // Domain filter
-  const [categoryFilter, setCategoryFilter] = useState<number | null>(null); // Category filter
+  const [domainFilter, setDomainFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const MAX_JOURNALS = 10;
+  const [limitWarning, setLimitWarning] = useState(false);
+
+  const applyWithCap = (list: SelectedJournal[]) => {
+    if (list.length <= MAX_JOURNALS) {
+      setLimitWarning(false);
+      onApply(list);
+    } else {
+      setLimitWarning(true);
+      onApply(list.slice(0, MAX_JOURNALS));
+    }
+  };
 
   // Filter journals according to domain and category
   const filteredJournals = journals.filter(
@@ -37,13 +46,33 @@ export default function JournalModal({
     label: `${j.name} [${j.domain}, Rank ${j.category}]`,
   }));
 
-  const handleApply = () => {
-    const selected = selectedOptions
-      .map((o) => journals.find((j) => j.issn === o.issn)!)
-      .filter(Boolean);
-    onApply(selected);
-    onClose();
+  // Select all filtered journals immediately
+  const handleSelectAllFiltered = () => {
+    const merged = [
+      ...selectedJournals,
+      ...filteredJournals
+        .filter((j) => !selectedJournals.some((s) => s.issn === j.issn))
+        .map((j) => ({
+          issn: j.issn,
+          name: j.name,
+          domain: j.domain,
+          category: j.category,
+        })),
+    ];
+
+    applyWithCap(merged);
   };
+
+  // Select all journals (no filters)
+  // const handleSelectAllJournals = () => {
+  //   const all = journals.map((j) => ({
+  //     issn: j.issn,
+  //     name: j.name,
+  //     domain: j.domain,
+  //     category: j.category,
+  //   }));
+  //   setSelectedOptions(all);
+  // };
 
   if (!isOpen) return null;
 
@@ -62,6 +91,7 @@ export default function JournalModal({
           marginRight: '-50%',
           transform: 'translate(-50%, -50%)',
           width: '600px',
+          maxHeight: '80vh',
         },
       }}
     >
@@ -92,7 +122,6 @@ export default function JournalModal({
             menuPortal: (base) => ({ ...base, zIndex: 9999 }),
           }}
         />
-
         <Select
           options={[1, 2, 3, 4].map((c) => ({
             value: c,
@@ -114,26 +143,90 @@ export default function JournalModal({
         />
       </div>
 
+      {/* Select All buttons */}
+      <div className='flex gap-2 mb-4'>
+        <button
+          onClick={handleSelectAllFiltered}
+          className='px-3 py-1 text-sm border rounded bg-blue-50 hover:bg-blue-100'
+          disabled={
+            filteredJournals.length === 0 ||
+            selectedJournals.length > MAX_JOURNALS
+          }
+        >
+          Select All Filtered ({filteredJournals.length})
+        </button>
+        {/* <button
+          onClick={handleSelectAllJournals}
+          className='px-3 py-1 text-sm border rounded bg-green-50 hover:bg-green-100'
+        >
+          Select All Journals ({journals.length})
+        </button> */}
+        <button
+          onClick={() => {
+            onApply([]);
+            setLimitWarning(false);
+          }}
+          className='px-3 py-1 text-sm border rounded bg-gray-50 hover:bg-gray-100'
+        >
+          Clear All
+        </button>
+      </div>
+
+      {/* Selection counter - no individual journals shown if too many */}
+      <div className='mb-2 p-2 bg-gray-50 border border-gray-200 rounded text-sm'>
+        <strong>
+          {selectedJournals.length} / {MAX_JOURNALS} journals selected
+        </strong>
+
+        {selectedJournals.length === MAX_JOURNALS && !limitWarning && (
+          <div className='text-orange-600 mt-1'>
+            You reached the maximum of 10 journals.
+          </div>
+        )}
+
+        {limitWarning && (
+          <div className='text-red-600 mt-1'>
+            You can’t add more than 10 journals.
+          </div>
+        )}
+      </div>
+
       {/* Journal multi-select */}
       <Select
         isMulti
         options={options}
-        value={selectedOptions.map((j) => ({
-          value: j.issn,
-          label: `${j.name} [${j.domain}, Rank ${j.category}]`,
-        }))}
-        onChange={(opts) =>
-          setSelectedOptions(
-            opts.map((o) => ({ name: o.label.split(' [')[0], issn: o.value }))
-          )
+        isDisabled={selectedJournals.length > MAX_JOURNALS}
+        value={
+          selectedJournals.length <= 10
+            ? selectedJournals.map((j) => ({
+                value: j.issn,
+                label: `${j.name} [${j.domain}, Rank ${j.category}]`,
+              }))
+            : []
         }
+        onChange={(opts) => {
+          const selected = opts.map(
+            (o) => journals.find((j) => j.issn === o.value)!
+          );
+          applyWithCap(selected);
+        }}
         isClearable
-        placeholder='Search and select journals...'
+        placeholder={
+          selectedJournals.length > 10
+            ? `${selectedJournals.length} Too many journals selected to display`
+            : 'Search and select journals...'
+        }
         menuPortalTarget={document.body}
         styles={{
           menuPortal: (base) => ({ ...base, zIndex: 9999 }),
         }}
       />
+
+      {selectedJournals.length == 10 && (
+        <div className='mt-2 text-xs text-gray-600'>
+          Tip: Click on the journal&apos;s associated cross to remove it.
+        </div>
+      )}
 
       <div className='flex justify-end gap-2 mt-4'>
         <button
@@ -141,7 +234,6 @@ export default function JournalModal({
             onClose();
             setDomainFilter('');
             setCategoryFilter(null);
-            setSelectedOptions([]);
           }}
           className='px-2 py-1 border rounded'
         >
@@ -149,12 +241,11 @@ export default function JournalModal({
         </button>
         <button
           onClick={() => {
-            handleApply();
+            onClose();
             setDomainFilter('');
             setCategoryFilter(null);
-            setSelectedOptions([]);
           }}
-          className='px-2 py-1 border rounded'
+          className='px-2 py-1 bg-blue-600 text-white border rounded hover:bg-blue-700'
         >
           Apply
         </button>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
-import { SelectedAuthor } from '../types';
+import { SelectedAuthor } from '../types/interfaces';
 
 interface Props {
   isOpen: boolean;

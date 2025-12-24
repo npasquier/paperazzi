@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <main className='bombay-bg-color cold-gray-color'>
+    <main className='h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800'>
       <PaperazziApp />
     </main>
   );
