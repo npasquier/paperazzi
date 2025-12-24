@@ -216,85 +216,109 @@ export default function PaperPage() {
     ));
 
   return (
-    <div className='max-w-4xl mx-auto py-6 space-y-6'>
+    <div className='max-w-5xl mx-auto py-8 space-y-8'>
       {/* MAIN PAPER */}
-      <div>
-        <h1 className='text-2xl font-bold'>{paper.title}</h1>
-        <div className='text-sm'>{paper.authors.join(', ')}</div>
-        <div className='text-sm'>
+      <div className='bg-white p-6 rounded-xl shadow-md'>
+        <h1 className='text-3xl font-bold text-blue-600'>{paper.title}</h1>
+        <div className='text-sm text-gray-700 mt-1'>
+          {paper.authors.join(', ')}
+        </div>
+        <div className='text-sm text-gray-500'>
           {paper.journal_name} ({paper.publication_year})
         </div>
-        <div className='text-sm'>Citations: {paper.cited_by_count}</div>
-        <div className='flex gap-4 text-sm text-blue-600 mt-1'>
+        <div className='mt-2 flex flex-wrap gap-2 items-center'>
+          <span className='text-sm text-gray-500'>
+            Citations: {paper.cited_by_count}
+          </span>
           {paper.doi && (
             <a
               href={`https://doi.org/${paper.doi}`}
               target='_blank'
-              className='underline'
+              className='text-sm px-3 py-1 border rounded bg-blue-50 hover:bg-blue-100 transition'
             >
               DOI
             </a>
           )}
           {paper.pdf_url && (
-            <a href={paper.pdf_url} target='_blank' className='underline'>
+            <a
+              href={paper.pdf_url}
+              target='_blank'
+              className='text-sm px-3 py-1 border rounded bg-green-50 hover:bg-green-100 transition'
+            >
               PDF
             </a>
           )}
         </div>
-        <p className='text-sm text-gray-700 mt-2'>
+        <p className='text-gray-700 mt-4 leading-relaxed'>
           {buildAbstract(paper.abstract)}
         </p>
       </div>
 
       {/* REFERENCES */}
-      <div>
-        <h2 className='font-semibold'>References (Cited by this paper)</h2>
-        {renderPaperList(cites, 'references')}
-        {loadingCites && (
-          <div className='text-sm text-gray-500'>Loading more…</div>
-        )}
-        {referencedWorks.length > cites.length && !loadingCites && (
+      <div className='space-y-2'>
+        <h2 className='text-xl font-semibold'>
+          References (Cited by this paper)
+        </h2>
+        <div className='grid md:grid-cols-2 gap-4'>
+          {renderPaperList(cites, 'references').map((item) => (
+            <div
+              className='bg-white p-4 rounded-lg shadow hover:shadow-md transition'
+              key={item.key}
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+        {referencedWorks.length > cites.length && (
           <button
             onClick={() => setCitesPage((p) => p + 1)}
-            className='border px-3 py-1 mt-2 text-sm'
+            className='mt-2 px-4 py-2 border rounded bg-gray-50 hover:bg-gray-100 transition'
           >
-            More references
+            Load more references
           </button>
         )}
       </div>
 
       {/* RELATED PAPERS */}
-      <div>
-        <h2 className='font-semibold'>Related Papers</h2>
-        {renderPaperList(related, 'related')}
-        {loadingRelated && (
-          <div className='text-sm text-gray-500'>Loading more…</div>
-        )}
-        {!loadingRelated && (
-          <button
-            onClick={() => setRelatedPage((p) => p + 1)}
-            className='border px-3 py-1 mt-2 text-sm'
-          >
-            More Related Papers
-          </button>
-        )}
+      <div className='space-y-2'>
+        <h2 className='text-xl font-semibold'>Related Papers</h2>
+        <div className='grid md:grid-cols-2 gap-4'>
+          {renderPaperList(related, 'related').map((item) => (
+            <div
+              className='bg-white p-4 rounded-lg shadow hover:shadow-md transition'
+              key={item.key}
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setRelatedPage((p) => p + 1)}
+          className='mt-2 px-4 py-2 border rounded bg-gray-50 hover:bg-gray-100 transition'
+        >
+          Load more related
+        </button>
       </div>
 
       {/* CITED PAPERS */}
-      <div>
-        <h2 className='font-semibold'>Cited Papers</h2>
-        {renderPaperList(cited, 'cited')}
-        {loadingCited && (
-          <div className='text-sm text-gray-500'>Loading more…</div>
-        )}
-        {!loadingCited && (
-          <button
-            onClick={() => setCitedPage((p) => p + 1)}
-            className='border px-3 py-1 mt-2 text-sm'
-          >
-            More Citations
-          </button>
-        )}
+      <div className='space-y-2'>
+        <h2 className='text-xl font-semibold'>Cited Papers</h2>
+        <div className='grid md:grid-cols-2 gap-4'>
+          {renderPaperList(cited, 'cited').map((item) => (
+            <div
+              className='bg-white p-4 rounded-lg shadow hover:shadow-md transition'
+              key={item.key}
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setCitedPage((p) => p + 1)}
+          className='mt-2 px-4 py-2 border rounded bg-gray-50 hover:bg-gray-100 transition'
+        >
+          Load more citations
+        </button>
       </div>
     </div>
   );
