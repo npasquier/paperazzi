@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   return (
-    <main className='min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800 p-6 md:p-12'>
+    <main className='min-h-screen bg-linear-to-br from-slate-50 to-slate-100 text-slate-800 p-6 md:p-12'>
       <div className='max-w-4xl mx-auto space-y-8'>
         <h1 className='text-3xl md:text-4xl font-bold'>
           About <span className='text-blue-700'>Paper</span>azzi
@@ -46,8 +46,11 @@ export default function AboutPage() {
             </li>
           </ul>
           <p className='text-slate-700 mt-4 italic'>
-            Data is sourced from <a href='https://openalex.org/'>OpenAlex</a>, a
-            comprehensive open database of academic papers.
+            Data is sourced from{' '}
+            <a href='https://openalex.org/' className='font-semibold'>
+              OpenAlex
+            </a>
+            , a comprehensive open database of academic papers.
           </p>
         </section>
 
@@ -79,8 +82,7 @@ export default function AboutPage() {
               <h3 className='font-semibold mb-1'>Differences</h3>
               <ul className='list-disc list-inside text-slate-700 space-y-1'>
                 <li>
-                  Queries run only on titles and abstracts. Scholar also run on
-                  available PDFs.
+                  Queries are less powerful than Scholar (lower recall).
                 </li>
                 <li>
                   Journal filter builds on CNRS categorization to choose

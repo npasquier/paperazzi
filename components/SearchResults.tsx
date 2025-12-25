@@ -23,7 +23,16 @@ export default function SearchResults({ query, filters, trigger }: Props) {
       setLoading(true);
 
       try {
-        let url = `https://api.openalex.org/works?per-page=10`;
+        let url = `https://api.openalex.org/works?per-page=10&mailto=${process.env.MAIL_ID}`;
+
+        // Search looks through titles and abstracts but also fulltext when possible.
+        // There is a filter for search only titles and abstracts: filter=title.title_and_abstract.search
+        // Apparently OpenAlex also uses stemming to span word variations.
+
+        // I think there should be way to filter only economics related research thanks to their domain categorization
+        // There are displayed in their api we just need to add domains or fields.
+
+        // I wonder also about topics: they have a topic classification that could be useful.
 
         // collect filter conditions
         const filterConditions: string[] = [];
@@ -34,7 +43,7 @@ export default function SearchResults({ query, filters, trigger }: Props) {
             `primary_location.source.issn:${filters.journals[0].issn}`
           );
         } else if (filters.journals.length > 1) {
-          const journalFilter = filters.journals.map((j) => j.issn).join('||');
+          const journalFilter = filters.journals.map((j) => j.issn).join('|');
           filterConditions.push(
             `primary_location.source.issn:${journalFilter}`
           );
@@ -71,6 +80,7 @@ export default function SearchResults({ query, filters, trigger }: Props) {
         }
 
         const res = await axios.get(url);
+        console.log('API URL:', url);
         const papers: Paper[] = res.data.results.map((w: any) => ({
           id: w.id,
           title: w.title,

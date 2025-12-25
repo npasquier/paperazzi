@@ -44,7 +44,9 @@ export default function PaperPage() {
         const id = url.split('/').pop();
         if (!id) continue;
         try {
-          const res = await axios.get(`https://api.openalex.org/works/${id}`);
+          const res = await axios.get(
+            `https://api.openalex.org/works/${id}&mailto=${process.env.MAIL_ID}`
+          );
           const [p] = parsePapers([res.data]);
           papers.push(p);
         } catch {}
@@ -80,7 +82,7 @@ export default function PaperPage() {
       setLoadingPaper(true);
       try {
         const res = await axios.get(
-          `https://api.openalex.org/works/${paperId}`
+          `https://api.openalex.org/works/${paperId}&mailto=${process.env.MAIL_ID}`
         );
         if (isCancelled) return;
 
@@ -141,7 +143,7 @@ export default function PaperPage() {
       setLoadingRelated(true);
       try {
         const res = await axios.get(
-          `https://api.openalex.org/works?filter=related_to:${paperId}&per-page=3&page=${relatedPage}`
+          `https://api.openalex.org/works?filter=related_to:${paperId}&per-page=3&page=${relatedPage}&mailto=${process.env.MAIL_ID}`
         );
         const newPapers = parsePapers(res.data.results);
 
