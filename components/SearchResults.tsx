@@ -80,7 +80,7 @@ export default function SearchResults({ query, filters, trigger }: Props) {
         }
 
         const res = await axios.get(url);
-        console.log('API URL:', url);
+        // console.log('API URL:', url);
         const papers: Paper[] = res.data.results.map((w: any) => ({
           id: w.id,
           title: w.title,
