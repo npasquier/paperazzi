@@ -3,9 +3,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 
-export default function NavBar() {
+function NavBarContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -63,7 +63,7 @@ export default function NavBar() {
         {isSearchPage ? (
           // Search page: Show search bar
           <>
-            <div className='flex-1 max-w-2xl ml-auto'>
+            <div className='flex-1 max-w-2xl'>
               <div className='relative'>
                 <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400' />
                 <input
@@ -86,7 +86,7 @@ export default function NavBar() {
         ) : (
           // Other pages: Show tagline
           <div className='hidden ml-6 md:flex items-center gap-2 text-sm text-stone-600 flex-1'>
-            Track star papers in economics literature
+            Track star papers in economics literature.
           </div>
         )}
 
@@ -99,5 +99,24 @@ export default function NavBar() {
         </Link>
       </div>
     </nav>
+  );
+}
+
+export default function NavBar() {
+  return (
+    <Suspense fallback={
+      <nav className='bg-white border-b border-stone-200'>
+        <div className='flex items-center px-6 py-3 max-w-7xl mx-auto gap-6'>
+          <div className='flex items-center gap-3'>
+            <div className='bg-stone-100 p-1.5 rounded-lg'>
+              <div className='w-7 h-7' />
+            </div>
+            <span className='text-xl font-semibold text-stone-900'>Paperazzi</span>
+          </div>
+        </div>
+      </nav>
+    }>
+      <NavBarContent />
+    </Suspense>
   );
 }

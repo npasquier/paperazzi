@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
 import SearchResults from './SearchResults';
@@ -9,7 +9,7 @@ import AuthorModal from './AuthorModal';
 import { Filters } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 
-export default function PaperazziApp() {
+function PaperazziAppContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -40,7 +40,6 @@ export default function PaperazziApp() {
   // Sync state with URL parameters whenever URL changes
   useEffect(() => {
     const syncFromURL = async () => {
-
       // Extract params from URL
       const q = searchParams.get('q') || '';
       const journalIssns = searchParams.get('journals')?.split(',').filter(Boolean) || [];
@@ -113,11 +112,10 @@ export default function PaperazziApp() {
     return () => {
       window.removeEventListener('navbar-search', handleNavbarSearch as EventListener);
     };
-  }, [filters, router]); // Re-create listener when filters change
+  }, [filters, router]);
 
   // Update URL and trigger search (only called on explicit user action)
   const handleSearch = (newPage = 1) => {
-    
     const params = new URLSearchParams();
     
     // Get query from URL (navbar updates this)
@@ -126,7 +124,6 @@ export default function PaperazziApp() {
     
     if (filters.journals.length) {
       const journalIssns = filters.journals.map((j) => j.issn).join(',');
-      console.log('Adding journals to URL:', journalIssns);
       params.set('journals', journalIssns);
     }
     
@@ -162,7 +159,7 @@ export default function PaperazziApp() {
     if (filters.dateTo) params.set('to', filters.dateTo);
     
     params.set('sort', newSort);
-    params.set('page', '1'); // Reset to page 1 when sorting changes
+    params.set('page', '1');
 
     router.push(`/search?${params.toString()}`);
   };
@@ -170,7 +167,7 @@ export default function PaperazziApp() {
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
       {/* Left sidebar with filters - fixed width, scrollable */}
-      <aside className='w-80 bg-white border-r border-slate-200 overflow-y-auto'>
+      <aside className='w-80 bg-white border-r border-stone-200 overflow-y-auto'>
         <FilterPanel
           filters={filters}
           setFilters={setFilters}
@@ -221,5 +218,22 @@ export default function PaperazziApp() {
         }
       />
     </div>
+  );
+}
+
+export default function PaperazziApp() {
+  return (
+    <Suspense fallback={
+      <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
+        <aside className='w-80 bg-white border-r border-stone-200 p-4'>
+          <div className='text-sm text-stone-600'>Loading filters...</div>
+        </aside>
+        <div className='flex-1 p-6'>
+          <div className='text-stone-600'>Loading search...</div>
+        </div>
+      </div>
+    }>
+      <PaperazziAppContent />
+    </Suspense>
   );
 }
