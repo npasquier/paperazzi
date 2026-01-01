@@ -63,7 +63,7 @@ function NavBarContent() {
         {isSearchPage ? (
           // Search page: Show search bar
           <>
-            <div className='flex-1 max-w-2xl'>
+            <div className='flex-1 max-w-2xl ml-auto'>
               <div className='relative'>
                 <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400' />
                 <input
