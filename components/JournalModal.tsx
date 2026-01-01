@@ -63,17 +63,6 @@ export default function JournalModal({
     applyWithCap(merged);
   };
 
-  // Select all journals (no filters)
-  // const handleSelectAllJournals = () => {
-  //   const all = journals.map((j) => ({
-  //     issn: j.issn,
-  //     name: j.name,
-  //     domain: j.domain,
-  //     category: j.category,
-  //   }));
-  //   setSelectedOptions(all);
-  // };
-
   if (!isOpen) return null;
 
   return (
@@ -82,20 +71,10 @@ export default function JournalModal({
       onRequestClose={onClose}
       contentLabel='Select Journals'
       ariaHideApp={false}
-      style={{
-        content: {
-          top: '50%',
-          left: '50%',
-          right: 'auto',
-          bottom: 'auto',
-          marginRight: '-50%',
-          transform: 'translate(-50%, -50%)',
-          width: '600px',
-          maxHeight: '80vh',
-        },
-      }}
+      className='bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto outline-none'
+      overlayClassName='fixed inset-0 bg-black/50 flex items-center justify-center p-4'
     >
-      <h2 className='font-semibold mb-2'>Select Journals</h2>
+      <h2 className='text-xl font-semibold mb-4 text-stone-900'>Select Journals</h2>
 
       {/* Domain & Category filters */}
       <div className='flex gap-2 mb-4'>
@@ -120,6 +99,12 @@ export default function JournalModal({
           menuPortalTarget={document.body}
           styles={{
             menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+            control: (base) => ({
+              ...base,
+              borderColor: '#d6d3d1',
+              borderRadius: '0.5rem',
+              '&:hover': { borderColor: '#a8a29e' },
+            }),
           }}
         />
         <Select
@@ -139,6 +124,12 @@ export default function JournalModal({
           menuPortalTarget={document.body}
           styles={{
             menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+            control: (base) => ({
+              ...base,
+              borderColor: '#d6d3d1',
+              borderRadius: '0.5rem',
+              '&:hover': { borderColor: '#a8a29e' },
+            }),
           }}
         />
       </div>
@@ -147,46 +138,40 @@ export default function JournalModal({
       <div className='flex gap-2 mb-4'>
         <button
           onClick={handleSelectAllFiltered}
-          className='px-3 py-1 text-sm border rounded bg-blue-50 hover:bg-blue-100'
+          className='px-3 py-1.5 text-sm border border-stone-300 rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-700 font-medium transition'
           disabled={
             filteredJournals.length === 0 ||
-            selectedJournals.length > MAX_JOURNALS
+            selectedJournals.length >= MAX_JOURNALS
           }
         >
           Select All Filtered ({filteredJournals.length})
         </button>
-        {/* <button
-          onClick={handleSelectAllJournals}
-          className='px-3 py-1 text-sm border rounded bg-green-50 hover:bg-green-100'
-        >
-          Select All Journals ({journals.length})
-        </button> */}
         <button
           onClick={() => {
             onApply([]);
             setLimitWarning(false);
           }}
-          className='px-3 py-1 text-sm border rounded bg-gray-50 hover:bg-gray-100'
+          className='px-3 py-1.5 text-sm border border-stone-300 rounded-lg bg-white hover:bg-stone-50 text-stone-700 font-medium transition'
         >
           Clear All
         </button>
       </div>
 
-      {/* Selection counter - no individual journals shown if too many */}
-      <div className='mb-2 p-2 bg-gray-50 border border-gray-200 rounded text-sm'>
-        <strong>
+      {/* Selection counter */}
+      <div className='mb-4 p-3 bg-stone-50 border border-stone-200 rounded-lg text-sm'>
+        <strong className='text-stone-900'>
           {selectedJournals.length} / {MAX_JOURNALS} journals selected
         </strong>
 
         {selectedJournals.length === MAX_JOURNALS && !limitWarning && (
-          <div className='text-orange-600 mt-1'>
+          <div className='text-amber-700 mt-1'>
             You reached the maximum of 10 journals.
           </div>
         )}
 
         {limitWarning && (
-          <div className='text-red-600 mt-1'>
-            You can’t add more than 10 journals.
+          <div className='text-red-700 mt-1'>
+            You can&apos;t add more than 10 journals.
           </div>
         )}
       </div>
@@ -219,23 +204,29 @@ export default function JournalModal({
         menuPortalTarget={document.body}
         styles={{
           menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+          control: (base) => ({
+            ...base,
+            borderColor: '#d6d3d1',
+            borderRadius: '0.5rem',
+            '&:hover': { borderColor: '#a8a29e' },
+          }),
         }}
       />
 
-      {selectedJournals.length == 10 && (
-        <div className='mt-2 text-xs text-gray-600'>
+      {selectedJournals.length === 10 && (
+        <div className='mt-2 text-xs text-stone-600'>
           Tip: Click on the journal&apos;s associated cross to remove it.
         </div>
       )}
 
-      <div className='flex justify-end gap-2 mt-4'>
+      <div className='flex justify-end gap-2 mt-6'>
         <button
           onClick={() => {
             onClose();
             setDomainFilter('');
             setCategoryFilter(null);
           }}
-          className='px-2 py-1 border rounded'
+          className='px-4 py-2 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition font-medium'
         >
           Cancel
         </button>
@@ -245,7 +236,7 @@ export default function JournalModal({
             setDomainFilter('');
             setCategoryFilter(null);
           }}
-          className='px-2 py-1 bg-blue-600 text-white border rounded hover:bg-blue-700'
+          className='px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition font-medium'
         >
           Apply
         </button>

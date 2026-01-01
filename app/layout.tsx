@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Paperazzi',
-  description: 'Uncover influential papers in economics research',
+  description: 'Track star papers in economics literature',
 };
 
 export default function RootLayout({

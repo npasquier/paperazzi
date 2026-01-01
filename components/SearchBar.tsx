@@ -14,6 +14,9 @@ export default function SearchBar({ query, setQuery, onSearch }: Props) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder='Search papers...'
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onSearch();
+        }}
       />
       <button
         onClick={onSearch}

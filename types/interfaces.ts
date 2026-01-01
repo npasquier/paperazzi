@@ -20,11 +20,13 @@ export interface SelectedAuthor {
   institution?: string;
 }
 
+
 export interface Filters {
   journals: SelectedJournal[];
   authors: SelectedAuthor[];
   dateFrom: string;
   dateTo: string;
+  sortBy: string; 
 }
 
 export interface Paper {

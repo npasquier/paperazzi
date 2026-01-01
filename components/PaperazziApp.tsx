@@ -1,48 +1,202 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
-import SearchBar from './SearchBar';
 import SearchResults from './SearchResults';
 import JournalModal from './JournalModal';
-import { Filters } from '../types/interfaces';
 import AuthorModal from './AuthorModal';
+import { Filters } from '../types/interfaces';
+import mapIssnsToJournals from '@/utils/issnToJournals';
 
 export default function PaperazziApp() {
-  const [query, setQuery] = useState('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // --- Modal state ---
+  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [showAuthorModal, setShowAuthorModal] = useState(false);
+
+  // --- Local state for controlled inputs (updates as user types, no API calls) ---
   const [filters, setFilters] = useState<Filters>({
     journals: [],
     authors: [],
     dateFrom: '',
     dateTo: '',
+    sortBy: 'relevance_score',
   });
-  const [showJournalModal, setShowJournalModal] = useState(false);
-  const [showAuthorModal, setShowAuthorModal] = useState(false);
-  const [triggerSearch, setTriggerSearch] = useState(0);
+
+  // --- Search state (only updates when URL changes, triggers API calls) ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilters, setSearchFilters] = useState<Filters>({
+    journals: [],
+    authors: [],
+    dateFrom: '',
+    dateTo: '',
+    sortBy: 'relevance_score',
+  });
+  const [page, setPage] = useState(1);
+
+  // Sync state with URL parameters whenever URL changes
+  useEffect(() => {
+    const syncFromURL = async () => {
+
+      // Extract params from URL
+      const q = searchParams.get('q') || '';
+      const journalIssns = searchParams.get('journals')?.split(',').filter(Boolean) || [];
+      const authorIds = searchParams.get('authors')?.split(',').filter(Boolean) || [];
+      const from = searchParams.get('from') || '';
+      const to = searchParams.get('to') || '';
+      const sort = searchParams.get('sort') || 'relevance_score';
+      const p = Number(searchParams.get('page') || 1);
+
+      // Map ISSNs to full journal objects
+      const journals = mapIssnsToJournals(journalIssns);
+
+      // Fetch author names from OpenAlex API
+      const authors = await Promise.all(
+        authorIds.map(async (id) => {
+          try {
+            const res = await fetch(`https://api.openalex.org/authors/${id}`);
+            const data = await res.json();
+            return {
+              id,
+              name: data.display_name || 'Unknown Author'
+            };
+          } catch (error) {
+            console.error(`Failed to fetch author ${id}:`, error);
+            return { id, name: 'Unknown Author' };
+          }
+        })
+      );
+
+      // Update controlled inputs (what user sees in the form)
+      setFilters({ journals, authors, dateFrom: from, dateTo: to, sortBy: sort });
+
+      // Update search state (triggers API call in SearchResults)
+      setSearchQuery(q);
+      setSearchFilters({ journals, authors, dateFrom: from, dateTo: to, sortBy: sort });
+      setPage(p);
+    };
+
+    syncFromURL();
+  }, [searchParams]);
+
+  // Listen for navbar search events
+  useEffect(() => {
+    const handleNavbarSearch = (e: CustomEvent) => {
+      const newQuery = e.detail.query;
+      
+      // Build URL with query from navbar + current filters
+      const params = new URLSearchParams();
+      
+      if (newQuery) params.set('q', newQuery);
+      
+      if (filters.journals.length) {
+        params.set('journals', filters.journals.map((j) => j.issn).join(','));
+      }
+      
+      if (filters.authors.length) {
+        params.set('authors', filters.authors.map((a) => a.id).join(','));
+      }
+      
+      if (filters.dateFrom) params.set('from', filters.dateFrom);
+      if (filters.dateTo) params.set('to', filters.dateTo);
+      if (filters.sortBy) params.set('sort', filters.sortBy);
+      
+      params.set('page', '1');
+      
+      router.push(`/search?${params.toString()}`);
+    };
+
+    window.addEventListener('navbar-search', handleNavbarSearch as EventListener);
+    return () => {
+      window.removeEventListener('navbar-search', handleNavbarSearch as EventListener);
+    };
+  }, [filters, router]); // Re-create listener when filters change
+
+  // Update URL and trigger search (only called on explicit user action)
+  const handleSearch = (newPage = 1) => {
+    
+    const params = new URLSearchParams();
+    
+    // Get query from URL (navbar updates this)
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery) params.set('q', currentQuery);
+    
+    if (filters.journals.length) {
+      const journalIssns = filters.journals.map((j) => j.issn).join(',');
+      console.log('Adding journals to URL:', journalIssns);
+      params.set('journals', journalIssns);
+    }
+    
+    if (filters.authors.length) {
+      params.set('authors', filters.authors.map((a) => a.id).join(','));
+    }
+    
+    if (filters.dateFrom) params.set('from', filters.dateFrom);
+    if (filters.dateTo) params.set('to', filters.dateTo);
+    if (filters.sortBy) params.set('sort', filters.sortBy);
+    
+    params.set('page', newPage.toString());
+
+    router.push(`/search?${params.toString()}`);
+  };
+
+  // Handle sort change - triggers immediate search
+  const handleSortChange = (newSort: string) => {
+    const params = new URLSearchParams();
+    
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery) params.set('q', currentQuery);
+    
+    if (filters.journals.length) {
+      params.set('journals', filters.journals.map((j) => j.issn).join(','));
+    }
+    
+    if (filters.authors.length) {
+      params.set('authors', filters.authors.map((a) => a.id).join(','));
+    }
+    
+    if (filters.dateFrom) params.set('from', filters.dateFrom);
+    if (filters.dateTo) params.set('to', filters.dateTo);
+    
+    params.set('sort', newSort);
+    params.set('page', '1'); // Reset to page 1 when sorting changes
+
+    router.push(`/search?${params.toString()}`);
+  };
 
   return (
-    <div className='flex h-screen'>
-      <FilterPanel
-        filters={filters}
-        setFilters={setFilters}
-        openJournalModal={() => setShowJournalModal(true)}
-        openAuthorModal={() => setShowAuthorModal(true)}
-      />
-
-      <div className='flex-1 p-4'>
-        <SearchBar
-          query={query}
-          setQuery={setQuery}
-          onSearch={() => setTriggerSearch((v) => v + 1)}
-        />
-
-        <SearchResults
-          query={query}
+    <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
+      {/* Left sidebar with filters - fixed width, scrollable */}
+      <aside className='w-80 bg-white border-r border-slate-200 overflow-y-auto'>
+        <FilterPanel
           filters={filters}
-          trigger={triggerSearch}
+          setFilters={setFilters}
+          openJournalModal={() => setShowJournalModal(true)}
+          openAuthorModal={() => setShowAuthorModal(true)}
+          onSortChange={handleSortChange}
         />
-      </div>
+      </aside>
 
+      {/* Main results area - scrollable */}
+      <main className='flex-1 overflow-y-auto'>
+        <div className='max-w-5xl mx-auto p-6'>
+          <SearchResults
+            query={searchQuery}
+            journals={searchFilters.journals}
+            authors={searchFilters.authors}
+            from={searchFilters.dateFrom}
+            to={searchFilters.dateTo}
+            sortBy={searchFilters.sortBy}
+            page={page}
+            loadMore={(newPage) => handleSearch(newPage)}
+          />
+        </div>
+      </main>
+
+      {/* Modals */}
       <AuthorModal
         isOpen={showAuthorModal}
         selectedAuthors={filters.authors}

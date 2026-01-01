@@ -1,177 +1,254 @@
 'use client';
-
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Filters, Paper } from '../types/interfaces';
+import { useEffect, useState, useTransition } from 'react';
+import { Paper } from '../types/interfaces';
 import Link from 'next/link';
-import { FileText, ExternalLink, Download } from 'lucide-react';
+import { ExternalLink, Download, Info } from 'lucide-react';
 
 interface Props {
   query: string;
-  filters: Filters;
-  trigger: number;
+  journals: { issn: string; name?: string }[];
+  authors: { id: string; name?: string }[];
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  page: number;
+  loadMore?: (page: number) => void;
 }
 
-export default function SearchResults({ query, filters, trigger }: Props) {
+export default function SearchResults({
+  query,
+  journals,
+  authors,
+  from,
+  to,
+  sortBy = 'relevance_score',
+  page,
+  loadMore,
+}: Props) {
   const [results, setResults] = useState<Paper[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isPending, startTransition] = useTransition();
+  
+  const resultsPerPage = 20; // Increased from 10
 
   useEffect(() => {
-    if (trigger === 0) return;
+    if (!query && journals.length === 0 && authors.length === 0) return;
 
-    const fetchData = async () => {
-      setLoading(true);
-
+    startTransition(async () => {
       try {
-        let url = `https://api.openalex.org/works?per-page=10&mailto=${process.env.MAIL_ID}`;
+        const journalIssns = journals.map((j) => j.issn);
+        const authorIds = authors.map((a) => a.id);
 
-        // Search looks through titles and abstracts but also fulltext when possible.
-        // There is a filter for search only titles and abstracts: filter=title.title_and_abstract.search
-        // Apparently OpenAlex also uses stemming to span word variations.
-
-        // I think there should be way to filter only economics related research thanks to their domain categorization
-        // There are displayed in their api we just need to add domains or fields.
-
-        // I wonder also about topics: they have a topic classification that could be useful.
-
-        // collect filter conditions
-        const filterConditions: string[] = [];
-
-        // journals
-        if (filters.journals.length == 1) {
-          filterConditions.push(
-            `primary_location.source.issn:${filters.journals[0].issn}`
-          );
-        } else if (filters.journals.length > 1) {
-          const journalFilter = filters.journals.map((j) => j.issn).join('|');
-          filterConditions.push(
-            `primary_location.source.issn:${journalFilter}`
-          );
-        }
-
-        // authors
-        if (filters.authors.length > 0) {
-          filterConditions.push(
-            filters.authors
-              .map((a) => `authorships.author.id:${a.id}`)
-              .join(',')
-          );
-        }
-
-        // years
-        if (filters.dateFrom && filters.dateTo) {
-          filterConditions.push(
-            `publication_year:${filters.dateFrom}-${filters.dateTo}`
-          );
-        } else if (filters.dateFrom) {
-          filterConditions.push(`publication_year:${filters.dateFrom}-`);
-        } else if (filters.dateTo) {
-          filterConditions.push(`publication_year:-${filters.dateTo}`);
-        }
-
-        // append filters
-        if (filterConditions.length > 0) {
-          url += `&filter=${filterConditions.join(',')}`;
-        }
-
-        // append search query only if present
-        if (query) {
-          url += `&search=${encodeURIComponent(query)}`;
-        }
-
-        const res = await axios.get(url);
-        // console.log('API URL:', url);
-        const papers: Paper[] = res.data.results.map((w: any) => ({
-          id: w.id,
-          title: w.title,
-          authors: w.authorships.map((a: any) => a.author.display_name),
-          publication_year: w.publication_year,
-          journal_name: w.primary_location?.source?.display_name || 'Unknown',
-          doi: w.doi,
-          pdf_url: w.primary_location?.pdf_url,
-          cited_by_count: w.cited_by_count,
-          abstract: w.abstract_inverted_index,
-        }));
-
-        setResults(papers);
-      } catch (err) {
-        console.error(err);
+        const res = await fetch(
+          `/api/search?query=${encodeURIComponent(
+            query
+          )}&journals=${journalIssns.join(',')}&authors=${authorIds.join(
+            ','
+          )}&from=${from || ''}&to=${to || ''}&sort=${sortBy}&page=${page}`
+        );
+        const data = await res.json();
+        setResults(data.results);
+        setTotalCount(data.meta?.count || 0); // Assuming API returns total count
+      } catch {
         setResults([]);
-      } finally {
-        setLoading(false);
+        setTotalCount(0);
       }
-    };
+    });
+  }, [query, journals, authors, from, to, sortBy, page]);
 
-    fetchData();
-  }, [trigger]);
+  // Calculate total pages
+  const totalPages = Math.ceil(totalCount / resultsPerPage);
 
-  if (loading)
+  // Generate page numbers to display (like Google Scholar)
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 10; // Show max 10 page numbers
+
+    if (totalPages <= maxVisible) {
+      // Show all pages if total is less than max
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Show first page
+      pages.push(1);
+
+      // Calculate range around current page
+      let start = Math.max(2, page - 3);
+      let end = Math.min(totalPages - 1, page + 3);
+
+      // Add ellipsis after first page if needed
+      if (start > 2) {
+        pages.push('...');
+      }
+
+      // Add pages around current page
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      // Add ellipsis before last page if needed
+      if (end < totalPages - 1) {
+        pages.push('...');
+      }
+
+      // Show last page
+      if (totalPages > 1) {
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (loadMore) {
+      loadMore(newPage); // Pass the new page number!
+    }
+  };
+
+  if (isPending) {
     return (
-      <div className='text-slate-500 animate-pulse'>Searching papers…</div>
+      <div className='flex items-center justify-center py-12'>
+        <div className='text-stone-500 animate-pulse text-lg'>Searching papers…</div>
+      </div>
     );
-  if (trigger === 0) return <div>Please fill in query or filters.</div>;
-  if (results.length === 0)
-    return <div className='text-slate-500'>No papers found.</div>;
+  }
+
+  if (!query && journals.length === 0 && authors.length === 0) {
+    return (
+      <div className='text-center py-12 text-stone-500'>
+        Please enter a search query or select filters to begin.
+      </div>
+    );
+  }
+
+  if (results.length === 0) {
+    return (
+      <div className='text-center py-12 text-stone-500'>
+        No papers found. Try adjusting your search criteria.
+      </div>
+    );
+  }
 
   return (
-    <div>
-      {results.map((p) => {
-        const paperId = p.id.split('/').pop();
+    <div className='flex flex-col h-full'>
+      {/* Results count */}
+      <div className='text-sm text-stone-600 mb-4'>
+        Showing {(page - 1) * resultsPerPage + 1}–{Math.min(page * resultsPerPage, totalCount)} of {totalCount.toLocaleString()} results
+      </div>
 
-        return (
+      {/* Results list - more compact */}
+      <div className='flex-1 overflow-y-auto space-y-3 mb-4'>
+        {results.map((p) => (
           <div
             key={p.id}
-            className='bg-white rounded-xl shadow-sm p-4 mb-3 hover:shadow-md transition border'
+            className='bg-white border border-stone-200 rounded-lg p-3 hover:border-stone-300 transition'
           >
-            <div className='flex items-start gap-3'>
-              <FileText className='w-5 h-5 text-blue-500 mt-1' />
-
-              <div className='flex-1'>
-                <Link
-                  href={`/paper/${paperId}`}
-                  className='font-semibold text-blue-700 hover:underline block'
-                >
+            <div className='flex items-start justify-between gap-4'>
+              {/* Left side: Paper info */}
+              <div className='flex-1 min-w-0'>
+                {/* Title */}
+                <h3 className='font-semibold text-stone-900 text-base leading-snug mb-1'>
                   {p.title}
+                </h3>
+
+                {/* Authors - truncated if too long */}
+                <div className='text-sm text-stone-600 mb-1 truncate'>
+                  {p.authors.slice(0, 5).join(', ')}
+                  {p.authors.length > 5 && `, +${p.authors.length - 5} more`}
+                </div>
+
+                {/* Journal and year */}
+                <div className='text-xs text-stone-500'>
+                  {p.journal_name} • {p.publication_year} • {p.cited_by_count} citations
+                </div>
+              </div>
+
+              {/* Right side: Action buttons - horizontal compact */}
+              <div className='flex flex-wrap gap-2 items-start flex-shrink-0'>
+                <Link
+                  href={`/paper/${p.id.split('/').pop()}`}
+                  className='inline-flex items-center gap-1 px-2.5 py-1 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium whitespace-nowrap'
+                >
+                  <Info size={12} /> Info
                 </Link>
-
-                <div className='text-sm text-slate-600'>
-                  {p.authors.join(', ')}
-                </div>
-
-                <div className='text-xs text-slate-500 mt-1'>
-                  {p.journal_name} • {p.publication_year}
-                </div>
-
-                <div className='text-xs text-slate-500 mt-1'>
-                  Citations: {p.cited_by_count}
-                </div>
-
-                <div className='flex gap-4 mt-2 text-sm text-blue-600'>
-                  {p.doi && (
-                    <a
-                      href={`https://doi.org/${p.doi}`}
-                      target='_blank'
-                      className='flex items-center gap-1 hover:underline'
-                    >
-                      <ExternalLink size={14} /> DOI
-                    </a>
-                  )}
-
-                  {p.pdf_url && (
-                    <a
-                      href={p.pdf_url}
-                      target='_blank'
-                      className='flex items-center gap-1 hover:underline'
-                    >
-                      <Download size={14} /> PDF
-                    </a>
-                  )}
-                </div>
+                
+                {p.doi && (
+                  <a
+                    href={`https://doi.org/${p.doi}`}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='inline-flex items-center gap-1 px-2.5 py-1 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium whitespace-nowrap'
+                  >
+                    <ExternalLink size={12} /> DOI
+                  </a>
+                )}
+                
+                {p.pdf_url && (
+                  <a
+                    href={p.pdf_url}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='inline-flex items-center gap-1 px-2.5 py-1 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium whitespace-nowrap'
+                  >
+                    <Download size={12} /> PDF
+                  </a>
+                )}
               </div>
             </div>
           </div>
-        );
-      })}
+        ))}
+      </div>
+
+      {/* Pagination - Google Scholar style */}
+      {totalPages > 1 && (
+        <div className='flex items-center justify-center gap-1 py-4 border-t bg-white'>
+          {/* Previous button */}
+          <button
+            onClick={() => handlePageChange(page - 1)}
+            disabled={page === 1}
+            className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 disabled:hover:bg-transparent transition'
+          >
+            Previous
+          </button>
+
+          {/* Page numbers */}
+          {getPageNumbers().map((pageNum, idx) => {
+            if (pageNum === '...') {
+              return (
+                <span key={`ellipsis-${idx}`} className='px-2 text-stone-400'>
+                  ...
+                </span>
+              );
+            }
+
+            const isCurrentPage = pageNum === page;
+            return (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum as number)}
+                className={`min-w-[40px] px-3 py-2 text-sm rounded transition ${
+                  isCurrentPage
+                    ? 'bg-stone-800 text-white font-semibold'
+                    : 'text-stone-700 hover:bg-stone-50'
+                }`}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+
+          {/* Next button */}
+          <button
+            onClick={() => handlePageChange(page + 1)}
+            disabled={page === totalPages}
+            className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 disabled:hover:bg-transparent transition'
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

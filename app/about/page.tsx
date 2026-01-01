@@ -1,112 +1,102 @@
-import Link from 'next/link';
-import { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'About Paperazzi',
-  description:
-    'Learn about Paperazzi, a research platform for economics papers',
-};
 
 export default function AboutPage() {
   return (
-    <main className='min-h-screen bg-linear-to-br from-slate-50 to-slate-100 text-slate-800 p-6 md:p-12'>
-      <div className='max-w-4xl mx-auto space-y-8'>
-        <h1 className='text-3xl md:text-4xl font-bold'>
-          About <span className='text-blue-700'>Paper</span>azzi
-        </h1>
+    <main className='min-h-[calc(100vh-57px)] bg-white'>
+      <div className='max-w-3xl mx-auto px-6 py-12'>
+        <h1 className='text-3xl font-bold text-slate-900 mb-8'>About</h1>
 
-        <section className='bg-white p-6 rounded-xl shadow-sm'>
-          <h2 className='text-xl font-semibold mb-3'>Objective</h2>
-          <p className='text-slate-700 leading-relaxed'>
-            Paperazzi helps researchers uncover influential papers in the
-            economics literature. It provides a <i>simple filter by journals</i>{' '}
-            and allows <i>navigating forward and backward citations</i>.
-          </p>
-        </section>
+        <div className='space-y-8 text-slate-700'>
+          {/* What it does */}
+          <section className='space-y-3'>
+            <h2 className='text-xl font-semibold text-slate-900'>What it does</h2>
+            <p>
+              Paperazzi searches economics papers with two main features:
+            </p>
+            <ol className='list-decimal list-inside space-y-1 ml-4'>
+              <li>Filter by journal using CNRS categorization</li>
+              <li>Explore forward and backward citations</li>
+            </ol>
+          </section>
 
-        <section className='bg-white p-6 rounded-xl shadow-sm'>
-          <h2 className='text-xl font-semibold mb-3'>How it works</h2>
-          <ul className='list-decimal list-inside space-y-2 text-slate-700'>
-            <li>Type some keywords to search in titles and abstracts.</li>
-            <li>
-              Filter by journals using the last categorization by the CNRS. You
-              can also add authors or years.
-            </li>
-            <li>
-              Click <button className='text-blue-700'>Search</button>. Several
-              results appear (with DOI and PDF whenever available). Click on a
-              paper to access its page information.
-            </li>
-            <li>
-              You can then click on forward or backward citations:
-              <ul className='list-disc list-inside ml-4 mt-1'>
-                <li>Backward citations: the current papers it builds upon.</li>
-                <li>Forward citations: the papers that build upon it.</li>
-              </ul>
-            </li>
-          </ul>
-          <p className='text-slate-700 mt-4 italic'>
-            Data is sourced from{' '}
-            <a href='https://openalex.org/' className='font-semibold'>
-              OpenAlex
-            </a>
-            , a comprehensive open database of academic papers.
-          </p>
-        </section>
+          {/* How to use */}
+          <section className='space-y-3'>
+            <h2 className='text-xl font-semibold text-slate-900'>How to use</h2>
+            <ol className='list-decimal list-inside space-y-2 ml-4'>
+              <li>Search by keyword</li>
+              <li>Filter by journal, author, or publication year</li>
+              <li>Sort by relevance, date, or citation count</li>
+              <li>Click on a paper to see its citations (who cites it, what it cites)</li>
+            </ol>
+          </section>
 
-        <section className='bg-white p-6 rounded-xl shadow-sm'>
-          <h2 className='text-xl font-semibold mb-3'>
-            How <span className='text-blue-700'>Paper</span>azzi Differs from
-            Google Scholar
-          </h2>
-
-          <p className='text-slate-700 mb-4'>
-            Google Scholar is excellent for broad discovery (recall), but it
-            often returns many loosely related results (noise).
-            <br />
-            Paperazzi trades recall for relevance and gives you more control
-            over what you are actually searching.
-          </p>
-
-          <div className='grid md:grid-cols-2 gap-6'>
-            <div>
-              <h3 className='font-semibold mb-1'>Similarities</h3>
-              <ul className='list-disc list-inside text-slate-700'>
-                <li>Keyword-based search.</li>
-                <li>Journal filtering (a pain in the ass with Scholar).</li>
-                <li>Navigation through forward citations.</li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className='font-semibold mb-1'>Differences</h3>
-              <ul className='list-disc list-inside text-slate-700 space-y-1'>
+          {/* Comparison with Google Scholar */}
+          <section className='space-y-3'>
+            <h2 className='text-xl font-semibold text-slate-900'>
+              Comparison with Google Scholar
+            </h2>
+            <p>
+              Google Scholar optimizes for recall (finding everything) but must accept more noise. 
+              Paperazzi optimizes for precision (finding relevant papers in top journals) but lower recall.
+            </p>
+            
+            <div className='mt-4'>
+              <p className='font-medium text-slate-900 mb-2'>Key differences:</p>
+              <ul className='list-disc list-inside space-y-1 ml-4'>
                 <li>
-                  Queries are less powerful than Scholar (lower recall).
+                  <strong>Journal filtering:</strong> Uses ISSN-based filtering with last CNRS 
+                  journal rankings, not text-based journal name matching
                 </li>
                 <li>
-                  Journal filter builds on CNRS categorization to choose
-                  journals and then filter using their ISSN. Scholar instead
-                  asks for journal names in an advanced search (I dare you to
-                  find it) and uses journal names to filter (high risk of
-                  inconsistency). For example,{' '}
-                  <Link
-                    href='https://scholar-filter.vercel.app/'
-                    className='py-2 font-semibold hover:bg-gray-50'
-                    target='_blank'
-                  >
-                    scholar-filter.vercel.app
-                  </Link>{' '}
-                  shows this beautifully.
+                  <strong>Citations:</strong> Shows both forward and backward citations 
+                  (Scholar only shows forward)
                 </li>
                 <li>
-                  Explore both backward and forward citations. Scholar only
-                  allows forward citations.
+                  <strong>Scope:</strong> Economics-focused, covers fewer papers than Scholar
                 </li>
               </ul>
             </div>
-          </div>
-        </section>
+
+            <p className='text-sm mt-4'>
+              For ISSN-based journal filtering in Scholar, see{' '}
+              <a 
+                href='https://scholar-filter.vercel.app/' 
+                className='text-stone-900 hover:underline font-semibold'
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                scholar-filter.vercel.app
+              </a>
+            </p>
+          </section>
+
+          {/* Data source */}
+          <section className='space-y-3'>
+            <h2 className='text-xl font-semibold text-slate-900'>Data source</h2>
+            <p>
+              Paper metadata and citations from{' '}
+              <a 
+                href='https://openalex.org/' 
+                className='text-stone-900 hover:underline font-semibold'
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                OpenAlex
+              </a>
+              , an open database of academic publications.
+            </p>
+            <p>
+              Journal categorization from{' '}
+              <a 
+                href='https://www.gate.cnrs.fr/spip.php?article206&lang=fr' 
+                className='text-stone-900 hover:underline font-semibold'
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                CNRS economics journal rankings
+              </a>.
+            </p>
+          </section>
+        </div>
       </div>
     </main>
   );
