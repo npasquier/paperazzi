@@ -16,6 +16,7 @@ function PaperazziAppContent() {
   // --- Modal state ---
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [showAuthorModal, setShowAuthorModal] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
 
   // --- Local state for controlled inputs (updates as user types, no API calls) ---
   const [filters, setFilters] = useState<Filters>({
@@ -42,8 +43,10 @@ function PaperazziAppContent() {
     const syncFromURL = async () => {
       // Extract params from URL
       const q = searchParams.get('q') || '';
-      const journalIssns = searchParams.get('journals')?.split(',').filter(Boolean) || [];
-      const authorIds = searchParams.get('authors')?.split(',').filter(Boolean) || [];
+      const journalIssns =
+        searchParams.get('journals')?.split(',').filter(Boolean) || [];
+      const authorIds =
+        searchParams.get('authors')?.split(',').filter(Boolean) || [];
       const from = searchParams.get('from') || '';
       const to = searchParams.get('to') || '';
       const sort = searchParams.get('sort') || 'relevance_score';
@@ -60,7 +63,7 @@ function PaperazziAppContent() {
             const data = await res.json();
             return {
               id,
-              name: data.display_name || 'Unknown Author'
+              name: data.display_name || 'Unknown Author',
             };
           } catch (error) {
             console.error(`Failed to fetch author ${id}:`, error);
@@ -70,11 +73,23 @@ function PaperazziAppContent() {
       );
 
       // Update controlled inputs (what user sees in the form)
-      setFilters({ journals, authors, dateFrom: from, dateTo: to, sortBy: sort });
+      setFilters({
+        journals,
+        authors,
+        dateFrom: from,
+        dateTo: to,
+        sortBy: sort,
+      });
 
       // Update search state (triggers API call in SearchResults)
       setSearchQuery(q);
-      setSearchFilters({ journals, authors, dateFrom: from, dateTo: to, sortBy: sort });
+      setSearchFilters({
+        journals,
+        authors,
+        dateFrom: from,
+        dateTo: to,
+        sortBy: sort,
+      });
       setPage(p);
     };
 
@@ -85,56 +100,62 @@ function PaperazziAppContent() {
   useEffect(() => {
     const handleNavbarSearch = (e: CustomEvent) => {
       const newQuery = e.detail.query;
-      
+
       // Build URL with query from navbar + current filters
       const params = new URLSearchParams();
-      
+
       if (newQuery) params.set('q', newQuery);
-      
+
       if (filters.journals.length) {
         params.set('journals', filters.journals.map((j) => j.issn).join(','));
       }
-      
+
       if (filters.authors.length) {
         params.set('authors', filters.authors.map((a) => a.id).join(','));
       }
-      
+
       if (filters.dateFrom) params.set('from', filters.dateFrom);
       if (filters.dateTo) params.set('to', filters.dateTo);
       if (filters.sortBy) params.set('sort', filters.sortBy);
-      
+
       params.set('page', '1');
-      
+
       router.push(`/search?${params.toString()}`);
     };
 
-    window.addEventListener('navbar-search', handleNavbarSearch as EventListener);
+    window.addEventListener(
+      'navbar-search',
+      handleNavbarSearch as EventListener
+    );
     return () => {
-      window.removeEventListener('navbar-search', handleNavbarSearch as EventListener);
+      window.removeEventListener(
+        'navbar-search',
+        handleNavbarSearch as EventListener
+      );
     };
   }, [filters, router]);
 
   // Update URL and trigger search (only called on explicit user action)
   const handleSearch = (newPage = 1) => {
     const params = new URLSearchParams();
-    
+
     // Get query from URL (navbar updates this)
     const currentQuery = searchParams.get('q') || '';
     if (currentQuery) params.set('q', currentQuery);
-    
+
     if (filters.journals.length) {
       const journalIssns = filters.journals.map((j) => j.issn).join(',');
       params.set('journals', journalIssns);
     }
-    
+
     if (filters.authors.length) {
       params.set('authors', filters.authors.map((a) => a.id).join(','));
     }
-    
+
     if (filters.dateFrom) params.set('from', filters.dateFrom);
     if (filters.dateTo) params.set('to', filters.dateTo);
     if (filters.sortBy) params.set('sort', filters.sortBy);
-    
+
     params.set('page', newPage.toString());
 
     router.push(`/search?${params.toString()}`);
@@ -143,21 +164,21 @@ function PaperazziAppContent() {
   // Handle sort change - triggers immediate search
   const handleSortChange = (newSort: string) => {
     const params = new URLSearchParams();
-    
+
     const currentQuery = searchParams.get('q') || '';
     if (currentQuery) params.set('q', currentQuery);
-    
+
     if (filters.journals.length) {
       params.set('journals', filters.journals.map((j) => j.issn).join(','));
     }
-    
+
     if (filters.authors.length) {
       params.set('authors', filters.authors.map((a) => a.id).join(','));
     }
-    
+
     if (filters.dateFrom) params.set('from', filters.dateFrom);
     if (filters.dateTo) params.set('to', filters.dateTo);
-    
+
     params.set('sort', newSort);
     params.set('page', '1');
 
@@ -167,15 +188,15 @@ function PaperazziAppContent() {
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
       {/* Left sidebar with filters - fixed width, scrollable */}
-      <aside className='w-80 bg-white border-r border-stone-200 overflow-y-auto'>
-        <FilterPanel
-          filters={filters}
-          setFilters={setFilters}
-          openJournalModal={() => setShowJournalModal(true)}
-          openAuthorModal={() => setShowAuthorModal(true)}
-          onSortChange={handleSortChange}
-        />
-      </aside>
+      <FilterPanel
+        filters={filters}
+        setFilters={setFilters}
+        openJournalModal={() => setShowJournalModal(true)}
+        openAuthorModal={() => setShowAuthorModal(true)}
+        onSortChange={handleSortChange}
+        isOpen={isFilterOpen}
+        onToggle={() => setIsFilterOpen((v) => !v)}
+      />
 
       {/* Main results area - scrollable */}
       <main className='flex-1 overflow-y-auto'>
@@ -223,16 +244,18 @@ function PaperazziAppContent() {
 
 export default function PaperazziApp() {
   return (
-    <Suspense fallback={
-      <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
-        <aside className='w-80 bg-white border-r border-stone-200 p-4'>
-          <div className='text-sm text-stone-600'>Loading filters...</div>
-        </aside>
-        <div className='flex-1 p-6'>
-          <div className='text-stone-600'>Loading search...</div>
+    <Suspense
+      fallback={
+        <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
+          <aside className='w-80 bg-white border-r border-stone-200 p-4'>
+            <div className='text-sm text-stone-600'>Loading filters...</div>
+          </aside>
+          <div className='flex-1 p-6'>
+            <div className='text-stone-600'>Loading search...</div>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <PaperazziAppContent />
     </Suspense>
   );
