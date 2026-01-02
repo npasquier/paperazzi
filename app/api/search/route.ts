@@ -13,44 +13,90 @@ function decodeAbstract(inv: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
-  const query   = searchParams.get('query') || '';
-  const journals = (searchParams.get('journals') || '').split(',').filter(Boolean);
-  const authors  = (searchParams.get('authors') || '').split(',').filter(Boolean);
+  const query = searchParams.get('query') || '';
+  const journals = (searchParams.get('journals') || '')
+    .split(',')
+    .filter(Boolean);
+  const authors = (searchParams.get('authors') || '')
+    .split(',')
+    .filter(Boolean);
   const from = searchParams.get('from');
-  const to   = searchParams.get('to');
+  const to = searchParams.get('to');
   const sort = searchParams.get('sort') || 'relevance_score';
   const page = Number(searchParams.get('page') || 1);
+  const citing = searchParams.get('citing');
+  const citingAll = (searchParams.get('citingAll') || '')
+    .split(',')
+    .filter(Boolean);
 
+    console.log(
+    'Search API called with:',
+    { query, journals, authors, from, to, sort, page, citing, citingAll }   
+    )
 
+  let intersectionIds: string[] | null = null;
+
+  if (citingAll.length > 0) {
+    // Fetch citing papers for each pinned paper
+    const resultsPerId: string[][] = await Promise.all(
+      citingAll.map(async (id) => {
+        const res = await fetch(
+          `https://api.openalex.org/works?per-page=200&filter=cites:${id}&mailto=${process.env.MAIL_ID}`
+        );
+        const data = await res.json();
+        return data.results.map((w: any) => w.id);
+      })
+    );
+
+    // Compute intersection of IDs
+    intersectionIds = resultsPerId.reduce((a, b) =>
+      a.filter((x) => b.includes(x))
+    );
+    if (intersectionIds.length === 0) {
+      return NextResponse.json({
+        results: [],
+        meta: { count: 0, page, per_page: 20 },
+      });
+    }
+  }
+
+  // === Build OpenAlex API URL ===
   let url = `https://api.openalex.org/works?per-page=20&page=${page}&mailto=${process.env.MAIL_ID}`;
 
   const filters: string[] = [];
+
+  if (citing) {
+    filters.push(`cites:${citing}`);
+  }
 
   if (journals.length)
     filters.push(`primary_location.source.issn:${journals.join('|')}`);
 
   if (authors.length)
-    filters.push(authors.map(id => `authorships.author.id:${id}`).join(','));
+    filters.push(authors.map((id) => `authorships.author.id:${id}`).join(','));
 
-  if (from || to)
-    filters.push(`publication_year:${from || ''}-${to || ''}`);
+  if (from || to) filters.push(`publication_year:${from || ''}-${to || ''}`);
 
-  if (filters.length)
-    url += `&filter=${filters.join(',')}`;
+  // Apply intersection filter if exists
+  if (intersectionIds) {
+    filters.push(`id:${intersectionIds.join('|')}`); // OR in OpenAlex, but we pre-intersected
+  }
+
+  if (filters.length) url += `&filter=${filters.join(',')}`;
 
   if (query) url += `&search=${encodeURIComponent(query)}`;
-  
+
   // Add sort parameter
   if (sort && sort !== 'relevance_score') {
     url += `&sort=${sort}`;
   } else if (sort === 'relevance_score' && !query) {
-    // If no query, relevance_score doesn't work, fall back to publication_date:desc
     url += `&sort=publication_date:desc`;
   }
 
+  console.log('OpenAlex API URL:', url);
+
   const res = await fetch(url);
   const data = await res.json();
-
 
   const papers = data.results.map((w: any) => ({
     id: w.id,
@@ -64,12 +110,12 @@ export async function GET(req: NextRequest) {
     abstract: decodeAbstract(w.abstract_inverted_index),
   }));
 
-  return NextResponse.json({ 
+  return NextResponse.json({
     results: papers,
     meta: {
       count: data.meta?.count || 0,
       page: page,
-      per_page: 20
-    }
+      per_page: 20,
+    },
   });
 }

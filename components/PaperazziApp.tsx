@@ -8,7 +8,6 @@ import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
 import { Filters } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
-import { Pin } from 'lucide-react';
 import PinSidebar from './PinSidebar';
 
 function PaperazziAppContent() {
@@ -28,6 +27,8 @@ function PaperazziAppContent() {
     dateFrom: '',
     dateTo: '',
     sortBy: 'relevance_score',
+    citing: undefined,
+    citingAll: undefined,
   });
 
   // --- Search state (only updates when URL changes, triggers API calls) ---
@@ -38,6 +39,8 @@ function PaperazziAppContent() {
     dateFrom: '',
     dateTo: '',
     sortBy: 'relevance_score',
+    citing: undefined,
+    citingAll: undefined,
   });
   const [page, setPage] = useState(1);
 
@@ -54,6 +57,11 @@ function PaperazziAppContent() {
       const to = searchParams.get('to') || '';
       const sort = searchParams.get('sort') || 'relevance_score';
       const p = Number(searchParams.get('page') || 1);
+      const citing = searchParams.get('citing') || '';
+      const citingAll =
+        searchParams.get('citingAll')?.split(',').filter(Boolean) || [];
+
+      // If citing is set, we skip syncing other filters
 
       // Map ISSNs to full journal objects
       const journals = mapIssnsToJournals(journalIssns);
@@ -82,6 +90,8 @@ function PaperazziAppContent() {
         dateFrom: from,
         dateTo: to,
         sortBy: sort,
+        citing: citing,
+        citingAll: citingAll,
       });
 
       // Update search state (triggers API call in SearchResults)
@@ -92,6 +102,8 @@ function PaperazziAppContent() {
         dateFrom: from,
         dateTo: to,
         sortBy: sort,
+        citing: citing,
+        citingAll: citingAll,
       });
       setPage(p);
     };
@@ -120,6 +132,9 @@ function PaperazziAppContent() {
       if (filters.dateFrom) params.set('from', filters.dateFrom);
       if (filters.dateTo) params.set('to', filters.dateTo);
       if (filters.sortBy) params.set('sort', filters.sortBy);
+      if (filters.citing) params.set('citing', filters.citing);
+      if (filters.citingAll)
+        params.set('citingAll', filters.citingAll.join(','));
 
       params.set('page', '1');
 
@@ -159,6 +174,9 @@ function PaperazziAppContent() {
     if (filters.dateTo) params.set('to', filters.dateTo);
     if (filters.sortBy) params.set('sort', filters.sortBy);
 
+    if (filters.citing) params.set('citing', filters.citing);
+    if (filters.citingAll) params.set('citingAll', filters.citingAll.join(','));
+
     params.set('page', newPage.toString());
 
     router.push(`/search?${params.toString()}`);
@@ -181,8 +199,59 @@ function PaperazziAppContent() {
 
     if (filters.dateFrom) params.set('from', filters.dateFrom);
     if (filters.dateTo) params.set('to', filters.dateTo);
+    if (filters.citing) params.set('citing', filters.citing);
+    if (filters.citingAll) params.set('citingAll', filters.citingAll.join(','));
 
     params.set('sort', newSort);
+    params.set('page', '1');
+
+    router.push(`/search?${params.toString()}`);
+  };
+
+  const handleFindCites = (paperId: string) => {
+    const params = new URLSearchParams();
+
+    if (searchQuery) params.set('q', searchQuery);
+
+    if (filters.journals.length)
+      params.set('journals', filters.journals.map((j) => j.issn).join(','));
+
+    if (filters.authors.length)
+      params.set('authors', filters.authors.map((a) => a.id).join(','));
+
+    if (filters.dateFrom) params.set('from', filters.dateFrom);
+    if (filters.dateTo) params.set('to', filters.dateTo);
+    if (filters.sortBy) params.set('sort', filters.sortBy);
+
+    params.set('citing', paperId);
+    params.set('page', '1');
+
+    router.push(`/search?${params.toString()}`);
+  };
+
+  // Add this function in PaperazziAppContent
+  const handleClearCiting = () => {
+    const params = new URLSearchParams();
+
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery) params.set('q', currentQuery);
+
+    if (filters.journals.length) {
+      params.set('journals', filters.journals.map((j) => j.issn).join(','));
+    }
+
+    if (filters.authors.length) {
+      params.set('authors', filters.authors.map((a) => a.id).join(','));
+    }
+
+    if (filters.dateFrom) params.set('from', filters.dateFrom);
+    if (filters.dateTo) params.set('to', filters.dateTo);
+    if (filters.sortBy) params.set('sort', filters.sortBy);
+
+    // Don't include 'citing' - that's the point!
+    // Keep citingAll if you want, or remove it too:
+    // if (filters.citingAll?.length) params.set('citingAll', filters.citingAll.join(','));
+
     params.set('page', '1');
 
     router.push(`/search?${params.toString()}`);
@@ -213,6 +282,9 @@ function PaperazziAppContent() {
             sortBy={searchFilters.sortBy}
             page={page}
             loadMore={(newPage) => handleSearch(newPage)}
+            citing={searchFilters.citing}
+            citingAll={searchFilters.citingAll}
+            onClearCiting={handleClearCiting}
           />
         </div>
       </main>
@@ -220,6 +292,7 @@ function PaperazziAppContent() {
       <PinSidebar
         isOpen={isPinSidebarOpen}
         onToggle={() => setIsPinSidebarOpen((v) => !v)}
+        onFindingCites={handleFindCites}
       />
 
       {/* Modals */}

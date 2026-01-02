@@ -31,6 +31,8 @@ export interface Filters {
   dateFrom: string;
   dateTo: string;
   sortBy: string; 
+  citing?: string;
+  citingAll?: string[];
 }
 
 export interface Paper {
