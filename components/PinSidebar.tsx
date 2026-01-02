@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Pin, Search, X, ChevronRight, Loader2 } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
-import { fetchPapersCitingAll } from '@/lib/api';
+// import { fetchPapersCitingAll } from '@/lib/api';
 import PaperCard from './ui/PaperCard';
 
 interface PinSidebarProps {
@@ -46,15 +46,15 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
     setLoadingCitingAll(true);
     setShowCitingAll(true);
     
-    try {
-      const { papers, total } = await fetchPapersCitingAll(pinnedIds);
-      setCitingAllResults(papers);
-      setCitingAllTotal(total);
-    } catch (error) {
-      console.error('Failed to fetch papers citing all:', error);
-    } finally {
-      setLoadingCitingAll(false);
-    }
+    // try {
+    //   const { papers, total } = await fetchPapersCitingAll(pinnedIds);
+    //   setCitingAllResults(papers);
+    //   setCitingAllTotal(total);
+    // } catch (error) {
+    //   console.error('Failed to fetch papers citing all:', error);
+    // } finally {
+    //   setLoadingCitingAll(false);
+    // }
   };
   
   // Collapsed state - just show toggle button
@@ -76,7 +76,7 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
   }
   
   return (
-    <aside className="w-80 bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden">
+    <aside className="w-80  bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-stone-200 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">

@@ -8,6 +8,8 @@ import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
 import { Filters } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
+import { Pin } from 'lucide-react';
+import PinSidebar from './PinSidebar';
 
 function PaperazziAppContent() {
   const router = useRouter();
@@ -17,6 +19,7 @@ function PaperazziAppContent() {
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [showAuthorModal, setShowAuthorModal] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(false);
 
   // --- Local state for controlled inputs (updates as user types, no API calls) ---
   const [filters, setFilters] = useState<Filters>({
@@ -213,6 +216,11 @@ function PaperazziAppContent() {
           />
         </div>
       </main>
+
+      <PinSidebar
+        isOpen={isPinSidebarOpen}
+        onToggle={() => setIsPinSidebarOpen((v) => !v)}
+      />
 
       {/* Modals */}
       <AuthorModal
