@@ -1,4 +1,3 @@
-
 export default function AboutPage() {
   return (
     <main className='min-h-[calc(100vh-57px)] bg-white'>
@@ -8,10 +7,10 @@ export default function AboutPage() {
         <div className='space-y-8 text-slate-700'>
           {/* What it does */}
           <section className='space-y-3'>
-            <h2 className='text-xl font-semibold text-slate-900'>What it does</h2>
-            <p>
-              Paperazzi searches economics papers with two main features:
-            </p>
+            <h2 className='text-xl font-semibold text-slate-900'>
+              What it does
+            </h2>
+            <p>Paperazzi searches economics papers with two main features:</p>
             <ol className='list-decimal list-inside space-y-1 ml-4'>
               <li>Filter by journal using CNRS categorization</li>
               <li>Explore forward and backward citations</li>
@@ -25,7 +24,10 @@ export default function AboutPage() {
               <li>Search by keyword</li>
               <li>Filter by journal, author, or publication year</li>
               <li>Sort by relevance, date, or citation count</li>
-              <li>Click on a paper to see its citations (who cites it, what it cites)</li>
+              <li>
+                Click on a paper to see its citations (who cites it, what it
+                cites)
+              </li>
             </ol>
           </section>
 
@@ -35,31 +37,36 @@ export default function AboutPage() {
               Comparison with Google Scholar
             </h2>
             <p>
-              Google Scholar optimizes for recall (finding everything) but must accept more noise. 
-              Paperazzi optimizes for precision (finding relevant papers in top journals) but lower recall.
+              Google Scholar optimizes for recall (finding everything) but must
+              accept more noise. Paperazzi optimizes for precision (finding
+              relevant papers in top journals) but lower recall.
             </p>
-            
+
             <div className='mt-4'>
-              <p className='font-medium text-slate-900 mb-2'>Key differences:</p>
+              <p className='font-medium text-slate-900 mb-2'>
+                Key differences:
+              </p>
               <ul className='list-disc list-inside space-y-1 ml-4'>
                 <li>
-                  <strong>Journal filtering:</strong> Uses ISSN-based filtering with last CNRS 
-                  journal rankings, not text-based journal name matching
+                  <strong>Journal filtering:</strong> Uses ISSN-based filtering
+                  with last CNRS journal rankings, not text-based journal name
+                  matching
                 </li>
                 <li>
-                  <strong>Citations:</strong> Shows both forward and backward citations 
-                  (Scholar only shows forward)
+                  <strong>Citations:</strong> Shows both forward and backward
+                  citations (Scholar only shows forward)
                 </li>
                 <li>
-                  <strong>Scope:</strong> Economics-focused, covers fewer papers than Scholar
+                  <strong>Scope:</strong> Economics-focused, covers fewer papers
+                  than Scholar
                 </li>
               </ul>
             </div>
 
             <p className='text-sm mt-4'>
               For ISSN-based journal filtering in Scholar, see{' '}
-              <a 
-                href='https://scholar-filter.vercel.app/' 
+              <a
+                href='https://scholar-filter.vercel.app/'
                 className='text-stone-900 hover:underline font-semibold'
                 target='_blank'
                 rel='noopener noreferrer'
@@ -71,11 +78,13 @@ export default function AboutPage() {
 
           {/* Data source */}
           <section className='space-y-3'>
-            <h2 className='text-xl font-semibold text-slate-900'>Data source</h2>
+            <h2 className='text-xl font-semibold text-slate-900'>
+              Data source
+            </h2>
             <p>
               Paper metadata and citations from{' '}
-              <a 
-                href='https://openalex.org/' 
+              <a
+                href='https://openalex.org/'
                 className='text-stone-900 hover:underline font-semibold'
                 target='_blank'
                 rel='noopener noreferrer'
@@ -86,14 +95,17 @@ export default function AboutPage() {
             </p>
             <p>
               Journal categorization from{' '}
-              <a 
-                href='https://www.gate.cnrs.fr/spip.php?article206&lang=fr' 
+              <a
+                href='https://www.gate.cnrs.fr/wp-content/uploads/2021/12/categorisation37_liste_juin_2020-2.pdf'
                 className='text-stone-900 hover:underline font-semibold'
                 target='_blank'
                 rel='noopener noreferrer'
               >
-                CNRS economics journal rankings
-              </a>.
+                CNRS Economics Journal Rankings
+              </a>
+              , available in French. CNRS stopped categorizing economics
+              journals in 2020, but the list is still accessible and is often
+              used unofficially.
             </p>
           </section>
         </div>

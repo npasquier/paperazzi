@@ -1,21 +1,26 @@
 'use client';
+
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
+import Link from 'next/link';
+import { ExternalLink, Download } from 'lucide-react';
+
 import parsePapers from '@/utils/parsePapers';
 import buildAbstract from '@/utils/abstract';
 import { Paper } from '@/types/interfaces';
-import Link from 'next/link';
-import { ExternalLink, Download, Pin, X } from 'lucide-react';
+import { usePins } from '@/contexts/PinContext';
+import PinButton from '@/components/ui/PinButton';
+import PinSidebar from '@/components/PinSidebar';
 
 export default function PaperPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const rawId = params?.id;
-  
+
+  const { pinnedPapers, pinnedIds } = usePins();
+
   const [paper, setPaper] = useState<Paper | null>(null);
-  const [pinnedPapers, setPinnedPapers] = useState<Paper[]>([]);
   const [referencedWorks, setReferencedWorks] = useState<string[]>([]);
   const [cites, setCites] = useState<Paper[]>([]);
   const [citesPage, setCitesPage] = useState(1);
@@ -24,6 +29,7 @@ export default function PaperPage() {
   const [loadingPaper, setLoadingPaper] = useState(true);
   const [loadingCites, setLoadingCites] = useState(false);
   const [loadingCited, setLoadingCited] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const paperId =
     typeof rawId === 'string'
@@ -31,37 +37,6 @@ export default function PaperPage() {
       : Array.isArray(rawId)
       ? rawId[0]
       : undefined;
-
-  const MAX_PINS = 5;
-
-  // Parse pinned IDs from URL
-  const pinnedIds = searchParams.get('pinned')?.split(',').filter(Boolean) || [];
-
-  // Check if current paper is pinned
-  const isPinned = paperId ? pinnedIds.includes(paperId) : false;
-
-  // Fetch pinned papers
-  useEffect(() => {
-    if (pinnedIds.length === 0) {
-      setPinnedPapers([]);
-      return;
-    }
-
-    const fetchPinned = async () => {
-      const papers: Paper[] = [];
-      for (const id of pinnedIds) {
-        try {
-          const res = await axios.get(
-            `https://api.openalex.org/works/${id}?mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`
-          );
-          const [p] = parsePapers([res.data]);
-          papers.push(p);
-        } catch {}
-      }
-      setPinnedPapers(papers);
-    };
-    fetchPinned();
-  }, [pinnedIds.join(',')]);
 
   // Memoized helper function
   const fetchPapersByIds = useCallback(
@@ -120,7 +95,7 @@ export default function PaperPage() {
     };
   }, [paperId]);
 
-  // Fetch references (cited by this paper)
+  // Fetch references (backward citations)
   useEffect(() => {
     if (referencedWorks.length === 0) return;
     let isCancelled = false;
@@ -171,55 +146,19 @@ export default function PaperPage() {
     return () => {
       isCancelled = true;
     };
-  }, [citedPage, paperId]);
+  }, [citedPage, paperId, fetchPapersByIds]);
 
-  // Toggle pin
-  const togglePin = () => {
-    if (!paperId) return;
-    
-    let newPinnedIds: string[];
-    if (isPinned) {
-      // Unpin
-      newPinnedIds = pinnedIds.filter(id => id !== paperId);
-    } else {
-      // Pin (max 5)
-      if (pinnedIds.length >= MAX_PINS) {
-        alert(`Maximum ${MAX_PINS} papers can be pinned`);
-        return;
-      }
-      newPinnedIds = [...pinnedIds, paperId];
-    }
+  if (!paperId)
+    return <div className='p-6 text-stone-600'>Paper ID not found</div>;
+  if (loadingPaper || !paper)
+    return <div className='p-6 text-stone-600'>Loading paper…</div>;
 
-    updatePinnedUrl(newPinnedIds);
-  };
-
-  // Remove specific pin
-  const removePin = (idToRemove: string) => {
-    const newPinnedIds = pinnedIds.filter(id => id !== idToRemove);
-    updatePinnedUrl(newPinnedIds);
-  };
-
-  // Update URL with pinned papers
-  const updatePinnedUrl = (newPinnedIds: string[]) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (newPinnedIds.length > 0) {
-      params.set('pinned', newPinnedIds.join(','));
-    } else {
-      params.delete('pinned');
-    }
-    router.replace(`/paper/${paperId}?${params.toString()}`);
-  };
-
-  // Conditional rendering
-  if (!paperId) return <div className='p-6 text-stone-600'>Paper ID not found</div>;
-  if (loadingPaper || !paper) return <div className='p-6 text-stone-600'>Loading paper…</div>;
-
-  // Check which pinned papers appear in references/citations
-  const pinnedInReferences = pinnedPapers.filter(pp => 
-    referencedWorks.some(ref => ref.includes(pp.id.split('/').pop()!))
+  // Determine which pinned papers appear in references/citations
+  const pinnedInReferences = pinnedPapers.filter((pp) =>
+    referencedWorks.some((ref) => ref.includes(pp.id.split('/').pop()!))
   );
-  const pinnedInCited = pinnedPapers.filter(pp =>
-    cited.some(c => c.id === pp.id)
+  const pinnedInCited = pinnedPapers.filter((pp) =>
+    cited.some((c) => c.id === pp.id)
   );
 
   const renderPaperCard = (r: Paper, prefix: string, isPinnedCard = false) => (
@@ -227,71 +166,43 @@ export default function PaperPage() {
       key={`${prefix}-${r.id}-${paperId}`}
       href={`/paper/${r.id.split('/').pop()}?pinned=${pinnedIds.join(',')}`}
       className={`block border rounded-lg p-3 transition bg-white ${
-        isPinnedCard 
-          ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200' 
+        isPinnedCard
+          ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200'
           : 'border-stone-200 hover:border-stone-300'
       }`}
     >
       {isPinnedCard && (
         <div className='flex items-center gap-1 text-xs text-amber-700 font-medium mb-2'>
-          <Pin size={12} className='fill-amber-700' />
           Pinned paper
         </div>
       )}
-      <div className='font-semibold text-stone-900 text-sm leading-snug mb-1'>{r.title}</div>
-      <div className='text-xs text-stone-600 mb-1'>{r.authors.slice(0, 3).join(', ')}{r.authors.length > 3 && '...'}</div>
+      <div className='font-semibold text-stone-900 text-sm leading-snug mb-1'>
+        {r.title}
+      </div>
+      <div className='text-xs text-stone-600 mb-1'>
+        {r.authors.slice(0, 3).join(', ')}
+        {r.authors.length > 3 && '...'}
+      </div>
       <div className='text-xs text-stone-500'>
         {r.journal_name} • {r.publication_year} • {r.cited_by_count} citations
       </div>
     </Link>
   );
 
-  // Filter out pinned papers from regular lists
-  const regularCites = cites.filter(c => 
-    !pinnedInReferences.some(pp => pp.id === c.id)
+  const regularCites = cites.filter(
+    (c) => !pinnedInReferences.some((pp) => pp.id === c.id)
   );
-  const regularCited = cited.filter(c =>
-    !pinnedInCited.some(pp => pp.id === c.id)
+  const regularCited = cited.filter(
+    (c) => !pinnedInCited.some((pp) => pp.id === c.id)
   );
 
   return (
     <div className='min-h-screen bg-stone-50 flex'>
-      {/* Pinned Papers Sidebar */}
-      {pinnedPapers.length > 0 && (
-        <aside className='w-72 bg-white border-r border-stone-200 p-4 overflow-y-auto'>
-          <h3 className='text-sm font-semibold text-stone-900 mb-3 flex items-center gap-2'>
-            <Pin size={14} className='fill-stone-700' />
-            Pinned Papers ({pinnedPapers.length}/{MAX_PINS})
-          </h3>
-          <div className='space-y-2'>
-            {pinnedPapers.map(pp => (
-              <div
-                key={pp.id}
-                className='bg-stone-50 border border-stone-200 rounded-lg p-3 relative'
-              >
-                <button
-                  onClick={() => removePin(pp.id.split('/').pop()!)}
-                  className='absolute top-2 right-2 p-1 hover:bg-stone-200 rounded transition'
-                  title='Unpin'
-                >
-                  <X size={12} className='text-stone-600' />
-                </button>
-                <Link
-                  href={`/paper/${pp.id.split('/').pop()}?pinned=${pinnedIds.join(',')}`}
-                  className='block pr-6'
-                >
-                  <div className='font-semibold text-stone-900 text-xs leading-snug mb-1'>
-                    {pp.title}
-                  </div>
-                  <div className='text-xs text-stone-500'>
-                    {pp.publication_year} • {pp.cited_by_count} cites
-                  </div>
-                </Link>
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
+      {/* Pin Sidebar */}
+      <PinSidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
 
       {/* Main Content */}
       <div className='flex-1 overflow-y-auto'>
@@ -299,24 +210,17 @@ export default function PaperPage() {
           {/* MAIN PAPER */}
           <div className='bg-white border border-stone-200 rounded-lg p-6'>
             <div className='flex items-start justify-between gap-4 mb-2'>
-              <h1 className='text-2xl font-bold text-stone-900 flex-1'>{paper.title}</h1>
-              <button
-                onClick={togglePin}
-                className={`flex-shrink-0 p-2 rounded-lg border transition ${
-                  isPinned
-                    ? 'border-amber-400 bg-amber-50 text-amber-700'
-                    : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
-                }`}
-                title={isPinned ? 'Unpin this paper' : `Pin this paper (${pinnedIds.length}/${MAX_PINS})`}
-              >
-                <Pin size={18} className={isPinned ? 'fill-amber-700' : ''} />
-              </button>
+              <h1 className='text-2xl font-bold text-stone-900 flex-1'>
+                {paper.title}
+              </h1>
+              <PinButton paper={paper} />
             </div>
             <div className='text-sm text-stone-600 mb-1'>
               {paper.authors.join(', ')}
             </div>
             <div className='text-sm text-stone-500 mb-3'>
-              {paper.journal_name} • {paper.publication_year} • {paper.cited_by_count} citations
+              {paper.journal_name} • {paper.publication_year} •{' '}
+              {paper.cited_by_count} citations
             </div>
             <div className='flex flex-wrap gap-2 mb-4'>
               {paper.doi && (
@@ -347,17 +251,16 @@ export default function PaperPage() {
             )}
           </div>
 
-          {/* REFERENCES (backward citations) */}
+          {/* REFERENCES */}
           <div className='space-y-3'>
             <h2 className='text-lg font-semibold text-stone-900'>
               References ({referencedWorks.length})
             </h2>
             <div className='grid md:grid-cols-2 gap-3'>
-              {/* Show pinned papers at top if they're in references */}
-              {pinnedInReferences.map(pp => renderPaperCard(pp, 'pinned-ref', true))}
-              
-              {/* Show regular references */}
-              {regularCites.map(r => renderPaperCard(r, 'references'))}
+              {pinnedInReferences.map((pp) =>
+                renderPaperCard(pp, 'pinned-ref', true)
+              )}
+              {regularCites.map((r) => renderPaperCard(r, 'references'))}
             </div>
             {referencedWorks.length > cites.length && (
               <button
@@ -370,25 +273,26 @@ export default function PaperPage() {
             )}
           </div>
 
-          {/* CITED BY (forward citations) */}
+          {/* CITED BY */}
           <div className='space-y-3'>
             <h2 className='text-lg font-semibold text-stone-900'>
               Cited by ({paper.cited_by_count})
             </h2>
             <div className='grid md:grid-cols-2 gap-3'>
-              {/* Show pinned papers at top if they cite this paper */}
-              {pinnedInCited.map(pp => renderPaperCard(pp, 'pinned-cited', true))}
-              
-              {/* Show regular citations */}
-              {regularCited.map(r => renderPaperCard(r, 'cited'))}
+              {pinnedInCited.map((pp) =>
+                renderPaperCard(pp, 'pinned-cited', true)
+              )}
+              {regularCited.map((r) => renderPaperCard(r, 'cited'))}
             </div>
-            <button
-              onClick={() => setCitedPage((p) => p + 1)}
-              disabled={loadingCited}
-              className='px-4 py-2 text-sm border border-stone-300 rounded-lg bg-white hover:bg-stone-50 transition text-stone-700 font-medium disabled:opacity-50'
-            >
-              {loadingCited ? 'Loading...' : 'Load more citations'}
-            </button>
+            {cited.length > 0 && (
+              <button
+                onClick={() => setCitedPage((p) => p + 1)}
+                disabled={loadingCited}
+                className='px-4 py-2 text-sm border border-stone-300 rounded-lg bg-white hover:bg-stone-50 transition text-stone-700 font-medium disabled:opacity-50'
+              >
+                {loadingCited ? 'Loading...' : 'Load more citations'}
+              </button>
+            )}
           </div>
         </div>
       </div>

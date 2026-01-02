@@ -3,6 +3,7 @@
 import { Pin as PinIcon } from 'lucide-react';
 import { Paper } from '@/types/interfaces';
 import { usePins } from '@/contexts/PinContext';
+import { normalizeId } from '@/utils/normalizeId';
 
 interface PinButtonProps {
   paper: Paper;
@@ -11,7 +12,8 @@ interface PinButtonProps {
 
 export default function PinButton({ paper, size = 'md' }: PinButtonProps) {
   const { isPinned, togglePin } = usePins();
-  const pinned = isPinned(paper.id);
+  const pinned = isPinned(normalizeId(paper.id));
+
 
   return (
     <button
