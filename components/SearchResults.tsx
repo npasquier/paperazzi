@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
-import { X, Quote } from 'lucide-react';
+import { X, Quote, Library } from 'lucide-react';
 
 interface Props {
   query: string;
@@ -17,7 +17,8 @@ interface Props {
   citing?: string;
   citingAll?: string[];
   loadMore?: (page: number) => void;
-  onClearCiting?: () => void; // New prop to clear the citing filter
+  onClearCiting?: () => void;
+  onClearCitingAll?: () => void;
 }
 
 export default function SearchResults({
@@ -32,12 +33,15 @@ export default function SearchResults({
   citingAll,
   loadMore,
   onClearCiting,
+  onClearCitingAll,
 }: Props) {
   const [results, setResults] = useState<Paper[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [citingPaper, setCitingPaper] = useState<Paper | null>(null);
+  const [citingAllPapers, setCitingAllPapers] = useState<Paper[]>([]);
   const [loadingCitingPaper, setLoadingCitingPaper] = useState(false);
+  const [loadingCitingAllPapers, setLoadingCitingAllPapers] = useState(false);
   const { pinnedIds } = usePins();
 
   // Fetch the paper being cited when `citing` changes
@@ -54,9 +58,11 @@ export default function SearchResults({
         setCitingPaper({
           id: data.id,
           title: data.title,
-          authors: data.authorships?.map((a: any) => a.author.display_name) || [],
+          authors:
+            data.authorships?.map((a: any) => a.author.display_name) || [],
           publication_year: data.publication_year,
-          journal_name: data.primary_location?.source?.display_name || 'Unknown',
+          journal_name:
+            data.primary_location?.source?.display_name || 'Unknown',
           doi: data.doi,
           cited_by_count: data.cited_by_count,
           abstract: '',
@@ -69,6 +75,52 @@ export default function SearchResults({
       .finally(() => setLoadingCitingPaper(false));
   }, [citing]);
 
+  // Fetch all papers being cited when `citingAll` changes
+  // In SearchResults.tsx, update the citingAll useEffect (around line 75-113)
+
+  // Fetch all papers being cited when `citingAll` changes
+  useEffect(() => {
+    if (!citingAll || citingAll.length === 0) {
+      setCitingAllPapers([]);
+      return;
+    }
+
+    setLoadingCitingAllPapers(true);
+
+    Promise.all(
+      citingAll.map((id) =>
+        fetch(`https://api.openalex.org/works/${id}`)
+          .then((res) => res.json())
+          .then(
+            (data): Paper => ({
+              id: data.id,
+              title: data.title,
+              authors:
+                data.authorships?.map((a: any) => a.author.display_name) || [],
+              publication_year: data.publication_year,
+              journal_name:
+                data.primary_location?.source?.display_name || 'Unknown',
+              doi: data.doi,
+              cited_by_count: data.cited_by_count,
+              abstract: '',
+            })
+          )
+          .catch((err) => {
+            console.error(`Failed to fetch paper ${id}:`, err);
+            return null;
+          })
+      )
+    )
+      .then((papers) => {
+        const validPapers: Paper[] = papers.filter(
+          (p): p is Paper => p !== null
+        );
+        setCitingAllPapers(validPapers);
+      })
+      .finally(() => setLoadingCitingAllPapers(false));
+  }, [citingAll]);
+
+  // Main search effect
   useEffect(() => {
     if (
       !citing &&
@@ -77,6 +129,8 @@ export default function SearchResults({
       journals.length === 0 &&
       authors.length === 0
     ) {
+      setResults([]);
+      setTotalCount(0);
       return;
     }
 
@@ -164,17 +218,9 @@ export default function SearchResults({
     );
   }
 
-  if (results.length === 0) {
-    return (
-      <div className='text-center py-12 text-stone-500'>
-        No papers found. Try adjusting your search criteria.
-      </div>
-    );
-  }
-
   return (
     <div className='flex flex-col h-full'>
-      {/* Citing Paper Banner */}
+      {/* Citing Single Paper Banner */}
       {citing && (
         <div className='mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
@@ -193,7 +239,7 @@ export default function SearchResults({
                   </p>
                 ) : citingPaper ? (
                   <div>
-                    <p className='text-sm font-medium text-stone-900 truncate'>
+                    <p className='text-sm font-medium text-stone-900 line-clamp-2'>
                       {citingPaper.title}
                     </p>
                     <p className='text-xs text-stone-600 truncate'>
@@ -219,26 +265,98 @@ export default function SearchResults({
         </div>
       )}
 
+      {/* Citing ALL Papers Banner */}
+      {citingAll && citingAll.length > 0 && (
+        <div className='mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='flex items-start gap-2 flex-1 min-w-0'>
+              <Library
+                size={16}
+                className='text-purple-600 mt-0.5 flex-shrink-0'
+              />
+              <div className='min-w-0 flex-1'>
+                <p className='text-xs font-medium text-purple-800 mb-2'>
+                  Showing papers that cite ALL {citingAll.length} papers:
+                </p>
+                {loadingCitingAllPapers ? (
+                  <p className='text-sm text-purple-700 animate-pulse'>
+                    Loading papers info...
+                  </p>
+                ) : citingAllPapers.length > 0 ? (
+                  <div className='space-y-2'>
+                    {citingAllPapers.map((paper, index) => (
+                      <div
+                        key={paper.id}
+                        className='text-sm bg-white/60 rounded p-2 border border-purple-100'
+                      >
+                        <p className='font-medium text-stone-900 line-clamp-1'>
+                          {index + 1}. {paper.title}
+                        </p>
+                        <p className='text-xs text-stone-600 truncate'>
+                          {paper.authors?.slice(0, 2).join(', ')}
+                          {paper.authors?.length > 2 && ' et al.'}
+                          {paper.publication_year &&
+                            ` (${paper.publication_year})`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className='text-sm text-purple-700'>
+                    {citingAll.length} papers selected
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClearCitingAll}
+              className='p-1 hover:bg-purple-100 rounded transition flex-shrink-0'
+              title='Clear citing all filter'
+            >
+              <X size={16} className='text-purple-600' />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Results count */}
       <div className='text-sm text-stone-600 mb-4'>
-        Showing {(page - 1) * RESULTS_PER_PAGE + 1}–
-        {Math.min(page * RESULTS_PER_PAGE, totalCount)} of{' '}
-        {totalCount.toLocaleString()} results
+        {totalCount === 0 ? (
+          <span>No results found</span>
+        ) : (
+          <span>
+            Showing {(page - 1) * RESULTS_PER_PAGE + 1}–
+            {Math.min(page * RESULTS_PER_PAGE, totalCount)} of{' '}
+            {totalCount.toLocaleString()} results
+          </span>
+        )}
       </div>
 
+      {/* No results message */}
+      {results.length === 0 && !isPending && (
+        <div className='text-center py-12 text-stone-500'>
+          <p>No papers found that cite all selected papers.</p>
+          <p className='text-sm mt-2'>
+            Try removing some papers from the selection.
+          </p>
+        </div>
+      )}
+
       {/* Results list */}
-      <div className='flex-1 overflow-y-auto space-y-3 mb-4'>
-        {results.map((paper) => (
-          <PaperCard
-            key={paper.id}
-            paper={paper}
-            variant='default'
-            showPinButton={true}
-            showActions={true}
-            preserveParams={preserveParams}
-          />
-        ))}
-      </div>
+      {results.length > 0 && (
+        <div className='flex-1 overflow-y-auto space-y-3 mb-4'>
+          {results.map((paper) => (
+            <PaperCard
+              key={paper.id}
+              paper={paper}
+              variant='default'
+              showPinButton={true}
+              showActions={true}
+              preserveParams={preserveParams}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

@@ -29,30 +29,61 @@ export async function GET(req: NextRequest) {
     .split(',')
     .filter(Boolean);
 
-    console.log(
-    'Search API called with:',
-    { query, journals, authors, from, to, sort, page, citing, citingAll }   
-    )
-
   let intersectionIds: string[] | null = null;
 
   if (citingAll.length > 0) {
-    // Fetch citing papers for each pinned paper
-    const resultsPerId: string[][] = await Promise.all(
-      citingAll.map(async (id) => {
-        const res = await fetch(
-          `https://api.openalex.org/works?per-page=200&filter=cites:${id}&mailto=${process.env.MAIL_ID}`
-        );
-        const data = await res.json();
-        return data.results.map((w: any) => w.id);
-      })
-    );
+    try {
+      // Fetch papers that cite each pinned paper
+      const resultsPerId: string[][] = await Promise.all(
+        citingAll.map(async (id) => {
+          // Ensure we have proper ID format for the API
+          const fullId = id.startsWith('https://')
+            ? id
+            : `https://openalex.org/${id}`;
+          const apiUrl = `https://api.openalex.org/works?per-page=200&filter=cites:${fullId}&mailto=${process.env.MAIL_ID}`;
 
-    // Compute intersection of IDs
-    intersectionIds = resultsPerId.reduce((a, b) =>
-      a.filter((x) => b.includes(x))
-    );
-    if (intersectionIds.length === 0) {
+          console.log('Fetching citations for:', apiUrl);
+
+          const res = await fetch(apiUrl);
+          const data = await res.json();
+
+          if (!data.results) {
+            console.error('No results for citing query:', data);
+            return [];
+          }
+
+          // Return just the short ID (e.g., "W3129025814")
+          return data.results.map((w: any) => {
+            const id = w.id as string;
+            return id.replace('https://openalex.org/', '');
+          });
+        })
+      );
+
+      console.log(
+        'Results per pinned paper:',
+        resultsPerId.map((r) => r.length)
+      );
+
+      // Compute intersection of IDs (papers that cite ALL pinned papers)
+      if (resultsPerId.length > 0 && resultsPerId.every((r) => r.length > 0)) {
+        intersectionIds = resultsPerId.reduce((a, b) =>
+          a.filter((x) => b.includes(x))
+        );
+      } else {
+        intersectionIds = [];
+      }
+
+      console.log('Intersection count:', intersectionIds?.length);
+
+      if (!intersectionIds || intersectionIds.length === 0) {
+        return NextResponse.json({
+          results: [],
+          meta: { count: 0, page, per_page: 20 },
+        });
+      }
+    } catch (error) {
+      console.error('Error computing citingAll intersection:', error);
       return NextResponse.json({
         results: [],
         meta: { count: 0, page, per_page: 20 },
@@ -66,7 +97,11 @@ export async function GET(req: NextRequest) {
   const filters: string[] = [];
 
   if (citing) {
-    filters.push(`cites:${citing}`);
+    // Ensure proper format for citing filter
+    const fullCitingId = citing.startsWith('https://')
+      ? citing
+      : `https://openalex.org/${citing}`;
+    filters.push(`cites:${fullCitingId}`);
   }
 
   if (journals.length)
@@ -77,9 +112,13 @@ export async function GET(req: NextRequest) {
 
   if (from || to) filters.push(`publication_year:${from || ''}-${to || ''}`);
 
-  // Apply intersection filter if exists
-  if (intersectionIds) {
-    filters.push(`id:${intersectionIds.join('|')}`); // OR in OpenAlex, but we pre-intersected
+  // Apply intersection filter if exists - these are papers that cite ALL pinned papers
+  if (intersectionIds && intersectionIds.length > 0) {
+    // Use short IDs with pipe separator for OR filter
+    const idsFilter = intersectionIds
+      .map((id) => `https://openalex.org/${id}`)
+      .join('|');
+    filters.push(`openalex_id:${idsFilter}`);
   }
 
   if (filters.length) url += `&filter=${filters.join(',')}`;
@@ -93,29 +132,43 @@ export async function GET(req: NextRequest) {
     url += `&sort=publication_date:desc`;
   }
 
-  console.log('OpenAlex API URL:', url);
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
 
-  const res = await fetch(url);
-  const data = await res.json();
+    if (!data.results) {
+      console.error('OpenAlex API error:', data);
+      return NextResponse.json({
+        results: [],
+        meta: { count: 0, page, per_page: 20 },
+      });
+    }
 
-  const papers = data.results.map((w: any) => ({
-    id: w.id,
-    title: w.title,
-    authors: w.authorships.map((a: any) => a.author.display_name),
-    publication_year: w.publication_year,
-    journal_name: w.primary_location?.source?.display_name || 'Unknown',
-    doi: w.doi,
-    pdf_url: w.primary_location?.pdf_url,
-    cited_by_count: w.cited_by_count,
-    abstract: decodeAbstract(w.abstract_inverted_index),
-  }));
+    const papers = data.results.map((w: any) => ({
+      id: w.id,
+      title: w.title,
+      authors: w.authorships?.map((a: any) => a.author.display_name) || [],
+      publication_year: w.publication_year,
+      journal_name: w.primary_location?.source?.display_name || 'Unknown',
+      doi: w.doi,
+      pdf_url: w.primary_location?.pdf_url,
+      cited_by_count: w.cited_by_count,
+      abstract: decodeAbstract(w.abstract_inverted_index),
+    }));
 
-  return NextResponse.json({
-    results: papers,
-    meta: {
-      count: data.meta?.count || 0,
-      page: page,
-      per_page: 20,
-    },
-  });
+    return NextResponse.json({
+      results: papers,
+      meta: {
+        count: data.meta?.count || 0,
+        page: page,
+        per_page: 20,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching from OpenAlex:', error);
+    return NextResponse.json({
+      results: [],
+      meta: { count: 0, page, per_page: 20 },
+    });
+  }
 }

@@ -257,6 +257,36 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  const handleClearCitingAll = () => {
+    const params = new URLSearchParams();
+
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery) params.set('q', currentQuery);
+
+    if (filters.journals.length) {
+      params.set('journals', filters.journals.map((j) => j.issn).join(','));
+    }
+
+    if (filters.authors.length) {
+      params.set('authors', filters.authors.map((a) => a.id).join(','));
+    }
+
+    if (filters.dateFrom) params.set('from', filters.dateFrom);
+    if (filters.dateTo) params.set('to', filters.dateTo);
+    if (filters.sortBy) params.set('sort', filters.sortBy);
+
+    // Keep citing if present
+    if (filters.citing) {
+      params.set('citing', filters.citing);
+    }
+
+    // Don't include citingAll - that's what we're clearing!
+
+    params.set('page', '1');
+
+    router.push(`/search?${params.toString()}`);
+  };
+
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
       {/* Left sidebar with filters - fixed width, scrollable */}
@@ -285,6 +315,7 @@ function PaperazziAppContent() {
             citing={searchFilters.citing}
             citingAll={searchFilters.citingAll}
             onClearCiting={handleClearCiting}
+            onClearCitingAll={handleClearCitingAll}
           />
         </div>
       </main>
