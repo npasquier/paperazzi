@@ -10,6 +10,9 @@ interface Props {
   query: string;
   journals: { issn: string; name?: string }[];
   authors: { id: string; name?: string }[];
+  topics: { id: string; display_name: string }[];
+  institutions: { id: string; display_name: string }[];
+  publicationType?: string;
   from?: string;
   to?: string;
   sortBy?: string;
@@ -25,6 +28,9 @@ export default function SearchResults({
   query,
   journals,
   authors,
+  topics,
+  institutions,
+  publicationType,
   from,
   to,
   sortBy = 'relevance_score',
@@ -127,7 +133,9 @@ export default function SearchResults({
       !citingAll?.length &&
       !query &&
       journals.length === 0 &&
-      authors.length === 0
+      authors.length === 0 &&
+      topics.length === 0 &&
+      institutions.length === 0
     ) {
       setResults([]);
       setTotalCount(0);
@@ -138,12 +146,22 @@ export default function SearchResults({
       try {
         const journalIssns = journals.map((j) => j.issn);
         const authorIds = authors.map((a) => a.id);
+        const topicIds = topics.map((t) =>
+          t.id.replace('https://openalex.org/', '')
+        );
+        const institutionIds = institutions.map((i) =>
+          i.id.replace('https://openalex.org/', '')
+        );
 
         const params = new URLSearchParams();
 
         if (query) params.set('query', query);
         if (journalIssns.length) params.set('journals', journalIssns.join(','));
         if (authorIds.length) params.set('authors', authorIds.join(','));
+        if (topicIds.length) params.set('topics', topicIds.join(','));
+        if (institutionIds.length)
+          params.set('institutions', institutionIds.join(','));
+        if (publicationType) params.set('type', publicationType);
         if (from) params.set('from', from);
         if (to) params.set('to', to);
         if (sortBy) params.set('sort', sortBy);
@@ -161,7 +179,37 @@ export default function SearchResults({
         setTotalCount(0);
       }
     });
-  }, [query, journals, authors, from, to, sortBy, page, citing, citingAll]);
+  }, [
+    query,
+    journals,
+    authors,
+    topics,
+    institutions,
+    publicationType,
+    from,
+    to,
+    sortBy,
+    page,
+    citing,
+    citingAll,
+  ]);
+
+  // Update the empty state check
+  if (
+    !citing &&
+    !citingAll?.length &&
+    !query &&
+    journals.length === 0 &&
+    authors.length === 0 &&
+    topics.length === 0 &&
+    institutions.length === 0
+  ) {
+    return (
+      <div className='text-center py-12 text-stone-500'>
+        Please enter a search query or select filters to begin.
+      </div>
+    );
+  }
 
   const totalPages = Math.ceil(totalCount / RESULTS_PER_PAGE);
 

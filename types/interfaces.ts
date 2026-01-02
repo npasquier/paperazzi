@@ -1,6 +1,5 @@
-export const MAX_PINS = 5;
-export const RESULTS_PER_PAGE = 20; 
-
+export const MAX_PINS = 6;
+export const RESULTS_PER_PAGE = 20;
 
 export interface Journal {
   name: string;
@@ -11,26 +10,55 @@ export interface Journal {
 
 export interface SelectedJournal {
   issn: string;
-  name: string;
+  name?: string;
   domain?: string;
   category?: number;
 }
 
 export interface SelectedAuthor {
   id: string;
-  name: string;
+  name?: string;
   orcid?: string;
   worksCount?: number;
   institution?: string;
 }
 
+// Add these to your existing interfaces.ts
+
+export interface Topic {
+  id: string;
+  display_name: string;
+  subfield?: {
+    id: string;
+    display_name: string;
+  };
+  field?: {
+    id: string;
+    display_name: string;
+  };
+  domain?: {
+    id: string;
+    display_name: string;
+  };
+}
+
+export interface Institution {
+  id: string;
+  display_name: string;
+  country_code?: string;
+  type?: string;
+  ror?: string;
+}
 
 export interface Filters {
-  journals: SelectedJournal[];
-  authors: SelectedAuthor[];
+  journals: { issn: string; name?: string }[];
+  authors: { id: string; name?: string }[];
+  topics: Topic[];
+  institutions: Institution[];
+  publicationType?: string; 
   dateFrom: string;
   dateTo: string;
-  sortBy: string; 
+  sortBy: string;
   citing?: string;
   citingAll?: string[];
 }
@@ -38,11 +66,11 @@ export interface Filters {
 export interface Paper {
   id: string;
   title: string;
-  authors: SelectedAuthor[];
+  authors: string[];
   publication_year: number;
   journal_name: string;
-  cited_by_count: number;
   doi?: string;
   pdf_url?: string;
-  abstract?: any;
+  cited_by_count: number;
+  abstract: string;
 }

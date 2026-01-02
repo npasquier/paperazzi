@@ -1,4 +1,3 @@
-// app/api/search/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 function decodeAbstract(inv: any) {
@@ -14,45 +13,32 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const query = searchParams.get('query') || '';
-  const journals = (searchParams.get('journals') || '')
-    .split(',')
-    .filter(Boolean);
-  const authors = (searchParams.get('authors') || '')
-    .split(',')
-    .filter(Boolean);
+  const journals = (searchParams.get('journals') || '').split(',').filter(Boolean);
+  const authors = (searchParams.get('authors') || '').split(',').filter(Boolean);
+  const topics = (searchParams.get('topics') || '').split(',').filter(Boolean);
+  const institutions = (searchParams.get('institutions') || '').split(',').filter(Boolean);
+  const publicationType = searchParams.get('type') || '';
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const sort = searchParams.get('sort') || 'relevance_score';
   const page = Number(searchParams.get('page') || 1);
   const citing = searchParams.get('citing');
-  const citingAll = (searchParams.get('citingAll') || '')
-    .split(',')
-    .filter(Boolean);
+  const citingAll = (searchParams.get('citingAll') || '').split(',').filter(Boolean);
 
   let intersectionIds: string[] | null = null;
 
   if (citingAll.length > 0) {
     try {
-      // Fetch papers that cite each pinned paper
       const resultsPerId: string[][] = await Promise.all(
         citingAll.map(async (id) => {
-          // Ensure we have proper ID format for the API
-          const fullId = id.startsWith('https://')
-            ? id
-            : `https://openalex.org/${id}`;
+          const fullId = id.startsWith('https://') ? id : `https://openalex.org/${id}`;
           const apiUrl = `https://api.openalex.org/works?per-page=200&filter=cites:${fullId}&mailto=${process.env.MAIL_ID}`;
-
-          console.log('Fetching citations for:', apiUrl);
 
           const res = await fetch(apiUrl);
           const data = await res.json();
 
-          if (!data.results) {
-            console.error('No results for citing query:', data);
-            return [];
-          }
+          if (!data.results) return [];
 
-          // Return just the short ID (e.g., "W3129025814")
           return data.results.map((w: any) => {
             const id = w.id as string;
             return id.replace('https://openalex.org/', '');
@@ -60,21 +46,11 @@ export async function GET(req: NextRequest) {
         })
       );
 
-      console.log(
-        'Results per pinned paper:',
-        resultsPerId.map((r) => r.length)
-      );
-
-      // Compute intersection of IDs (papers that cite ALL pinned papers)
       if (resultsPerId.length > 0 && resultsPerId.every((r) => r.length > 0)) {
-        intersectionIds = resultsPerId.reduce((a, b) =>
-          a.filter((x) => b.includes(x))
-        );
+        intersectionIds = resultsPerId.reduce((a, b) => a.filter((x) => b.includes(x)));
       } else {
         intersectionIds = [];
       }
-
-      console.log('Intersection count:', intersectionIds?.length);
 
       if (!intersectionIds || intersectionIds.length === 0) {
         return NextResponse.json({
@@ -91,33 +67,51 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // === Build OpenAlex API URL ===
+  // Build OpenAlex API URL
   let url = `https://api.openalex.org/works?per-page=20&page=${page}&mailto=${process.env.MAIL_ID}`;
 
   const filters: string[] = [];
 
   if (citing) {
-    // Ensure proper format for citing filter
-    const fullCitingId = citing.startsWith('https://')
-      ? citing
-      : `https://openalex.org/${citing}`;
+    const fullCitingId = citing.startsWith('https://') ? citing : `https://openalex.org/${citing}`;
     filters.push(`cites:${fullCitingId}`);
   }
 
-  if (journals.length)
+  if (journals.length) {
     filters.push(`primary_location.source.issn:${journals.join('|')}`);
+  }
 
-  if (authors.length)
+  if (authors.length) {
     filters.push(authors.map((id) => `authorships.author.id:${id}`).join(','));
+  }
 
-  if (from || to) filters.push(`publication_year:${from || ''}-${to || ''}`);
-
-  // Apply intersection filter if exists - these are papers that cite ALL pinned papers
-  if (intersectionIds && intersectionIds.length > 0) {
-    // Use short IDs with pipe separator for OR filter
-    const idsFilter = intersectionIds
-      .map((id) => `https://openalex.org/${id}`)
+  // Topics filter
+  if (topics.length) {
+    const topicFilter = topics
+      .map((id) => (id.startsWith('https://') ? id : `https://openalex.org/${id}`))
       .join('|');
+    filters.push(`topics.id:${topicFilter}`);
+  }
+
+  // Institutions filter
+  if (institutions.length) {
+    const instFilter = institutions
+      .map((id) => (id.startsWith('https://') ? id : `https://openalex.org/${id}`))
+      .join('|');
+    filters.push(`authorships.institutions.id:${instFilter}`);
+  }
+
+  // Publication type filter
+  if (publicationType) {
+    filters.push(`type:${publicationType}`);
+  }
+
+  if (from || to) {
+    filters.push(`publication_year:${from || ''}-${to || ''}`);
+  }
+
+  if (intersectionIds && intersectionIds.length > 0) {
+    const idsFilter = intersectionIds.map((id) => `https://openalex.org/${id}`).join('|');
     filters.push(`openalex_id:${idsFilter}`);
   }
 
@@ -125,7 +119,6 @@ export async function GET(req: NextRequest) {
 
   if (query) url += `&search=${encodeURIComponent(query)}`;
 
-  // Add sort parameter
   if (sort && sort !== 'relevance_score') {
     url += `&sort=${sort}`;
   } else if (sort === 'relevance_score' && !query) {

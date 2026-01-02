@@ -6,7 +6,9 @@ import FilterPanel from './FilterPanel';
 import SearchResults from './SearchResults';
 import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
-import { Filters } from '../types/interfaces';
+import TopicModal from './TopicModal';
+import InstitutionModal from './InstitutionModal';
+import { Filters, Topic, Institution } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import PinSidebar from './PinSidebar';
 
@@ -17,13 +19,18 @@ function PaperazziAppContent() {
   // --- Modal state ---
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [showAuthorModal, setShowAuthorModal] = useState(false);
+  const [showTopicModal, setShowTopicModal] = useState(false);
+  const [showInstitutionModal, setShowInstitutionModal] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(false);
 
-  // --- Local state for controlled inputs (updates as user types, no API calls) ---
+  // --- Local state for controlled inputs ---
   const [filters, setFilters] = useState<Filters>({
     journals: [],
     authors: [],
+    topics: [],
+    institutions: [],
+    publicationType: '',
     dateFrom: '',
     dateTo: '',
     sortBy: 'relevance_score',
@@ -31,11 +38,14 @@ function PaperazziAppContent() {
     citingAll: undefined,
   });
 
-  // --- Search state (only updates when URL changes, triggers API calls) ---
+  // --- Search state ---
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilters, setSearchFilters] = useState<Filters>({
     journals: [],
     authors: [],
+    topics: [],
+    institutions: [],
+    publicationType: '',
     dateFrom: '',
     dateTo: '',
     sortBy: 'relevance_score',
@@ -44,15 +54,19 @@ function PaperazziAppContent() {
   });
   const [page, setPage] = useState(1);
 
-  // Sync state with URL parameters whenever URL changes
+  // Sync state with URL parameters
   useEffect(() => {
     const syncFromURL = async () => {
-      // Extract params from URL
       const q = searchParams.get('q') || '';
       const journalIssns =
         searchParams.get('journals')?.split(',').filter(Boolean) || [];
       const authorIds =
         searchParams.get('authors')?.split(',').filter(Boolean) || [];
+      const topicIds =
+        searchParams.get('topics')?.split(',').filter(Boolean) || [];
+      const institutionIds =
+        searchParams.get('institutions')?.split(',').filter(Boolean) || [];
+      const pubType = searchParams.get('type') || '';
       const from = searchParams.get('from') || '';
       const to = searchParams.get('to') || '';
       const sort = searchParams.get('sort') || 'relevance_score';
@@ -61,83 +75,146 @@ function PaperazziAppContent() {
       const citingAll =
         searchParams.get('citingAll')?.split(',').filter(Boolean) || [];
 
-      // If citing is set, we skip syncing other filters
-
-      // Map ISSNs to full journal objects
       const journals = mapIssnsToJournals(journalIssns);
 
-      // Fetch author names from OpenAlex API
+      // Fetch authors
       const authors = await Promise.all(
         authorIds.map(async (id) => {
           try {
             const res = await fetch(`https://api.openalex.org/authors/${id}`);
             const data = await res.json();
-            return {
-              id,
-              name: data.display_name || 'Unknown Author',
-            };
-          } catch (error) {
-            console.error(`Failed to fetch author ${id}:`, error);
+            return { id, name: data.display_name || 'Unknown Author' };
+          } catch {
             return { id, name: 'Unknown Author' };
           }
         })
       );
 
-      // Update controlled inputs (what user sees in the form)
-      setFilters({
-        journals,
-        authors,
-        dateFrom: from,
-        dateTo: to,
-        sortBy: sort,
-        citing: citing,
-        citingAll: citingAll,
-      });
+      // Fetch topics
+      const topics: Topic[] = await Promise.all(
+        topicIds.map(async (id) => {
+          try {
+            const res = await fetch(`https://api.openalex.org/topics/${id}`);
+            const data = await res.json();
+            return {
+              id: data.id,
+              display_name: data.display_name || 'Unknown Topic',
+              subfield: data.subfield,
+              field: data.field,
+              domain: data.domain,
+            };
+          } catch {
+            return { id, display_name: 'Unknown Topic' };
+          }
+        })
+      );
 
-      // Update search state (triggers API call in SearchResults)
-      setSearchQuery(q);
-      setSearchFilters({
+      // Fetch institutions
+      const institutions: Institution[] = await Promise.all(
+        institutionIds.map(async (id) => {
+          try {
+            const res = await fetch(
+              `https://api.openalex.org/institutions/${id}`
+            );
+            const data = await res.json();
+            return {
+              id: data.id,
+              display_name: data.display_name || 'Unknown Institution',
+              country_code: data.country_code,
+              type: data.type,
+            };
+          } catch {
+            return { id, display_name: 'Unknown Institution' };
+          }
+        })
+      );
+
+      const newFilters: Filters = {
         journals,
         authors,
+        topics,
+        institutions,
+        publicationType: pubType,
         dateFrom: from,
         dateTo: to,
         sortBy: sort,
-        citing: citing,
-        citingAll: citingAll,
-      });
+        citing,
+        citingAll,
+      };
+
+      setFilters(newFilters);
+      setSearchQuery(q);
+      setSearchFilters(newFilters);
       setPage(p);
     };
 
     syncFromURL();
   }, [searchParams]);
 
+  // Build URL params helper
+  const buildURLParams = (
+    overrides: Partial<Filters & { query?: string; page?: number }> = {}
+  ) => {
+    const params = new URLSearchParams();
+
+    const q = overrides.query ?? (searchParams.get('q') || '');
+    if (q) params.set('q', q);
+
+    const journals = overrides.journals ?? filters.journals;
+    if (journals.length) {
+      params.set('journals', journals.map((j) => j.issn).join(','));
+    }
+
+    const authors = overrides.authors ?? filters.authors;
+    if (authors.length) {
+      params.set('authors', authors.map((a) => a.id).join(','));
+    }
+
+    const topics = overrides.topics ?? filters.topics;
+    if (topics.length) {
+      params.set(
+        'topics',
+        topics.map((t) => t.id.replace('https://openalex.org/', '')).join(',')
+      );
+    }
+
+    const institutions = overrides.institutions ?? filters.institutions;
+    if (institutions.length) {
+      params.set(
+        'institutions',
+        institutions
+          .map((i) => i.id.replace('https://openalex.org/', ''))
+          .join(',')
+      );
+    }
+
+    const pubType = overrides.publicationType ?? filters.publicationType;
+    if (pubType) params.set('type', pubType);
+
+    const dateFrom = overrides.dateFrom ?? filters.dateFrom;
+    if (dateFrom) params.set('from', dateFrom);
+
+    const dateTo = overrides.dateTo ?? filters.dateTo;
+    if (dateTo) params.set('to', dateTo);
+
+    const sortBy = overrides.sortBy ?? filters.sortBy;
+    if (sortBy) params.set('sort', sortBy);
+
+    const citing = overrides.citing ?? filters.citing;
+    if (citing) params.set('citing', citing);
+
+    const citingAll = overrides.citingAll ?? filters.citingAll;
+    if (citingAll?.length) params.set('citingAll', citingAll.join(','));
+
+    params.set('page', (overrides.page ?? 1).toString());
+
+    return params;
+  };
+
   // Listen for navbar search events
   useEffect(() => {
     const handleNavbarSearch = (e: CustomEvent) => {
-      const newQuery = e.detail.query;
-
-      // Build URL with query from navbar + current filters
-      const params = new URLSearchParams();
-
-      if (newQuery) params.set('q', newQuery);
-
-      if (filters.journals.length) {
-        params.set('journals', filters.journals.map((j) => j.issn).join(','));
-      }
-
-      if (filters.authors.length) {
-        params.set('authors', filters.authors.map((a) => a.id).join(','));
-      }
-
-      if (filters.dateFrom) params.set('from', filters.dateFrom);
-      if (filters.dateTo) params.set('to', filters.dateTo);
-      if (filters.sortBy) params.set('sort', filters.sortBy);
-      if (filters.citing) params.set('citing', filters.citing);
-      if (filters.citingAll)
-        params.set('citingAll', filters.citingAll.join(','));
-
-      params.set('page', '1');
-
+      const params = buildURLParams({ query: e.detail.query, page: 1 });
       router.push(`/search?${params.toString()}`);
     };
 
@@ -145,168 +222,63 @@ function PaperazziAppContent() {
       'navbar-search',
       handleNavbarSearch as EventListener
     );
-    return () => {
+    return () =>
       window.removeEventListener(
         'navbar-search',
         handleNavbarSearch as EventListener
       );
-    };
-  }, [filters, router]);
+  }, [filters, router, searchParams]);
 
-  // Update URL and trigger search (only called on explicit user action)
   const handleSearch = (newPage = 1) => {
-    const params = new URLSearchParams();
-
-    // Get query from URL (navbar updates this)
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery) params.set('q', currentQuery);
-
-    if (filters.journals.length) {
-      const journalIssns = filters.journals.map((j) => j.issn).join(',');
-      params.set('journals', journalIssns);
-    }
-
-    if (filters.authors.length) {
-      params.set('authors', filters.authors.map((a) => a.id).join(','));
-    }
-
-    if (filters.dateFrom) params.set('from', filters.dateFrom);
-    if (filters.dateTo) params.set('to', filters.dateTo);
-    if (filters.sortBy) params.set('sort', filters.sortBy);
-
-    if (filters.citing) params.set('citing', filters.citing);
-    if (filters.citingAll) params.set('citingAll', filters.citingAll.join(','));
-
-    params.set('page', newPage.toString());
-
+    const params = buildURLParams({ page: newPage });
     router.push(`/search?${params.toString()}`);
   };
 
-  // Handle sort change - triggers immediate search
   const handleSortChange = (newSort: string) => {
-    const params = new URLSearchParams();
-
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery) params.set('q', currentQuery);
-
-    if (filters.journals.length) {
-      params.set('journals', filters.journals.map((j) => j.issn).join(','));
-    }
-
-    if (filters.authors.length) {
-      params.set('authors', filters.authors.map((a) => a.id).join(','));
-    }
-
-    if (filters.dateFrom) params.set('from', filters.dateFrom);
-    if (filters.dateTo) params.set('to', filters.dateTo);
-    if (filters.citing) params.set('citing', filters.citing);
-    if (filters.citingAll) params.set('citingAll', filters.citingAll.join(','));
-
-    params.set('sort', newSort);
-    params.set('page', '1');
-
+    const params = buildURLParams({ sortBy: newSort, page: 1 });
     router.push(`/search?${params.toString()}`);
   };
 
   const handleFindCites = (paperId: string) => {
-    const params = new URLSearchParams();
-
-    if (searchQuery) params.set('q', searchQuery);
-
-    if (filters.journals.length)
-      params.set('journals', filters.journals.map((j) => j.issn).join(','));
-
-    if (filters.authors.length)
-      params.set('authors', filters.authors.map((a) => a.id).join(','));
-
-    if (filters.dateFrom) params.set('from', filters.dateFrom);
-    if (filters.dateTo) params.set('to', filters.dateTo);
-    if (filters.sortBy) params.set('sort', filters.sortBy);
-
-    params.set('citing', paperId);
-    params.set('page', '1');
-
+    const params = buildURLParams({ citing: paperId, page: 1 });
     router.push(`/search?${params.toString()}`);
   };
 
-  // Add this function in PaperazziAppContent
   const handleClearCiting = () => {
-    const params = new URLSearchParams();
-
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery) params.set('q', currentQuery);
-
-    if (filters.journals.length) {
-      params.set('journals', filters.journals.map((j) => j.issn).join(','));
-    }
-
-    if (filters.authors.length) {
-      params.set('authors', filters.authors.map((a) => a.id).join(','));
-    }
-
-    if (filters.dateFrom) params.set('from', filters.dateFrom);
-    if (filters.dateTo) params.set('to', filters.dateTo);
-    if (filters.sortBy) params.set('sort', filters.sortBy);
-
-    // Don't include 'citing' - that's the point!
-    // Keep citingAll if you want, or remove it too:
-    // if (filters.citingAll?.length) params.set('citingAll', filters.citingAll.join(','));
-
-    params.set('page', '1');
-
+    const params = buildURLParams({ citing: undefined, page: 1 });
+    params.delete('citing');
     router.push(`/search?${params.toString()}`);
   };
 
   const handleClearCitingAll = () => {
-    const params = new URLSearchParams();
-
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery) params.set('q', currentQuery);
-
-    if (filters.journals.length) {
-      params.set('journals', filters.journals.map((j) => j.issn).join(','));
-    }
-
-    if (filters.authors.length) {
-      params.set('authors', filters.authors.map((a) => a.id).join(','));
-    }
-
-    if (filters.dateFrom) params.set('from', filters.dateFrom);
-    if (filters.dateTo) params.set('to', filters.dateTo);
-    if (filters.sortBy) params.set('sort', filters.sortBy);
-
-    // Keep citing if present
-    if (filters.citing) {
-      params.set('citing', filters.citing);
-    }
-
-    // Don't include citingAll - that's what we're clearing!
-
-    params.set('page', '1');
-
+    const params = buildURLParams({ citingAll: undefined, page: 1 });
+    params.delete('citingAll');
     router.push(`/search?${params.toString()}`);
   };
 
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
-      {/* Left sidebar with filters - fixed width, scrollable */}
       <FilterPanel
         filters={filters}
         setFilters={setFilters}
         openJournalModal={() => setShowJournalModal(true)}
         openAuthorModal={() => setShowAuthorModal(true)}
+        openTopicModal={() => setShowTopicModal(true)}
+        openInstitutionModal={() => setShowInstitutionModal(true)}
         onSortChange={handleSortChange}
         isOpen={isFilterOpen}
         onToggle={() => setIsFilterOpen((v) => !v)}
       />
 
-      {/* Main results area - scrollable */}
       <main className='flex-1 overflow-y-auto'>
         <div className='max-w-5xl mx-auto p-6'>
           <SearchResults
             query={searchQuery}
             journals={searchFilters.journals}
             authors={searchFilters.authors}
+            topics={searchFilters.topics}
+            institutions={searchFilters.institutions}
+            publicationType={searchFilters.publicationType}
             from={searchFilters.dateFrom}
             to={searchFilters.dateTo}
             sortBy={searchFilters.sortBy}
@@ -334,10 +306,7 @@ function PaperazziAppContent() {
         onAddAuthor={(author) =>
           setFilters((prev) => ({
             ...prev,
-            authors: [
-              ...prev.authors.filter((a) => a.id !== author.id),
-              author,
-            ],
+            authors: [...prev.authors.filter((a) => a.id !== author.id), author],
           }))
         }
       />
@@ -348,6 +317,24 @@ function PaperazziAppContent() {
         onClose={() => setShowJournalModal(false)}
         onApply={(selected) =>
           setFilters((prev) => ({ ...prev, journals: selected }))
+        }
+      />
+
+      <TopicModal
+        isOpen={showTopicModal}
+        selectedTopics={filters.topics}
+        onClose={() => setShowTopicModal(false)}
+        onApply={(selected) =>
+          setFilters((prev) => ({ ...prev, topics: selected }))
+        }
+      />
+
+      <InstitutionModal
+        isOpen={showInstitutionModal}
+        selectedInstitutions={filters.institutions}
+        onClose={() => setShowInstitutionModal(false)}
+        onApply={(selected) =>
+          setFilters((prev) => ({ ...prev, institutions: selected }))
         }
       />
     </div>
