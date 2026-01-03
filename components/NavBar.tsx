@@ -86,7 +86,7 @@ function NavBarContent() {
         ) : (
           // Other pages: Show tagline
           <div className='hidden ml-6 md:flex items-center gap-2 text-sm text-stone-600 flex-1'>
-            Track star papers in economics literature.
+              {' '}
           </div>
         )}
 

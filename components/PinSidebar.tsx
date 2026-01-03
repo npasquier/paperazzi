@@ -17,7 +17,6 @@ import {
   Edit2,
   Check,
   X,
-  GripVertical,
 } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
@@ -54,9 +53,7 @@ export default function PinSidebar({
   const [selectionMode, setSelectionMode] = useState(false);
 
   // Group UI state
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(['ungrouped'])
-  );
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [showNewGroupInput, setShowNewGroupInput] = useState(false);
@@ -75,6 +72,11 @@ export default function PinSidebar({
   useEffect(() => {
     setSelectedIds(new Set(pinnedPapers.map((p) => normalizeId(p.id))));
   }, [pinnedPapers]);
+
+  // Expand new groups by default
+  useEffect(() => {
+    setExpandedGroups(new Set(groups.map((g) => g.id)));
+  }, [groups.length]);
 
   useEffect(() => {
     if (showNewGroupInput && newGroupInputRef.current) {
@@ -131,9 +133,11 @@ export default function PinSidebar({
   // Handlers
   const handleSearchCiting = (paper: Paper) => {
     const paperId = normalizeId(paper.id);
-    if (onFindingCites) {
-      onFindingCites(paperId, pinnedIds);
-    }
+    const params = new URLSearchParams();
+    params.set('citing', paperId);
+    params.set('sort', 'cited_by_count:desc');
+    params.set('page', '1');
+    router.push(`/search?${params.toString()}`);
   };
 
   const handleSearchReferences = (paper: Paper) => {
@@ -150,6 +154,8 @@ export default function PinSidebar({
     if (ids.length < 2) return;
     const params = new URLSearchParams();
     params.set('citingAll', ids.join(','));
+    params.set('sort', 'cited_by_count:desc');
+    params.set('page', '1');
     router.push(`/search?${params.toString()}`);
   };
 
@@ -159,6 +165,7 @@ export default function PinSidebar({
     const params = new URLSearchParams();
     params.set('referencesAll', ids.join(','));
     params.set('sort', 'cited_by_count:desc');
+    params.set('page', '1');
     router.push(`/search?${params.toString()}`);
   };
 
@@ -183,11 +190,18 @@ export default function PinSidebar({
   const handleDragStart = (e: React.DragEvent, paperId: string) => {
     setDraggingPaperId(normalizeId(paperId));
     e.dataTransfer.effectAllowed = 'move';
+    // Add a drag image effect
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (e: React.DragEvent) => {
     setDraggingPaperId(null);
     setDragOverGroupId(null);
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, groupId: string) => {
@@ -218,14 +232,16 @@ export default function PinSidebar({
     return (
       <div
         key={paper.id}
-        className={`relative group ${isDragging ? 'opacity-50' : ''}`}
+        className={`relative transition-opacity ${
+          isDragging ? 'opacity-50' : ''
+        } ${!selectionMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
         draggable={!selectionMode}
         onDragStart={(e) => handleDragStart(e, paper.id)}
         onDragEnd={handleDragEnd}
       >
-        <div className='flex items-start gap-1'>
-          {/* Drag handle or selection checkbox */}
-          {selectionMode ? (
+        <div className='flex items-start gap-2'>
+          {/* Selection checkbox */}
+          {selectionMode && (
             <button
               onClick={() => toggleSelection(paper.id)}
               className={`mt-2 p-0.5 rounded transition flex-shrink-0 ${
@@ -236,10 +252,6 @@ export default function PinSidebar({
             >
               {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
             </button>
-          ) : (
-            <div className='mt-2 cursor-grab text-stone-300 hover:text-stone-500 flex-shrink-0'>
-              <GripVertical size={16} />
-            </div>
           )}
 
           <div
@@ -283,12 +295,7 @@ export default function PinSidebar({
   };
 
   // Render a group section
-  const renderGroup = (
-    groupId: string,
-    groupName: string,
-    papers: Paper[],
-    isUngrouped = false
-  ) => {
+  const renderGroup = (groupId: string, groupName: string, papers: Paper[]) => {
     const isExpanded = expandedGroups.has(groupId);
     const isEditing = editingGroupId === groupId;
     const isDragOver = dragOverGroupId === groupId;
@@ -296,25 +303,21 @@ export default function PinSidebar({
     return (
       <div
         key={groupId}
-        className={`border rounded-lg overflow-hidden transition ${
-          isDragOver
-            ? 'border-stone-400 bg-stone-100'
-            : 'border-stone-200 bg-white'
-        }`}
+        className={`transition rounded-lg ${isDragOver ? 'bg-stone-100' : ''}`}
         onDragOver={(e) => handleDragOver(e, groupId)}
         onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, isUngrouped ? null : groupId)}
+        onDrop={(e) => handleDrop(e, groupId)}
       >
         {/* Group header */}
-        <div className='group flex items-center gap-2 p-2 bg-stone-50 border-b border-stone-200'>
+        <div className='group flex items-center gap-2 py-2'>
           <button
             onClick={() => toggleGroupExpanded(groupId)}
-            className='p-0.5 hover:bg-stone-200 rounded transition'
+            className='p-0.5 hover:bg-stone-100 rounded transition'
           >
             {isExpanded ? (
-              <ChevronDown size={16} className='text-stone-500' />
+              <ChevronDown size={14} className='text-stone-400' />
             ) : (
-              <ChevronRight size={16} className='text-stone-500' />
+              <ChevronRight size={14} className='text-stone-400' />
             )}
           </button>
 
@@ -332,63 +335,65 @@ export default function PinSidebar({
                     setEditingName('');
                   }
                 }}
-                className='flex-1 px-2 py-0.5 text-sm border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-stone-400'
+                className='flex-1 px-2 py-0.5 text-xs border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-stone-400'
               />
               <button
                 onClick={() => handleRenameGroup(groupId)}
-                className='p-1 text-green-600 hover:bg-green-50 rounded'
+                className='p-0.5 text-green-600 hover:bg-green-50 rounded'
               >
-                <Check size={14} />
+                <Check size={12} />
               </button>
               <button
                 onClick={() => {
                   setEditingGroupId(null);
                   setEditingName('');
                 }}
-                className='p-1 text-stone-500 hover:bg-stone-100 rounded'
+                className='p-0.5 text-stone-400 hover:bg-stone-100 rounded'
               >
-                <X size={14} />
+                <X size={12} />
               </button>
             </div>
           ) : (
             <>
-              <span className='flex-1 text-sm font-medium text-stone-700'>
+              <span className='flex-1 text-xs font-medium text-stone-500 uppercase tracking-wide'>
                 {groupName}
               </span>
               <span className='text-xs text-stone-400'>{papers.length}</span>
 
-              {!isUngrouped && (
-                <div className='flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition'>
-                  <button
-                    onClick={() => {
-                      setEditingGroupId(groupId);
-                      setEditingName(groupName);
-                    }}
-                    className='p-1 text-stone-500 hover:bg-stone-200 rounded'
-                    title='Rename group'
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                  <button
-                    onClick={() => deleteGroup(groupId)}
-                    className='p-1 text-red-500 hover:bg-red-50 rounded'
-                    title='Delete group'
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              )}
+              <div className='flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition'>
+                <button
+                  onClick={() => {
+                    setEditingGroupId(groupId);
+                    setEditingName(groupName);
+                  }}
+                  className='p-0.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded'
+                  title='Rename group'
+                >
+                  <Edit2 size={11} />
+                </button>
+                <button
+                  onClick={() => deleteGroup(groupId)}
+                  className='p-0.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded'
+                  title='Delete group'
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
             </>
           )}
         </div>
 
         {/* Group content */}
         {isExpanded && (
-          <div className='p-2 space-y-2'>
+          <div
+            className={`${
+              papers.length > 0
+                ? 'border-l-2 border-stone-200 ml-2 pl-3'
+                : 'ml-6'
+            } space-y-2 pb-3`}
+          >
             {papers.length === 0 ? (
-              <p className='text-xs text-stone-400 text-center py-2'>
-                {isUngrouped ? 'All papers are in groups' : 'Drag papers here'}
-              </p>
+              <p className='text-xs text-stone-400 py-2'>Drag papers here</p>
             ) : (
               papers.map(renderPaperItem)
             )}
@@ -426,6 +431,7 @@ export default function PinSidebar({
   }
 
   const ungroupedPapers = getUngroupedPapers();
+  const hasGroups = groups.length > 0;
 
   return (
     <aside className='w-80 bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden'>
@@ -541,7 +547,7 @@ export default function PinSidebar({
       </div>
 
       {/* Content */}
-      <div className='flex-1 overflow-y-auto p-4 space-y-3'>
+      <div className='flex-1 overflow-y-auto p-4'>
         {isLoading ? (
           <div className='flex items-center justify-center py-8'>
             <Loader2 className='animate-spin text-stone-400' size={24} />
@@ -555,25 +561,36 @@ export default function PinSidebar({
             </p>
           </div>
         ) : (
-          <>
-            {/* Custom groups */}
+          <div className='space-y-3'>
+            {/* Groups first */}
             {groups.map((group) =>
-              renderGroup(
-                group.id,
-                group.name,
-                getPapersInGroup(group.id),
-                false
-              )
+              renderGroup(group.id, group.name, getPapersInGroup(group.id))
             )}
 
-            {/* Ungrouped papers */}
-            {renderGroup('ungrouped', 'Ungrouped', ungroupedPapers, true)}
-          </>
+            {/* Separator between groups and ungrouped */}
+            {hasGroups && ungroupedPapers.length > 0 && (
+              <div className='border-t border-dashed border-stone-300 my-4' />
+            )}
+
+            {/* Ungrouped papers at bottom */}
+            {ungroupedPapers.length > 0 && (
+              <div
+                className={`space-y-2 transition rounded-lg ${
+                  dragOverGroupId === 'ungrouped' ? 'bg-stone-100 p-2 -m-2' : ''
+                }`}
+                onDragOver={(e) => handleDragOver(e, 'ungrouped')}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, null)}
+              >
+                {ungroupedPapers.map(renderPaperItem)}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Multi-paper actions */}
         {pinnedPapers.length >= 2 && (
-          <div className='mt-4 pt-4 border-t border-stone-200 space-y-3'>
+          <div className='mt-6 pt-4 border-t border-stone-200 space-y-3'>
             <button
               onClick={handleSearchCitingAll}
               disabled={selectedCount < 2}

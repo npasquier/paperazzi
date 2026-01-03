@@ -21,7 +21,7 @@ function PaperazziAppContent() {
   const [showAuthorModal, setShowAuthorModal] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [showInstitutionModal, setShowInstitutionModal] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(false);
 
   // --- Local state for controlled inputs ---
