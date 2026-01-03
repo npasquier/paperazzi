@@ -1,4 +1,4 @@
-export const MAX_PINS = 6;
+export const MAX_PINS = 10;
 export const RESULTS_PER_PAGE = 20;
 
 export interface Journal {
