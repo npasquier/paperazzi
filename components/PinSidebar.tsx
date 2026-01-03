@@ -1,8 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pin, Search, ChevronRight, Loader2, BookOpen, Library } from 'lucide-react';
+import {
+  Pin,
+  Search,
+  ChevronRight,
+  Loader2,
+  BookOpen,
+  Library,
+  CheckSquare,
+  Square,
+  CheckCircle2,
+} from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
@@ -21,22 +31,57 @@ export default function PinSidebar({
   const router = useRouter();
   const { pinnedPapers, pinnedIds, clearPins, isLoading } = usePins();
 
-  const [loadingCitingAll, setLoadingCitingAll] = useState(false);
-  const [loadingReferencesAll, setLoadingReferencesAll] = useState(false);
+  // Selection state - by default all are selected
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+
+  // Sync selectedIds when pinnedPapers change
+  useEffect(() => {
+    setSelectedIds(new Set(pinnedPapers.map((p) => p.id.replace('https://openalex.org/', ''))));
+  }, [pinnedPapers]);
+
+  const normalizeId = (id: string) => id.replace('https://openalex.org/', '');
+
+  const toggleSelection = (paperId: string) => {
+    const normalizedId = normalizeId(paperId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(normalizedId)) {
+        next.delete(normalizedId);
+      } else {
+        next.add(normalizedId);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(pinnedPapers.map((p) => normalizeId(p.id))));
+  };
+
+  const selectNone = () => {
+    setSelectedIds(new Set());
+  };
+
+  const selectedCount = selectedIds.size;
+  const allSelected = selectedCount === pinnedPapers.length;
+
+  // Get array of selected IDs
+  const getSelectedIds = () => Array.from(selectedIds);
 
   // Build URL params that preserve pins
   const preserveParams =
     pinnedIds.length > 0 ? `pinned=${pinnedIds.join(',')}` : '';
 
   const handleSearchCiting = (paper: Paper) => {
-    const paperId = paper.id.split('/').pop() || '';
+    const paperId = normalizeId(paper.id);
     if (onFindingCites) {
       onFindingCites(paperId, pinnedIds);
     }
   };
 
   const handleSearchReferences = (paper: Paper) => {
-    const paperId = paper.id.replace('https://openalex.org/', '');
+    const paperId = normalizeId(paper.id);
     const params = new URLSearchParams();
     params.set('referencedBy', paperId);
     params.set('sort', 'cited_by_count:desc');
@@ -45,16 +90,18 @@ export default function PinSidebar({
   };
 
   const handleSearchCitingAll = () => {
-    if (pinnedIds.length < 2) return;
+    const ids = getSelectedIds();
+    if (ids.length < 2) return;
     const params = new URLSearchParams();
-    params.set('citingAll', pinnedIds.join(','));
+    params.set('citingAll', ids.join(','));
     router.push(`/search?${params.toString()}`);
   };
 
   const handleSearchReferencesAll = () => {
-    if (pinnedIds.length < 2) return;
+    const ids = getSelectedIds();
+    if (ids.length < 2) return;
     const params = new URLSearchParams();
-    params.set('referencesAll', pinnedIds.join(','));
+    params.set('referencesAll', ids.join(','));
     params.set('sort', 'cited_by_count:desc');
     router.push(`/search?${params.toString()}`);
   };
@@ -105,12 +152,51 @@ export default function PinSidebar({
         </div>
 
         {pinnedPapers.length > 0 && (
-          <button
-            onClick={clearPins}
-            className='text-xs text-stone-500 hover:text-stone-700 transition'
-          >
-            Clear all
-          </button>
+          <div className='flex items-center justify-between'>
+            <button
+              onClick={clearPins}
+              className='text-xs text-stone-500 hover:text-stone-700 transition'
+            >
+              Clear all
+            </button>
+
+            {pinnedPapers.length >= 2 && (
+              <button
+                onClick={() => setSelectionMode((v) => !v)}
+                className={`text-xs px-2 py-1 rounded transition ${
+                  selectionMode
+                    ? 'bg-stone-800 text-white'
+                    : 'text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                {selectionMode ? 'Done' : 'Select'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Selection controls */}
+        {selectionMode && pinnedPapers.length >= 2 && (
+          <div className='mt-3 pt-3 border-t border-stone-100 flex items-center justify-between'>
+            <span className='text-xs text-stone-600'>
+              {selectedCount} of {pinnedPapers.length} selected
+            </span>
+            <div className='flex gap-2'>
+              <button
+                onClick={selectAll}
+                className='text-xs text-blue-600 hover:text-blue-800'
+              >
+                All
+              </button>
+              <span className='text-stone-300'>|</span>
+              <button
+                onClick={selectNone}
+                className='text-xs text-stone-500 hover:text-stone-700'
+              >
+                None
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -130,75 +216,114 @@ export default function PinSidebar({
           </div>
         ) : (
           <div className='space-y-3'>
-            {pinnedPapers.map((paper) => (
-              <div key={paper.id} className='relative group'>
-                <PaperCard
-                  paper={paper}
-                  variant='pinned'
-                  showPinButton={true}
-                  preserveParams={preserveParams}
-                />
+            {pinnedPapers.map((paper) => {
+              const normalizedId = normalizeId(paper.id);
+              const isSelected = selectedIds.has(normalizedId);
 
-                {/* Action buttons */}
-                <div className='mt-1 flex gap-1'>
-                  {/* Find citing papers (forward citations) */}
-                  <button
-                    onClick={() => handleSearchCiting(paper)}
-                    className='flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
-                    title='Find papers that cite this paper'
-                  >
-                    <Search size={12} />
-                    Citing
-                  </button>
+              return (
+                <div key={paper.id} className='relative group'>
+                  {/* Selection checkbox */}
+                  {selectionMode && (
+                    <button
+                      onClick={() => toggleSelection(paper.id)}
+                      className={`absolute -left-1 top-2 z-10 p-0.5 rounded transition ${
+                        isSelected
+                          ? 'text-stone-800'
+                          : 'text-stone-300 hover:text-stone-500'
+                      }`}
+                    >
+                      {isSelected ? (
+                        <CheckSquare size={18} />
+                      ) : (
+                        <Square size={18} />
+                      )}
+                    </button>
+                  )}
 
-                  {/* Find references (backward citations) */}
-                  <button
-                    onClick={() => handleSearchReferences(paper)}
-                    className='flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
-                    title='Find papers cited by this paper'
-                  >
-                    <BookOpen size={12} />
-                    References
-                  </button>
+                  <div className={selectionMode ? 'ml-6' : ''}>
+                    <div
+                      className={`rounded-lg transition ${
+                        selectionMode && isSelected
+                          ? 'ring-2 ring-stone-300'
+                          : ''
+                      }`}
+                    >
+                      <PaperCard
+                        paper={paper}
+                        variant='pinned'
+                        showPinButton={!selectionMode}
+                        preserveParams={preserveParams}
+                      />
+                    </div>
+
+                    {/* Action buttons - hide in selection mode */}
+                    {!selectionMode && (
+                      <div className='mt-1 flex gap-1'>
+                        <button
+                          onClick={() => handleSearchCiting(paper)}
+                          className='flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
+                          title='Find papers that cite this paper'
+                        >
+                          <Search size={12} />
+                          Citing
+                        </button>
+
+                        <button
+                          onClick={() => handleSearchReferences(paper)}
+                          className='flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
+                          title='Find papers cited by this paper'
+                        >
+                          <BookOpen size={12} />
+                          References
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {/* Multi-paper actions */}
         {pinnedPapers.length >= 2 && (
           <div className='mt-6 pt-4 border-t border-stone-200 space-y-3'>
-            {/* Find papers citing ALL */}
+            {/* Find papers citing ALL selected */}
             <button
               onClick={handleSearchCitingAll}
-              disabled={loadingCitingAll}
-              className='w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition text-sm font-medium disabled:opacity-50'
+              disabled={selectedCount < 2}
+              className='w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
             >
-              {loadingCitingAll ? (
-                <Loader2 className='animate-spin' size={16} />
-              ) : (
-                <Search size={16} />
+              <Search size={16} />
+              Papers citing ALL
+              {selectionMode && selectedCount >= 2 && (
+                <span className='bg-white/20 px-1.5 py-0.5 rounded text-xs'>
+                  {selectedCount}
+                </span>
               )}
-              Papers citing ALL ({pinnedPapers.length})
             </button>
 
             {/* Find common references */}
             <button
               onClick={handleSearchReferencesAll}
-              disabled={loadingReferencesAll}
-              className='w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-green-700 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium disabled:opacity-50'
+              disabled={selectedCount < 2}
+              className='w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-green-700 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
             >
-              {loadingReferencesAll ? (
-                <Loader2 className='animate-spin' size={16} />
-              ) : (
-                <Library size={16} />
+              <Library size={16} />
+              Common references
+              {selectionMode && selectedCount >= 2 && (
+                <span className='bg-white/20 px-1.5 py-0.5 rounded text-xs'>
+                  {selectedCount}
+                </span>
               )}
-              Common references ({pinnedPapers.length})
             </button>
 
             <p className='text-xs text-stone-500 text-center'>
-              Find papers cited by all {pinnedPapers.length} pinned papers
+              {selectionMode
+                ? selectedCount < 2
+                  ? 'Select at least 2 papers'
+                  : `Using ${selectedCount} selected papers`
+                : `Using all ${pinnedPapers.length} pinned papers`}
             </p>
           </div>
         )}
