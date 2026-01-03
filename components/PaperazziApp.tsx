@@ -36,6 +36,8 @@ function PaperazziAppContent() {
     sortBy: 'relevance_score',
     citing: undefined,
     citingAll: undefined,
+    referencedBy: undefined,
+    referencesAll: undefined,
   });
 
   // --- Search state ---
@@ -51,6 +53,8 @@ function PaperazziAppContent() {
     sortBy: 'relevance_score',
     citing: undefined,
     citingAll: undefined,
+    referencedBy: undefined,
+    referencesAll: undefined,
   });
   const [page, setPage] = useState(1);
 
@@ -74,6 +78,9 @@ function PaperazziAppContent() {
       const citing = searchParams.get('citing') || '';
       const citingAll =
         searchParams.get('citingAll')?.split(',').filter(Boolean) || [];
+      const referencedBy = searchParams.get('referencedBy') || '';
+      const referencesAll =
+        searchParams.get('referencesAll')?.split(',').filter(Boolean) || [];
 
       const journals = mapIssnsToJournals(journalIssns);
 
@@ -140,6 +147,8 @@ function PaperazziAppContent() {
         sortBy: sort,
         citing,
         citingAll,
+        referencedBy,
+        referencesAll,
       };
 
       setFilters(newFilters);
@@ -206,6 +215,13 @@ function PaperazziAppContent() {
     const citingAll = overrides.citingAll ?? filters.citingAll;
     if (citingAll?.length) params.set('citingAll', citingAll.join(','));
 
+    const referencedBy = overrides.referencedBy ?? filters.referencedBy;
+    if (referencedBy) params.set('referencedBy', referencedBy);
+
+    const referencesAll = overrides.referencesAll ?? filters.referencesAll;
+    if (referencesAll?.length)
+      params.set('referencesAll', referencesAll.join(','));
+
     params.set('page', (overrides.page ?? 1).toString());
 
     return params;
@@ -256,6 +272,18 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  const handleClearReferencedBy = () => {
+    const params = buildURLParams({ referencedBy: undefined, page: 1 });
+    params.delete('referencedBy');
+    router.push(`/search?${params.toString()}`);
+  };
+
+  const handleClearReferencesAll = () => {
+    const params = buildURLParams({ referencesAll: undefined, page: 1 });
+    params.delete('referencesAll');
+    router.push(`/search?${params.toString()}`);
+  };
+
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
       <FilterPanel
@@ -286,8 +314,12 @@ function PaperazziAppContent() {
             loadMore={(newPage) => handleSearch(newPage)}
             citing={searchFilters.citing}
             citingAll={searchFilters.citingAll}
+            referencedBy={searchFilters.referencedBy}
             onClearCiting={handleClearCiting}
             onClearCitingAll={handleClearCitingAll}
+            onClearReferencedBy={handleClearReferencedBy}
+            referencesAll={searchFilters.referencesAll}
+            onClearReferencesAll={handleClearReferencesAll}
           />
         </div>
       </main>
@@ -306,7 +338,10 @@ function PaperazziAppContent() {
         onAddAuthor={(author) =>
           setFilters((prev) => ({
             ...prev,
-            authors: [...prev.authors.filter((a) => a.id !== author.id), author],
+            authors: [
+              ...prev.authors.filter((a) => a.id !== author.id),
+              author,
+            ],
           }))
         }
       />

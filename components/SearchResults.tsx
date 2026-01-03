@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
-import { X, Quote, Library } from 'lucide-react';
+import { X, Quote, Library, BookOpen } from 'lucide-react';
 
 interface Props {
   query: string;
@@ -19,9 +19,13 @@ interface Props {
   page: number;
   citing?: string;
   citingAll?: string[];
+  referencedBy?: string;
+  referencesAll?: string[];
   loadMore?: (page: number) => void;
   onClearCiting?: () => void;
   onClearCitingAll?: () => void;
+  onClearReferencedBy?: () => void;
+  onClearReferencesAll?: () => void;
 }
 
 export default function SearchResults({
@@ -37,9 +41,13 @@ export default function SearchResults({
   page,
   citing,
   citingAll,
+  referencedBy,
+  referencesAll,
   loadMore,
   onClearCiting,
   onClearCitingAll,
+  onClearReferencedBy,
+  onClearReferencesAll,
 }: Props) {
   const [results, setResults] = useState<Paper[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -48,6 +56,15 @@ export default function SearchResults({
   const [citingAllPapers, setCitingAllPapers] = useState<Paper[]>([]);
   const [loadingCitingPaper, setLoadingCitingPaper] = useState(false);
   const [loadingCitingAllPapers, setLoadingCitingAllPapers] = useState(false);
+  const [referencedByPaper, setReferencedByPaper] = useState<Paper | null>(
+    null
+  );
+  const [loadingReferencedByPaper, setLoadingReferencedByPaper] =
+    useState(false);
+  const [referencesAllPapers, setReferencesAllPapers] = useState<Paper[]>([]);
+  const [loadingReferencesAllPapers, setLoadingReferencesAllPapers] =
+    useState(false);
+
   const { pinnedIds } = usePins();
 
   // Fetch the paper being cited when `citing` changes
@@ -81,8 +98,36 @@ export default function SearchResults({
       .finally(() => setLoadingCitingPaper(false));
   }, [citing]);
 
-  // Fetch all papers being cited when `citingAll` changes
-  // In SearchResults.tsx, update the citingAll useEffect (around line 75-113)
+  // Fetch the paper whose references we're viewing
+  useEffect(() => {
+    if (!referencedBy) {
+      setReferencedByPaper(null);
+      return;
+    }
+
+    setLoadingReferencedByPaper(true);
+    fetch(`https://api.openalex.org/works/${referencedBy}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setReferencedByPaper({
+          id: data.id,
+          title: data.title,
+          authors:
+            data.authorships?.map((a: any) => a.author.display_name) || [],
+          publication_year: data.publication_year,
+          journal_name:
+            data.primary_location?.source?.display_name || 'Unknown',
+          doi: data.doi,
+          cited_by_count: data.cited_by_count,
+          abstract: '',
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to fetch referenced by paper:', err);
+        setReferencedByPaper(null);
+      })
+      .finally(() => setLoadingReferencedByPaper(false));
+  }, [referencedBy]);
 
   // Fetch all papers being cited when `citingAll` changes
   useEffect(() => {
@@ -126,11 +171,48 @@ export default function SearchResults({
       .finally(() => setLoadingCitingAllPapers(false));
   }, [citingAll]);
 
+  useEffect(() => {
+    if (!referencesAll || referencesAll.length === 0) {
+      setReferencesAllPapers([]);
+      return;
+    }
+
+    setLoadingReferencesAllPapers(true);
+
+    Promise.all(
+      referencesAll.map((id) =>
+        fetch(`https://api.openalex.org/works/${id}`)
+          .then((res) => res.json())
+          .then(
+            (data): Paper => ({
+              id: data.id,
+              title: data.title,
+              authors:
+                data.authorships?.map((a: any) => a.author.display_name) || [],
+              publication_year: data.publication_year,
+              journal_name:
+                data.primary_location?.source?.display_name || 'Unknown',
+              doi: data.doi,
+              cited_by_count: data.cited_by_count,
+              abstract: '',
+            })
+          )
+          .catch(() => null)
+      )
+    )
+      .then((papers) =>
+        setReferencesAllPapers(papers.filter((p): p is Paper => p !== null))
+      )
+      .finally(() => setLoadingReferencesAllPapers(false));
+  }, [referencesAll]);
+
   // Main search effect
   useEffect(() => {
     if (
       !citing &&
       !citingAll?.length &&
+      !referencedBy &&
+      !referencesAll?.length &&
       !query &&
       journals.length === 0 &&
       authors.length === 0 &&
@@ -169,6 +251,9 @@ export default function SearchResults({
 
         if (citing) params.set('citing', citing);
         if (citingAll?.length) params.set('citingAll', citingAll.join(','));
+        if (referencedBy) params.set('referencedBy', referencedBy);
+        if (referencesAll?.length)
+          params.set('referencesAll', referencesAll.join(','));
 
         const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
@@ -192,12 +277,16 @@ export default function SearchResults({
     page,
     citing,
     citingAll,
+    referencedBy,
+    referencesAll,
   ]);
 
-  // Update the empty state check
+  // Empty state check
   if (
     !citing &&
     !citingAll?.length &&
+    !referencedBy &&
+    !referencesAll?.length &&
     !query &&
     journals.length === 0 &&
     authors.length === 0 &&
@@ -248,20 +337,6 @@ export default function SearchResults({
         <div className='text-stone-500 animate-pulse text-lg'>
           Searching papers…
         </div>
-      </div>
-    );
-  }
-
-  if (
-    !citing &&
-    !citingAll?.length &&
-    !query &&
-    journals.length === 0 &&
-    authors.length === 0
-  ) {
-    return (
-      <div className='text-center py-12 text-stone-500'>
-        Please enter a search query or select filters to begin.
       </div>
     );
   }
@@ -367,6 +442,104 @@ export default function SearchResults({
         </div>
       )}
 
+      {/* Referenced By Paper Banner (backward citations) */}
+      {referencedBy && (
+        <div className='mb-4 p-3 bg-green-50 border border-green-200 rounded-lg'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='flex items-start gap-2 flex-1 min-w-0'>
+              <BookOpen
+                size={16}
+                className='text-green-600 mt-0.5 flex-shrink-0'
+              />
+              <div className='min-w-0'>
+                <p className='text-xs font-medium text-green-800 mb-1'>
+                  Showing references from:
+                </p>
+                {loadingReferencedByPaper ? (
+                  <p className='text-sm text-green-700 animate-pulse'>
+                    Loading paper info...
+                  </p>
+                ) : referencedByPaper ? (
+                  <div>
+                    <p className='text-sm font-medium text-stone-900 line-clamp-2'>
+                      {referencedByPaper.title}
+                    </p>
+                    <p className='text-xs text-stone-600 truncate'>
+                      {referencedByPaper.authors?.slice(0, 3).join(', ')}
+                      {referencedByPaper.authors?.length > 3 && ' et al.'}
+                      {referencedByPaper.publication_year &&
+                        ` (${referencedByPaper.publication_year})`}
+                    </p>
+                  </div>
+                ) : (
+                  <p className='text-sm text-green-700'>
+                    Paper ID: {referencedBy}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClearReferencedBy}
+              className='p-1 hover:bg-green-100 rounded transition flex-shrink-0'
+              title='Clear references filter'
+            >
+              <X size={16} className='text-green-600' />
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Referenced ALL Paper Banner (backward citations) */}
+      {referencesAll && referencesAll.length > 0 && (
+        <div className='mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='flex items-start gap-2 flex-1 min-w-0'>
+              <Library
+                size={16}
+                className='text-emerald-600 mt-0.5 flex-shrink-0'
+              />
+              <div className='min-w-0 flex-1'>
+                <p className='text-xs font-medium text-emerald-800 mb-2'>
+                  Showing common references from {referencesAll.length} papers:
+                </p>
+
+                {loadingReferencesAllPapers ? (
+                  <p className='text-sm text-emerald-700 animate-pulse'>
+                    Loading papers info...
+                  </p>
+                ) : (
+                  <div className='space-y-2'>
+                    {referencesAllPapers.map((paper, index) => (
+                      <div
+                        key={paper.id}
+                        className='text-sm bg-white/60 rounded p-2 border border-emerald-100'
+                      >
+                        <p className='font-medium text-stone-900 line-clamp-1'>
+                          {index + 1}. {paper.title}
+                        </p>
+                        <p className='text-xs text-stone-600 truncate'>
+                          {paper.authors?.slice(0, 2).join(', ')}
+                          {paper.authors?.length > 2 && ' et al.'}
+                          {paper.publication_year &&
+                            ` (${paper.publication_year})`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={onClearReferencesAll}
+              className='p-1 hover:bg-emerald-100 rounded transition flex-shrink-0'
+              title='Clear common references filter'
+            >
+              <X size={16} className='text-emerald-600' />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Results count */}
       <div className='text-sm text-stone-600 mb-4'>
         {totalCount === 0 ? (
@@ -383,10 +556,8 @@ export default function SearchResults({
       {/* No results message */}
       {results.length === 0 && !isPending && (
         <div className='text-center py-12 text-stone-500'>
-          <p>No papers found that cite all selected papers.</p>
-          <p className='text-sm mt-2'>
-            Try removing some papers from the selection.
-          </p>
+          <p>No papers found.</p>
+          <p className='text-sm mt-2'>Try adjusting your filters.</p>
         </div>
       )}
 

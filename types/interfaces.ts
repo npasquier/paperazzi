@@ -51,16 +51,18 @@ export interface Institution {
 }
 
 export interface Filters {
-  journals: { issn: string; name?: string }[];
-  authors: { id: string; name?: string }[];
+  journals: SelectedJournal[];
+  authors: SelectedAuthor[];
   topics: Topic[];
   institutions: Institution[];
-  publicationType?: string; 
+  publicationType: string;
   dateFrom: string;
   dateTo: string;
   sortBy: string;
   citing?: string;
   citingAll?: string[];
+  referencedBy?: string;
+  referencesAll?: string[];
 }
 
 export interface Paper {
@@ -72,5 +74,6 @@ export interface Paper {
   doi?: string;
   pdf_url?: string;
   cited_by_count: number;
+  referenced_works_count?: number;
   abstract: string;
 }

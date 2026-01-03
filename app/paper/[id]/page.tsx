@@ -198,12 +198,6 @@ export default function PaperPage() {
 
   return (
     <div className='min-h-screen bg-stone-50 flex'>
-      {/* Pin Sidebar */}
-      <PinSidebar
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-      />
-
       {/* Main Content */}
       <div className='flex-1 overflow-y-auto'>
         <div className='max-w-5xl mx-auto p-6 space-y-6'>
@@ -296,6 +290,11 @@ export default function PaperPage() {
           </div>
         </div>
       </div>
+      {/* Pin Sidebar */}
+      <PinSidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
     </div>
   );
 }

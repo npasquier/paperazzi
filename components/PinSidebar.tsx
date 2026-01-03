@@ -1,11 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Pin, Search, X, ChevronRight, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Pin, Search, ChevronRight, Loader2, BookOpen, Library } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
-// import { fetchPapersCitingAll } from '@/lib/api';
 import PaperCard from './ui/PaperCard';
 
 interface PinSidebarProps {
@@ -14,33 +13,20 @@ interface PinSidebarProps {
   onFindingCites?: (paperId: string, pinnedIds: string[]) => void;
 }
 
-export default function PinSidebar({ isOpen, onToggle, onFindingCites }: PinSidebarProps) {
+export default function PinSidebar({
+  isOpen,
+  onToggle,
+  onFindingCites,
+}: PinSidebarProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { pinnedPapers, pinnedIds, removePin, clearPins, isLoading } =
-    usePins();
+  const { pinnedPapers, pinnedIds, clearPins, isLoading } = usePins();
 
-  const [citingAllResults, setCitingAllResults] = useState<Paper[]>([]);
-  const [citingAllTotal, setCitingAllTotal] = useState(0);
   const [loadingCitingAll, setLoadingCitingAll] = useState(false);
-  const [showCitingAll, setShowCitingAll] = useState(false);
+  const [loadingReferencesAll, setLoadingReferencesAll] = useState(false);
 
   // Build URL params that preserve pins
   const preserveParams =
     pinnedIds.length > 0 ? `pinned=${pinnedIds.join(',')}` : '';
-
-  // Search for papers citing a single pinned paper
-  // const handleSearchCiting = (paper: Paper) => {
-  //   const paperId = paper.id.split('/').pop();
-  //   // Navigate to search page with filter for papers citing this one
-  //   const params = new URLSearchParams();
-  //   // We'll use a special query format that the search can understand
-  //   params.set('citing', paperId || '');
-  //   if (pinnedIds.length > 0) {
-  //     params.set('pinned', pinnedIds.join(','));
-  //   }
-  //   router.push(`/search?${params.toString()}`);
-  // };
 
   const handleSearchCiting = (paper: Paper) => {
     const paperId = paper.id.split('/').pop() || '';
@@ -49,31 +35,29 @@ export default function PinSidebar({ isOpen, onToggle, onFindingCites }: PinSide
     }
   };
 
+  const handleSearchReferences = (paper: Paper) => {
+    const paperId = paper.id.replace('https://openalex.org/', '');
+    const params = new URLSearchParams();
+    params.set('referencedBy', paperId);
+    params.set('sort', 'cited_by_count:desc');
+    params.set('page', '1');
+    router.push(`/search?${params.toString()}`);
+  };
+
   const handleSearchCitingAll = () => {
     if (pinnedIds.length < 2) return;
-
     const params = new URLSearchParams();
     params.set('citingAll', pinnedIds.join(','));
     router.push(`/search?${params.toString()}`);
   };
 
-  // Search for papers citing ALL pinned papers
-  // const handleSearchCitingAll = async () => {
-  //   if (pinnedIds.length < 2) return;
-
-  //   setLoadingCitingAll(true);
-  //   setShowCitingAll(true);
-
-  //   // try {
-  //   //   const { papers, total } = await fetchPapersCitingAll(pinnedIds);
-  //   //   setCitingAllResults(papers);
-  //   //   setCitingAllTotal(total);
-  //   // } catch (error) {
-  //   //   console.error('Failed to fetch papers citing all:', error);
-  //   // } finally {
-  //   //   setLoadingCitingAll(false);
-  //   // }
-  // };
+  const handleSearchReferencesAll = () => {
+    if (pinnedIds.length < 2) return;
+    const params = new URLSearchParams();
+    params.set('referencesAll', pinnedIds.join(','));
+    params.set('sort', 'cited_by_count:desc');
+    router.push(`/search?${params.toString()}`);
+  };
 
   // Collapsed state - just show toggle button
   if (!isOpen) {
@@ -103,7 +87,7 @@ export default function PinSidebar({ isOpen, onToggle, onFindingCites }: PinSide
   }
 
   return (
-    <aside className='w-80  bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden'>
+    <aside className='w-80 bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden'>
       {/* Header */}
       <div className='p-4 border-b border-stone-200 flex-shrink-0'>
         <div className='flex items-center justify-between mb-2'>
@@ -155,23 +139,37 @@ export default function PinSidebar({ isOpen, onToggle, onFindingCites }: PinSide
                   preserveParams={preserveParams}
                 />
 
-                {/* Search citing button */}
-                <button
-                  onClick={() => handleSearchCiting(paper)}
-                  className='mt-1 w-full flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
-                  title='Find papers that cite this paper'
-                >
-                  <Search size={12} />
-                  Find citing papers
-                </button>
+                {/* Action buttons */}
+                <div className='mt-1 flex gap-1'>
+                  {/* Find citing papers (forward citations) */}
+                  <button
+                    onClick={() => handleSearchCiting(paper)}
+                    className='flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
+                    title='Find papers that cite this paper'
+                  >
+                    <Search size={12} />
+                    Citing
+                  </button>
+
+                  {/* Find references (backward citations) */}
+                  <button
+                    onClick={() => handleSearchReferences(paper)}
+                    className='flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded transition'
+                    title='Find papers cited by this paper'
+                  >
+                    <BookOpen size={12} />
+                    References
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Find papers citing ALL */}
+        {/* Multi-paper actions */}
         {pinnedPapers.length >= 2 && (
-          <div className='mt-6 pt-4 border-t border-stone-200'>
+          <div className='mt-6 pt-4 border-t border-stone-200 space-y-3'>
+            {/* Find papers citing ALL */}
             <button
               onClick={handleSearchCitingAll}
               disabled={loadingCitingAll}
@@ -182,58 +180,26 @@ export default function PinSidebar({ isOpen, onToggle, onFindingCites }: PinSide
               ) : (
                 <Search size={16} />
               )}
-              Find papers citing ALL ({pinnedPapers.length})
+              Papers citing ALL ({pinnedPapers.length})
             </button>
-            <p className='text-xs text-stone-500 text-center mt-2'>
-              Papers that cite all {pinnedPapers.length} pinned papers
+
+            {/* Find common references */}
+            <button
+              onClick={handleSearchReferencesAll}
+              disabled={loadingReferencesAll}
+              className='w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-green-700 text-white rounded-lg hover:bg-green-600 transition text-sm font-medium disabled:opacity-50'
+            >
+              {loadingReferencesAll ? (
+                <Loader2 className='animate-spin' size={16} />
+              ) : (
+                <Library size={16} />
+              )}
+              Common references ({pinnedPapers.length})
+            </button>
+
+            <p className='text-xs text-stone-500 text-center'>
+              Find papers cited by all {pinnedPapers.length} pinned papers
             </p>
-          </div>
-        )}
-
-        {/* Citing All Results */}
-        {showCitingAll && (
-          <div className='mt-4 pt-4 border-t border-stone-200'>
-            <div className='flex items-center justify-between mb-3'>
-              <h4 className='text-sm font-semibold text-stone-900'>
-                Citing All ({citingAllTotal})
-              </h4>
-              <button
-                onClick={() => {
-                  setShowCitingAll(false);
-                  setCitingAllResults([]);
-                }}
-                className='p-1 hover:bg-stone-100 rounded transition'
-              >
-                <X size={14} className='text-stone-500' />
-              </button>
-            </div>
-
-            {loadingCitingAll ? (
-              <div className='flex items-center justify-center py-4'>
-                <Loader2 className='animate-spin text-stone-400' size={20} />
-              </div>
-            ) : citingAllResults.length === 0 ? (
-              <p className='text-sm text-stone-500 text-center py-4'>
-                No papers found that cite all pinned papers.
-              </p>
-            ) : (
-              <div className='space-y-2'>
-                {citingAllResults.slice(0, 10).map((paper) => (
-                  <PaperCard
-                    key={paper.id}
-                    paper={paper}
-                    variant='pinned'
-                    showPinButton={true}
-                    preserveParams={preserveParams}
-                  />
-                ))}
-                {citingAllTotal > 10 && (
-                  <p className='text-xs text-stone-500 text-center pt-2'>
-                    Showing 10 of {citingAllTotal} results
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
