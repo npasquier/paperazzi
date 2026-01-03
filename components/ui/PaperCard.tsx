@@ -41,7 +41,8 @@ export default function PaperCard({
     if (onClick) {
       onClick();
     }
-    router.push(paperUrl);
+    // Open in new tab instead of navigating
+    window.open(paperUrl, '_blank');
   };
 
   const openGoogleScholar = (e: React.MouseEvent) => {
