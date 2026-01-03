@@ -333,10 +333,10 @@ export default function SearchResults({
 
   if (isPending) {
     return (
-      <div className='flex items-center justify-center py-12'>
-        <div className='text-stone-500 animate-pulse text-lg'>
-          Searching papers…
-        </div>
+      <div className='animate-pulse space-y-3'>
+        {[1, 2, 3].map((i) => (
+          <div key={i} className='bg-stone-200 h-24 rounded-lg' />
+        ))}
       </div>
     );
   }
