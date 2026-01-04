@@ -230,7 +230,6 @@ export default function FilterPanel({
           </button>
         </div>
       </div>
-
       {/* Scrollable content */}
       <div className='flex-1 overflow-y-auto'>
         {/* Sort By */}

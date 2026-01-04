@@ -11,6 +11,7 @@ import InstitutionModal from './InstitutionModal';
 import { Filters, Topic, Institution } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import PinSidebar from './PinSidebar';
+import CreateAlertButton from './CreateAlertButton';
 
 function PaperazziAppContent() {
   const router = useRouter();
@@ -323,6 +324,8 @@ function PaperazziAppContent() {
         isOpen={isPinSidebarOpen}
         onToggle={() => setIsPinSidebarOpen((v) => !v)}
       />
+
+      <CreateAlertButton filters={searchFilters} query={searchQuery} />
 
       {/* Modals */}
       <AuthorModal
