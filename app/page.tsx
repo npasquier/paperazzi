@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Filter, Pin, ArrowRight } from 'lucide-react';
+import { Filter, Pin, ArrowRight, Laptop } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Paperazzi',
@@ -11,9 +11,7 @@ export default function Page() {
   return (
     <main className='min-h-[calc(100vh-57px)] bg-white flex flex-col items-center justify-center px-6'>
       {/* Tagline */}
-      <p className='text-stone-400 text-sm mb-4'>
-        For economics researchers
-      </p>
+      <p className='text-stone-400 text-sm mb-4'>For economics researchers</p>
 
       {/* Main headline */}
       <h1 className='text-3xl md:text-4xl font-semibold text-stone-900 text-center mb-4 max-w-xl'>
@@ -82,13 +80,22 @@ export default function Page() {
       {/* CTA */}
       <Link
         href='/search'
-        className='inline-flex items-center gap-2 text-stone-900 hover:text-stone-600 transition group'
+        className='inline-flex items-center gap-2 text-stone-900 hover:text-stone-600 transition group mb-16'
       >
         <span className='border-b border-stone-900 group-hover:border-stone-600 pb-0.5'>
           Start searching
         </span>
-        <ArrowRight size={16} className='group-hover:translate-x-0.5 transition-transform' />
+        <ArrowRight
+          size={16}
+          className='group-hover:translate-x-0.5 transition-transform'
+        />
       </Link>
+
+      {/* Device note */}
+      <p className='text-xs text-stone-400 flex items-center gap-1.5'>
+        <Laptop size={14} />
+        Optimized for laptops — give your phone a break
+      </p>
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import buildAbstract from '@/utils/abstract';
+import cleanHtml from '@/utils/cleanHtml';
 
 // Utility to normalize IDs
 function normalizeId(id: string) {
@@ -67,7 +68,9 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const idsFilter = ids.map((id) => `https://openalex.org/${id}`).join('|');
+        const idsFilter = ids
+          .map((id) => `https://openalex.org/${id}`)
+          .join('|');
         const res = await fetch(
           `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=50`
         );
@@ -76,10 +79,12 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         if (data.results) {
           const freshPapers: Paper[] = data.results.map((w: any) => ({
             id: normalizeId(w.id),
-            title: w.title,
-            authors: w.authorships?.map((a: any) => a.author.display_name) || [],
+            title: cleanHtml(w.title),
+            authors:
+              w.authorships?.map((a: any) => a.author.display_name) || [],
             publication_year: w.publication_year,
-            journal_name: w.primary_location?.source?.display_name || 'Unknown',
+            journal_name:
+              w.primary_location?.source?.display_name || 'Unknown',
             doi: w.doi,
             pdf_url: w.primary_location?.pdf_url,
             cited_by_count: w.cited_by_count,
@@ -93,7 +98,13 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
 
           setPinnedPapers(orderedPapers);
         } else {
-          setPinnedPapers(parsed.map((p) => ({ ...p, id: normalizeId(p.id) })));
+          setPinnedPapers(
+            parsed.map((p) => ({
+              ...p,
+              id: normalizeId(p.id),
+              title: cleanHtml(p.title),
+            }))
+          );
         }
       } catch (error) {
         console.error('Failed to load pinned papers:', error);
@@ -148,7 +159,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         return prev.filter((p) => normalizeId(p.id) !== id);
       }
       if (prev.length >= MAX_PINS) return prev;
-      return [{ ...paper, id }, ...prev];
+      // Clean title when adding new paper
+      return [{ ...paper, id, title: cleanHtml(paper.title) }, ...prev];
     });
   };
 
@@ -184,13 +196,11 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     const normalizedPaperId = normalizeId(paperId);
 
     setGroups((prev) => {
-      // Remove from all groups first
       const cleaned = prev.map((g) => ({
         ...g,
         paperIds: g.paperIds.filter((id) => id !== normalizedPaperId),
       }));
 
-      // Add to target group if specified
       if (groupId) {
         return cleaned.map((g) =>
           g.id === groupId

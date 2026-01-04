@@ -255,11 +255,6 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
-  const handleFindCites = (paperId: string) => {
-    const params = buildURLParams({ citing: paperId, page: 1 });
-    router.push(`/search?${params.toString()}`);
-  };
-
   const handleClearCiting = () => {
     const params = buildURLParams({ citing: undefined, page: 1 });
     params.delete('citing');
@@ -327,7 +322,6 @@ function PaperazziAppContent() {
       <PinSidebar
         isOpen={isPinSidebarOpen}
         onToggle={() => setIsPinSidebarOpen((v) => !v)}
-        onFindingCites={handleFindCites}
       />
 
       {/* Modals */}

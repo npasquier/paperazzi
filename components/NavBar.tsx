@@ -71,7 +71,7 @@ function NavBarContent() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder='Search papers by title, author, keywords...'
+                  placeholder='Search papers...'
                   className='w-full pl-10 pr-4 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-400 focus:border-stone-400'
                 />
               </div>

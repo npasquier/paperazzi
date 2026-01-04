@@ -186,7 +186,7 @@ export default function PaperCard({
                 onClick={handleInfoClick}
                 className='inline-flex items-center gap-1 px-2.5 py-1 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium whitespace-nowrap'
               >
-                <Info size={12} /> Info
+                <Info size={12} /> Abstract
               </button>
 
               <button

@@ -6,6 +6,15 @@ import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
 import { X, Quote, Library, BookOpen } from 'lucide-react';
 
+// Helper to clean HTML tags
+function cleanHtml(text: string | null | undefined): string {
+  if (!text) return '';
+  return text
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 interface Props {
   query: string;
   journals: { issn: string; name?: string }[];
@@ -80,7 +89,7 @@ export default function SearchResults({
       .then((data) => {
         setCitingPaper({
           id: data.id,
-          title: data.title,
+          title: cleanHtml(data.title),
           authors:
             data.authorships?.map((a: any) => a.author.display_name) || [],
           publication_year: data.publication_year,
@@ -111,7 +120,7 @@ export default function SearchResults({
       .then((data) => {
         setReferencedByPaper({
           id: data.id,
-          title: data.title,
+          title: cleanHtml(data.title),
           authors:
             data.authorships?.map((a: any) => a.author.display_name) || [],
           publication_year: data.publication_year,
@@ -145,7 +154,7 @@ export default function SearchResults({
           .then(
             (data): Paper => ({
               id: data.id,
-              title: data.title,
+              title: cleanHtml(data.title),
               authors:
                 data.authorships?.map((a: any) => a.author.display_name) || [],
               publication_year: data.publication_year,
@@ -186,7 +195,7 @@ export default function SearchResults({
           .then(
             (data): Paper => ({
               id: data.id,
-              title: data.title,
+              title: cleanHtml(data.title),
               authors:
                 data.authorships?.map((a: any) => a.author.display_name) || [],
               publication_year: data.publication_year,
@@ -488,6 +497,7 @@ export default function SearchResults({
           </div>
         </div>
       )}
+
       {/* Referenced ALL Paper Banner (backward citations) */}
       {referencesAll && referencesAll.length > 0 && (
         <div className='mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg'>

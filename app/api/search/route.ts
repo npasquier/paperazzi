@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import buildAbstract from '@/utils/abstract';
 
+// Helper to clean HTML tags from text
+function cleanHtml(text: string | null | undefined): string {
+  if (!text) return '';
+  return text
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Helper to normalize OpenAlex IDs
 function normalizeId(id: string): string {
   return id.replace('https://openalex.org/', '');
@@ -66,7 +75,7 @@ function buildFilters(params: {
 function mapToPapers(results: any[]): any[] {
   return results.map((w: any) => ({
     id: w.id,
-    title: w.title,
+    title: cleanHtml(w.title),
     authors: w.authorships?.map((a: any) => a.author.display_name) || [],
     publication_year: w.publication_year,
     journal_name: w.primary_location?.source?.display_name || 'Unknown',
@@ -109,11 +118,7 @@ async function searchWithinIds(
     return { results: [], count: 0 };
   }
 
-  // If there's a query, we need to:
-  // 1. Search with the query + filters
-  // 2. Intersect results with our workIds
   if (query) {
-    // First, get all works matching the query (up to a reasonable limit)
     const filters = buildFilters(filterParams);
     let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(
       query
@@ -128,14 +133,12 @@ async function searchWithinIds(
       normalizeId(w.id)
     );
 
-    // Intersect with our workIds
     const intersectedIds = workIds.filter((id) => searchIds.includes(id));
 
     if (intersectedIds.length === 0) {
       return { results: [], count: 0 };
     }
 
-    // Now fetch the intersected works with pagination and sort
     const totalCount = intersectedIds.length;
     const paginatedIds = intersectedIds.slice((page - 1) * 20, page * 20);
 
@@ -156,7 +159,6 @@ async function searchWithinIds(
     };
   }
 
-  // No query - just filter by IDs and other filters
   const filters = buildFilters({ ...filterParams, workIds });
 
   let url = `https://api.openalex.org/works?filter=${filters.join(
@@ -177,7 +179,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mailTo = process.env.MAIL_ID || '';
 
-  // Parse query params
   const query = searchParams.get('query') || '';
   const journals = (searchParams.get('journals') || '')
     .split(',')
@@ -203,7 +204,6 @@ export async function GET(req: NextRequest) {
     .split(',')
     .filter(Boolean);
 
-  // Common filter params
   const filterParams = {
     journals,
     authors,
@@ -215,9 +215,7 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    // ============================================
-    // CASE 1: referencedBy (papers cited by a given paper)
-    // ============================================
+    // CASE 1: referencedBy
     if (referencedBy) {
       const cleanId = normalizeId(referencedBy);
       const paperRes = await fetch(
@@ -230,7 +228,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           results: [],
           meta: { count: 0, page, per_page: 20 },
-          referencedByTitle: paperData.title,
+          referencedByTitle: cleanHtml(paperData.title),
         });
       }
 
@@ -247,15 +245,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         results: mapToPapers(results),
         meta: { count, page, per_page: 20 },
-        referencedByTitle: paperData.title,
+        referencedByTitle: cleanHtml(paperData.title),
       });
     }
 
-    // ============================================
-    // CASE 2: referencesAll (common references across multiple papers)
-    // ============================================
+    // CASE 2: referencesAll
     if (referencesAll.length > 0) {
-      // Fetch referenced_works for each paper
       const referenceSets = await Promise.all(
         referencesAll.map(async (id) => {
           const cleanId = normalizeId(id);
@@ -267,7 +262,6 @@ export async function GET(req: NextRequest) {
         })
       );
 
-      // Find intersection
       const commonIds = referenceSets.reduce((a, b) =>
         a.filter((id: string) => b.includes(id))
       );
@@ -294,11 +288,8 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // ============================================
-    // CASE 3: citingAll (papers citing ALL specified papers)
-    // ============================================
+    // CASE 3: citingAll
     if (citingAll.length > 0) {
-      // Fetch citing papers for each pinned paper
       const citingSets = await Promise.all(
         citingAll.map(async (id) => {
           const fullId = toFullId(id);
@@ -310,7 +301,6 @@ export async function GET(req: NextRequest) {
         })
       );
 
-      // Find intersection
       const commonIds = citingSets.reduce((a, b) =>
         a.filter((id: string) => b.includes(id))
       );
@@ -337,9 +327,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // ============================================
-    // CASE 4: Regular search (with optional citing filter)
-    // ============================================
+    // CASE 4: Regular search
     const filters = buildFilters({ ...filterParams, citing });
 
     let url = `https://api.openalex.org/works?per-page=20&page=${page}&mailto=${mailTo}`;
