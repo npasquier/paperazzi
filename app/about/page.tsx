@@ -1,4 +1,4 @@
-import { BookOpen, Search, Filter, Quote, Database, Scale } from 'lucide-react';
+import { BookOpen, Search, Database, Scale, Heart } from 'lucide-react';
 
 export default function AboutPage() {
   return (
@@ -77,8 +77,7 @@ export default function AboutPage() {
                     4
                   </span>
                   <span>
-                    Click on a paper to see its citations (who cites it, what it
-                    cites)
+                    Pin papers to your collection and explore citation networks
                   </span>
                 </li>
                 <li className='flex items-start gap-3'>
@@ -86,8 +85,8 @@ export default function AboutPage() {
                     5
                   </span>
                   <span>
-                    Pin papers to your collection and explore papers that cite
-                    them all
+                    Optionally, click "Alert" to download code for monthly email
+                    notifications via GitHub Actions
                   </span>
                 </li>
               </ul>
@@ -154,7 +153,7 @@ export default function AboutPage() {
               </div>
 
               <p className='text-sm text-stone-500 mt-4'>
-                For ISSN-based journal filtering in Scholar, see{' '}
+                For (inconsistent) text-based journal filtering in Scholar, see previous project {' '}
                 <a
                   href='https://scholar-filter.vercel.app/'
                   className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
@@ -212,13 +211,61 @@ export default function AboutPage() {
               </div>
             </div>
           </section>
+
+          {/* Contribute */}
+          <section>
+            <div className='flex items-center gap-2 mb-4'>
+              <Heart size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Help improve the data
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-stone-200'>
+              <p className='text-stone-700 mb-4'>
+                OpenAlex is a non-profit, open-source project. Like any large
+                database, it contains some errors — missing papers, incorrect
+                metadata, or misattributed citations.
+              </p>
+              <p className='text-stone-700 mb-4'>
+                You can help by reporting errors. OpenAlex is also working on
+                enabling direct community edits in the future.
+              </p>
+              <div className='bg-white rounded-lg border border-stone-200 p-4'>
+                <p className='text-sm text-stone-700 mb-3'>
+                  <span className='font-medium'>Found an error?</span>
+                </p>
+
+                <a
+                  href='https://help.openalex.org/hc/en-us/articles/27714298573719-Fix-errors-in-OpenAlex'
+                  className='inline-flex items-center gap-2 text-sm text-stone-700 hover:text-stone-900 underline underline-offset-2'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                >
+                  Fix errors in OpenAlex →
+                </a>
+              </div>
+              <p className='text-sm text-stone-500 mt-4'>
+                Contributing to OpenAlex helps build open infrastructure for
+                academic research — reducing reliance on dominant platforms.
+              </p>
+            </div>
+          </section>
         </div>
 
         {/* Footer */}
-        <div className='mt-16 pt-8 border-t border-stone-200'>
-          <p className='text-sm text-stone-400 text-center'>
-            Built for economics researchers who value signal over noise.
+        <div className='mt-16 pt-8 border-t border-stone-200 text-center'>
+          <p className='text-sm text-stone-500 mb-2'>
+            Built for economics researchers, by an economics researcher.
           </p>
+
+          <a
+            href='https://npasquier.github.io/'
+            className='text-sm text-stone-400 hover:text-stone-600 transition'
+            target='_blank'
+            rel='noopener noreferrrr'
+          >
+            npasquier
+          </a>
         </div>
       </div>
     </main>
