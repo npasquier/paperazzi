@@ -29,6 +29,11 @@ interface PinContextType {
   renameGroup: (groupId: string, name: string) => void;
   deleteGroup: (groupId: string) => void;
   movePaperToGroup: (paperId: string, groupId: string | null) => void;
+  reorderPapersInGroup: (
+    groupId: string | null,
+    fromIndex: number,
+    toIndex: number
+  ) => void;
   getUngroupedPapers: () => Paper[];
   getPapersInGroup: (groupId: string) => Paper[];
 }
@@ -83,8 +88,7 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
             authors:
               w.authorships?.map((a: any) => a.author.display_name) || [],
             publication_year: w.publication_year,
-            journal_name:
-              w.primary_location?.source?.display_name || 'Unknown',
+            journal_name: w.primary_location?.source?.display_name || 'Unknown',
             doi: w.doi,
             pdf_url: w.primary_location?.pdf_url,
             cited_by_count: w.cited_by_count,
@@ -159,8 +163,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         return prev.filter((p) => normalizeId(p.id) !== id);
       }
       if (prev.length >= MAX_PINS) return prev;
-      // Clean title when adding new paper
-      return [{ ...paper, id, title: cleanHtml(paper.title) }, ...prev];
+      // Clean title when adding new paper - ADD TO BOTTOM
+      return [...prev, { ...paper, id, title: cleanHtml(paper.title) }];
     });
   };
 
@@ -213,6 +217,45 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const reorderPapersInGroup = (
+    groupId: string | null,
+    fromIndex: number,
+    toIndex: number
+  ) => {
+    if (fromIndex === toIndex) return;
+
+    if (groupId === null) {
+      // Reorder in ungrouped papers
+      const ungroupedPapers = getUngroupedPapers();
+      const [movedPaper] = ungroupedPapers.splice(fromIndex, 1);
+      ungroupedPapers.splice(toIndex, 0, movedPaper);
+
+      // Rebuild the full pinnedPapers array maintaining group order
+      const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
+      const nonUngrouped = pinnedPapers.filter((p) =>
+        groupedIds.has(normalizeId(p.id))
+      );
+      const ungroupedIds = new Set(
+        ungroupedPapers.map((p) => normalizeId(p.id))
+      );
+
+      setPinnedPapers([...nonUngrouped, ...ungroupedPapers]);
+    } else {
+      // Reorder within a specific group
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (g.id === groupId) {
+            const newPaperIds = [...g.paperIds];
+            const [movedId] = newPaperIds.splice(fromIndex, 1);
+            newPaperIds.splice(toIndex, 0, movedId);
+            return { ...g, paperIds: newPaperIds };
+          }
+          return g;
+        })
+      );
+    }
+  };
+
   const getUngroupedPapers = (): Paper[] => {
     const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
     return pinnedPapers.filter((p) => !groupedIds.has(normalizeId(p.id)));
@@ -241,6 +284,7 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         renameGroup,
         deleteGroup,
         movePaperToGroup,
+        reorderPapersInGroup,
         getUngroupedPapers,
         getPapersInGroup,
       }}

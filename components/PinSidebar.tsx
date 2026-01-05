@@ -39,6 +39,7 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
     renameGroup,
     deleteGroup,
     movePaperToGroup,
+    reorderPapersInGroup,
     getUngroupedPapers,
     getPapersInGroup,
   } = usePins();
@@ -56,7 +57,17 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
 
   // Drag state
   const [draggingPaperId, setDraggingPaperId] = useState<string | null>(null);
+  const [draggingFromGroup, setDraggingFromGroup] = useState<string | null>(
+    null
+  );
+  const [draggingFromIndex, setDraggingFromIndex] = useState<number | null>(
+    null
+  );
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+  const [dropIndicatorPosition, setDropIndicatorPosition] = useState<{
+    groupId: string | null;
+    index: number;
+  } | null>(null);
 
   const newGroupInputRef = useRef<HTMLInputElement>(null);
   const editGroupInputRef = useRef<HTMLInputElement>(null);
@@ -177,9 +188,17 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
     setEditingName('');
   };
 
-  // Drag handlers
-  const handleDragStart = (e: React.DragEvent, paperId: string) => {
-    setDraggingPaperId(normalizeId(paperId));
+  // Enhanced drag handlers
+  const handleDragStart = (
+    e: React.DragEvent,
+    paperId: string,
+    groupId: string | null,
+    index: number
+  ) => {
+    const normalizedId = normalizeId(paperId);
+    setDraggingPaperId(normalizedId);
+    setDraggingFromGroup(groupId);
+    setDraggingFromIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '0.5';
@@ -188,95 +207,195 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
 
   const handleDragEnd = (e: React.DragEvent) => {
     setDraggingPaperId(null);
+    setDraggingFromGroup(null);
+    setDraggingFromIndex(null);
     setDragOverGroupId(null);
+    setDropIndicatorPosition(null);
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '1';
     }
   };
 
-  const handleDragOver = (e: React.DragEvent, groupId: string) => {
+  const handleDragOverPaper = (
+    e: React.DragEvent,
+    targetGroupId: string | null,
+    targetIndex: number
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseY = e.clientY;
+    const paperMiddle = rect.top + rect.height / 2;
+    const isBelow = mouseY > paperMiddle;
+
+    // Calculate the actual drop index
+    let dropIndex = isBelow ? targetIndex + 1 : targetIndex;
+
+    // If dragging within the same group and dropping after the dragged item,
+    // adjust the index
+    if (
+      draggingFromGroup === targetGroupId &&
+      draggingFromIndex !== null &&
+      dropIndex > draggingFromIndex
+    ) {
+      dropIndex--;
+    }
+
+    setDropIndicatorPosition({
+      groupId: targetGroupId,
+      index: dropIndex,
+    });
+  };
+
+  const handleDragOverGroup = (e: React.DragEvent, groupId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverGroupId(groupId);
   };
 
-  const handleDragLeave = () => {
-    setDragOverGroupId(null);
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're leaving the container, not a child
+    if (e.currentTarget === e.target) {
+      setDragOverGroupId(null);
+      setDropIndicatorPosition(null);
+    }
   };
 
-  const handleDrop = (e: React.DragEvent, groupId: string | null) => {
+  const handleDropOnPaper = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggingPaperId || !dropIndicatorPosition) return;
+
+    const { groupId: targetGroupId, index: targetIndex } =
+      dropIndicatorPosition;
+
+    // Case 1: Reordering within the same group/section
+    if (draggingFromGroup === targetGroupId && draggingFromIndex !== null) {
+      if (draggingFromIndex !== targetIndex) {
+        reorderPapersInGroup(targetGroupId, draggingFromIndex, targetIndex);
+      }
+    }
+    // Case 2: Moving to a different group
+    else {
+      movePaperToGroup(draggingPaperId, targetGroupId);
+      // If we want to place it at a specific position in the target group,
+      // we need to move it first, then reorder
+      if (targetGroupId !== null) {
+        // Get the current papers in the target group
+        const targetPapers = getPapersInGroup(targetGroupId);
+        // The paper will be added at the end, so we need to move it to the target index
+        setTimeout(() => {
+          reorderPapersInGroup(targetGroupId, targetPapers.length, targetIndex);
+        }, 0);
+      }
+    }
+
+    setDraggingPaperId(null);
+    setDraggingFromGroup(null);
+    setDraggingFromIndex(null);
+    setDragOverGroupId(null);
+    setDropIndicatorPosition(null);
+  };
+
+  const handleDropOnGroup = (e: React.DragEvent, groupId: string | null) => {
     e.preventDefault();
     if (draggingPaperId) {
       movePaperToGroup(draggingPaperId, groupId);
     }
     setDraggingPaperId(null);
+    setDraggingFromGroup(null);
+    setDraggingFromIndex(null);
     setDragOverGroupId(null);
+    setDropIndicatorPosition(null);
   };
 
   // Render paper item
-  const renderPaperItem = (paper: Paper) => {
+  const renderPaperItem = (
+    paper: Paper,
+    groupId: string | null,
+    index: number
+  ) => {
     const normalizedId = normalizeId(paper.id);
     const isSelected = selectedIds.has(normalizedId);
     const isDragging = draggingPaperId === normalizedId;
+    const showDropIndicatorAbove =
+      dropIndicatorPosition?.groupId === groupId &&
+      dropIndicatorPosition?.index === index;
+    const showDropIndicatorBelow =
+      dropIndicatorPosition?.groupId === groupId &&
+      dropIndicatorPosition?.index === index + 1;
 
     return (
-      <div
-        key={paper.id}
-        className={`relative transition-opacity ${isDragging ? 'opacity-50' : ''} ${
-          !selectionMode ? 'cursor-grab active:cursor-grabbing' : ''
-        }`}
-        draggable={!selectionMode}
-        onDragStart={(e) => handleDragStart(e, paper.id)}
-        onDragEnd={handleDragEnd}
-      >
-        <div className='flex items-start gap-2'>
-          {selectionMode && (
-            <button
-              onClick={() => toggleSelection(paper.id)}
-              className={`mt-2 p-0.5 rounded transition flex-shrink-0 ${
-                isSelected
-                  ? 'text-stone-700'
-                  : 'text-stone-300 hover:text-stone-500'
+      <div key={paper.id} className='relative'>
+        {showDropIndicatorAbove && (
+          <div className='h-0.5 bg-stone-400 -mt-1 mb-1 rounded-full' />
+        )}
+
+        <div
+          className={`relative transition-opacity ${
+            isDragging ? 'opacity-30' : ''
+          } ${!selectionMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          draggable={!selectionMode}
+          onDragStart={(e) => handleDragStart(e, paper.id, groupId, index)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => handleDragOverPaper(e, groupId, index)}
+          onDrop={handleDropOnPaper}
+        >
+          <div className='flex items-start gap-2'>
+            {selectionMode && (
+              <button
+                onClick={() => toggleSelection(paper.id)}
+                className={`mt-2 p-0.5 rounded transition flex-shrink-0 ${
+                  isSelected
+                    ? 'text-stone-700'
+                    : 'text-stone-300 hover:text-stone-500'
+                }`}
+              >
+                {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+              </button>
+            )}
+
+            <div
+              className={`flex-1 rounded transition ${
+                selectionMode && isSelected ? 'ring-1 ring-stone-300' : ''
               }`}
             >
-              {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-            </button>
-          )}
+              <PaperCard
+                paper={paper}
+                variant='pinned'
+                showPinButton={!selectionMode}
+                preserveParams={preserveParams}
+              />
 
-          <div
-            className={`flex-1 rounded transition ${
-              selectionMode && isSelected ? 'ring-1 ring-stone-300' : ''
-            }`}
-          >
-            <PaperCard
-              paper={paper}
-              variant='pinned'
-              showPinButton={!selectionMode}
-              preserveParams={preserveParams}
-            />
-
-            {!selectionMode && (
-              <div className='mt-1 flex gap-1'>
-                <button
-                  onClick={() => handleSearchCiting(paper)}
-                  className='flex-1 flex items-center justify-center gap-1 py-1 text-xs text-stone-400 hover:text-stone-600 transition'
-                  title='Find papers that cite this paper'
-                >
-                  <Search size={10} />
-                  Citing
-                </button>
-                <button
-                  onClick={() => handleSearchReferences(paper)}
-                  className='flex-1 flex items-center justify-center gap-1 py-1 text-xs text-stone-400 hover:text-stone-600 transition'
-                  title='Find papers cited by this paper'
-                >
-                  <BookOpen size={10} />
-                  Refs
-                </button>
-              </div>
-            )}
+              {!selectionMode && (
+                <div className='mt-1 flex gap-1'>
+                  <button
+                    onClick={() => handleSearchCiting(paper)}
+                    className='flex-1 flex items-center justify-center gap-1 py-1 text-xs text-stone-400 hover:text-stone-600 transition'
+                    title='Find papers that cite this paper'
+                  >
+                    <Search size={10} />
+                    Citing
+                  </button>
+                  <button
+                    onClick={() => handleSearchReferences(paper)}
+                    className='flex-1 flex items-center justify-center gap-1 py-1 text-xs text-stone-400 hover:text-stone-600 transition'
+                    title='Find papers cited by this paper'
+                  >
+                    <BookOpen size={10} />
+                    Refs
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {showDropIndicatorBelow && (
+          <div className='h-0.5 bg-stone-400 mt-1 -mb-1 rounded-full' />
+        )}
       </div>
     );
   };
@@ -285,15 +404,15 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
   const renderGroup = (groupId: string, groupName: string, papers: Paper[]) => {
     const isExpanded = expandedGroups.has(groupId);
     const isEditing = editingGroupId === groupId;
-    const isDragOver = dragOverGroupId === groupId;
+    const isDragOver = dragOverGroupId === groupId && !dropIndicatorPosition;
 
     return (
       <div
         key={groupId}
         className={`transition rounded ${isDragOver ? 'bg-stone-50' : ''}`}
-        onDragOver={(e) => handleDragOver(e, groupId)}
+        onDragOver={(e) => handleDragOverGroup(e, groupId)}
         onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, groupId)}
+        onDrop={(e) => handleDropOnGroup(e, groupId)}
       >
         <div className='group flex items-center gap-1 py-2'>
           <button
@@ -371,7 +490,9 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
             {papers.length === 0 ? (
               <p className='text-xs text-stone-300 py-1'>Drag papers here</p>
             ) : (
-              papers.map(renderPaperItem)
+              papers.map((paper, index) =>
+                renderPaperItem(paper, groupId, index)
+              )
             )}
           </div>
         )}
@@ -390,10 +511,14 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
         <div className='flex flex-col items-center gap-1'>
           <Pin
             size={16}
-            className={pinnedPapers.length > 0 ? 'text-stone-600' : 'text-stone-300'}
+            className={
+              pinnedPapers.length > 0 ? 'text-stone-600' : 'text-stone-300'
+            }
           />
           {pinnedPapers.length > 0 && (
-            <span className='text-xs text-stone-500'>{pinnedPapers.length}</span>
+            <span className='text-xs text-stone-500'>
+              {pinnedPapers.length}
+            </span>
           )}
         </div>
       </button>
@@ -545,13 +670,17 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
             {ungroupedPapers.length > 0 && (
               <div
                 className={`space-y-2 transition rounded ${
-                  dragOverGroupId === 'ungrouped' ? 'bg-stone-50 p-2 -m-2' : ''
+                  dragOverGroupId === 'ungrouped' && !dropIndicatorPosition
+                    ? 'bg-stone-50 p-2 -m-2'
+                    : ''
                 }`}
-                onDragOver={(e) => handleDragOver(e, 'ungrouped')}
+                onDragOver={(e) => handleDragOverGroup(e, 'ungrouped')}
                 onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, null)}
+                onDrop={(e) => handleDropOnGroup(e, null)}
               >
-                {ungroupedPapers.map(renderPaperItem)}
+                {ungroupedPapers.map((paper, index) =>
+                  renderPaperItem(paper, null, index)
+                )}
               </div>
             )}
           </div>
