@@ -220,7 +220,7 @@ export default function PaperCard({
           >
             <div className='px-3 pb-3 pt-0 border-t border-stone-200'>
               <div className='mt-3 text-sm text-stone-700 leading-relaxed'>
-                {paper.abstract}
+                <b>Abstract</b>: {paper.abstract}
               </div>
             </div>
           </div>

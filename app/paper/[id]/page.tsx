@@ -1,11 +1,9 @@
 'use client';
-
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
 import { ExternalLink, Download } from 'lucide-react';
-
 import parsePapers from '@/utils/parsePapers';
 import buildAbstract from '@/utils/abstract';
 import { Paper } from '@/types/interfaces';
@@ -17,7 +15,6 @@ export default function PaperPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const rawId = params?.id;
-
   const { pinnedPapers, pinnedIds } = usePins();
 
   const [paper, setPaper] = useState<Paper | null>(null);
@@ -26,10 +23,16 @@ export default function PaperPage() {
   const [citesPage, setCitesPage] = useState(1);
   const [cited, setCited] = useState<Paper[]>([]);
   const [citedPage, setCitedPage] = useState(1);
+  const [relatedPapers, setRelatedPapers] = useState<Paper[]>([]);
   const [loadingPaper, setLoadingPaper] = useState(true);
   const [loadingCites, setLoadingCites] = useState(false);
   const [loadingCited, setLoadingCited] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Ref for intersection observer
+  const relatedSectionRef = useRef<HTMLDivElement>(null);
+  const [hasLoadedRelated, setHasLoadedRelated] = useState(false);
 
   const paperId =
     typeof rawId === 'string'
@@ -66,9 +69,12 @@ export default function PaperPage() {
     setCitesPage(1);
     setCited([]);
     setCitedPage(1);
+    setRelatedPapers([]);
     setLoadingPaper(true);
     setLoadingCites(false);
     setLoadingCited(false);
+    setLoadingRelated(false);
+    setHasLoadedRelated(false);
   }, [paperId]);
 
   // Fetch main paper
@@ -146,7 +152,46 @@ export default function PaperPage() {
     return () => {
       isCancelled = true;
     };
-  }, [citedPage, paperId, fetchPapersByIds]);
+  }, [citedPage, paperId]);
+
+  // Fetch related papers when section is visible
+  useEffect(() => {
+    if (!paperId || !paper || hasLoadedRelated) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !hasLoadedRelated) {
+          setHasLoadedRelated(true);
+          fetchRelatedPapers();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    if (relatedSectionRef.current) {
+      observer.observe(relatedSectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [paperId, paper, hasLoadedRelated]);
+
+  const fetchRelatedPapers = async () => {
+    if (!paper) return;
+    setLoadingRelated(true);
+    try {
+      // Use OpenAlex's related-to filter based on title/concepts
+      const res = await axios.get(
+        `https://api.openalex.org/works?filter=related_to:${paperId}&per-page=6&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`
+      );
+      const papers = parsePapers(res.data.results);
+      // Filter out the current paper
+      setRelatedPapers(papers.filter((p) => p.id !== paper.id));
+    } catch (error) {
+      console.error('Error fetching related papers:', error);
+    } finally {
+      setLoadingRelated(false);
+    }
+  };
 
   if (!paperId)
     return <div className='p-6 text-stone-600'>Paper ID not found</div>;
@@ -288,8 +333,33 @@ export default function PaperPage() {
               </button>
             )}
           </div>
+
+          {/* RELATED PAPERS - Lazy loaded */}
+          <div ref={relatedSectionRef} className='space-y-3'>
+            <h2 className='text-lg font-semibold text-stone-900'>
+              Related Papers
+            </h2>
+            {loadingRelated ? (
+              <div className='text-sm text-stone-500 py-4'>
+                Loading related papers...
+              </div>
+            ) : relatedPapers.length > 0 ? (
+              <div className='grid md:grid-cols-2 gap-3'>
+                {relatedPapers.map((r) => renderPaperCard(r, 'related'))}
+              </div>
+            ) : hasLoadedRelated ? (
+              <div className='text-sm text-stone-500 py-4'>
+                No related papers found
+              </div>
+            ) : (
+              <div className='text-sm text-stone-500 py-4'>
+                Scroll to load related papers...
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
       {/* Pin Sidebar */}
       <PinSidebar
         isOpen={sidebarOpen}
