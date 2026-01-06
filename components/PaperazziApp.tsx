@@ -285,6 +285,8 @@ function PaperazziAppContent() {
       <FilterPanel
         filters={filters}
         setFilters={setFilters}
+        query={searchQuery}
+        setQuery={setSearchQuery}
         openJournalModal={() => setShowJournalModal(true)}
         openAuthorModal={() => setShowAuthorModal(true)}
         openTopicModal={() => setShowTopicModal(true)}
@@ -292,6 +294,22 @@ function PaperazziAppContent() {
         onSortChange={handleSortChange}
         isOpen={isFilterOpen}
         onToggle={() => setIsFilterOpen((v) => !v)}
+        onPresetLoad={(preset) => {
+          // Use the preset data directly to build URL params
+          const params = buildURLParams({
+            query: preset.query,
+            journals: preset.filters.journals,
+            authors: preset.filters.authors,
+            topics: preset.filters.topics,
+            institutions: preset.filters.institutions,
+            publicationType: preset.filters.publicationType,
+            dateFrom: preset.filters.dateFrom,
+            dateTo: preset.filters.dateTo,
+            sortBy: preset.filters.sortBy,
+            page: 1,
+          });
+          router.push(`/search?${params.toString()}`);
+        }}
       />
 
       <main className='flex-1 overflow-y-auto'>

@@ -9,16 +9,27 @@ import {
   Filter,
   X,
   Plus,
+  Save,
 } from 'lucide-react';
+
+interface FilterPreset {
+  id: string;
+  name: string;
+  query: string;
+  filters: Filters;
+}
 
 interface FilterPanelProps {
   filters: Filters;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
+  query: string;
+  setQuery: React.Dispatch<React.SetStateAction<string>>;
   openJournalModal: () => void;
   openAuthorModal: () => void;
   openTopicModal: () => void;
   openInstitutionModal: () => void;
   onSortChange?: (sortBy: string) => void;
+  onPresetLoad?: (preset: FilterPreset) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
@@ -34,20 +45,77 @@ const PUBLICATION_TYPES = [
   { value: 'dataset', label: 'Dataset' },
 ];
 
+const MAX_PRESETS = 3;
+
 export default function FilterPanel({
   filters,
   setFilters,
+  query,
+  setQuery,
   openJournalModal,
   openAuthorModal,
   openTopicModal,
   openInstitutionModal,
   onSortChange,
+  onPresetLoad,
   isOpen,
   onToggle,
 }: FilterPanelProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(['topics', 'journals']) // Default expanded
+    new Set(['topics', 'journals'])
   );
+
+  // Load presets from localStorage on mount
+  const [presets, setPresets] = useState<FilterPreset[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('filterPresets');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+
+  // Save presets to localStorage whenever they change
+  const updatePresets = (newPresets: FilterPreset[]) => {
+    setPresets(newPresets);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('filterPresets', JSON.stringify(newPresets));
+    }
+  };
+
+  const saveCurrentFilters = () => {
+    if (!presetName.trim()) return;
+    if (presets.length >= MAX_PRESETS) return;
+
+    const newPreset: FilterPreset = {
+      id: Date.now().toString(),
+      name: presetName.trim(),
+      query: query,
+      filters: { ...filters },
+    };
+
+    updatePresets([...presets, newPreset]);
+    setPresetName('');
+    setShowSaveModal(false);
+    setActivePresetId(newPreset.id);
+  };
+
+  const loadPreset = (preset: FilterPreset) => {
+    setActivePresetId(preset.id);
+    if (onPresetLoad) {
+      onPresetLoad(preset);
+    }
+  };
+
+  const deletePreset = (presetId: string) => {
+    updatePresets(presets.filter((p) => p.id !== presetId));
+    if (activePresetId === presetId) {
+      setActivePresetId(null);
+    }
+  };
 
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
@@ -66,6 +134,7 @@ export default function FilterPanel({
       ...prev,
       journals: prev.journals.filter((j) => j.issn !== issn),
     }));
+    setActivePresetId(null);
   };
 
   const removeTopic = (topicId: string) => {
@@ -73,6 +142,7 @@ export default function FilterPanel({
       ...prev,
       topics: prev.topics.filter((t) => t.id !== topicId),
     }));
+    setActivePresetId(null);
   };
 
   const removeAuthor = (authorId: string) => {
@@ -80,6 +150,7 @@ export default function FilterPanel({
       ...prev,
       authors: prev.authors.filter((a) => a.id !== authorId),
     }));
+    setActivePresetId(null);
   };
 
   const removeInstitution = (instId: string) => {
@@ -87,6 +158,7 @@ export default function FilterPanel({
       ...prev,
       institutions: prev.institutions.filter((i) => i.id !== instId),
     }));
+    setActivePresetId(null);
   };
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -95,12 +167,14 @@ export default function FilterPanel({
     if (onSortChange) {
       onSortChange(newSort);
     }
+    setActivePresetId(null);
   };
 
   const handlePublicationTypeChange = (
     e: React.ChangeEvent<HTMLSelectElement>
   ) => {
     setFilters((prev) => ({ ...prev, publicationType: e.target.value }));
+    setActivePresetId(null);
   };
 
   const activeFilterCount =
@@ -230,6 +304,124 @@ export default function FilterPanel({
           </button>
         </div>
       </div>
+
+      {/* Saved Presets Section */}
+      {presets.length > 0 && (
+        <div className='px-4 py-3 border-b border-stone-100 flex-shrink-0'>
+          <div className='flex items-center justify-between mb-2'>
+            <span className='text-xs text-stone-500'>Saved Filters</span>
+            <span className='text-xs text-stone-400'>
+              {presets.length}/{MAX_PRESETS}
+            </span>
+          </div>
+          <div className='space-y-1'>
+            {presets.map((preset) => (
+              <div
+                key={preset.id}
+                className='flex items-center justify-between gap-2 group'
+              >
+                <button
+                  onClick={() => loadPreset(preset)}
+                  className={`flex-1 text-left px-2 py-1.5 rounded text-xs transition ${
+                    activePresetId === preset.id
+                      ? 'bg-stone-100 text-stone-900'
+                      : 'text-stone-600 hover:bg-stone-50'
+                  }`}
+                  title={preset.query ? `Query: ${preset.query}` : 'No query'}
+                >
+                  <div className='font-medium'>{preset.name}</div>
+                  {preset.query && (
+                    <div className='text-stone-400 truncate mt-0.5'>
+                      {preset.query}
+                    </div>
+                  )}
+                </button>
+                <button
+                  onClick={() => deletePreset(preset.id)}
+                  className='opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-stone-600 transition'
+                  title='Delete'
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Save Current Filters Button */}
+      {activeFilterCount > 0 && (
+        <div className='px-4 py-2 border-b border-stone-100 flex-shrink-0'>
+          <button
+            onClick={() => {
+              if (presets.length < MAX_PRESETS) {
+                setShowSaveModal(true);
+              }
+            }}
+            disabled={presets.length >= MAX_PRESETS}
+            className='w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-stone-600 hover:text-stone-700 transition disabled:opacity-40 disabled:cursor-not-allowed'
+            title={
+              presets.length >= MAX_PRESETS
+                ? `Maximum ${MAX_PRESETS} presets reached`
+                : 'Save current filters'
+            }
+          >
+            <Save size={12} />
+            Save Current Filters
+          </button>
+        </div>
+      )}
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className='fixed inset-0 bg-black/30 flex items-center justify-center z-50'>
+          <div className='bg-white rounded-lg p-4 max-w-sm w-full mx-4 shadow-lg'>
+            <h3 className='text-sm font-medium text-stone-900 mb-3'>
+              Save Filter Preset
+            </h3>
+            {query && (
+              <div className='mb-3 p-2 bg-stone-50 rounded text-xs text-stone-600'>
+                <span className='text-stone-500'>Query: </span>
+                {query}
+              </div>
+            )}
+            <input
+              type='text'
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder='Enter preset name'
+              className='w-full px-3 py-2 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm mb-3'
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveCurrentFilters();
+                if (e.key === 'Escape') {
+                  setShowSaveModal(false);
+                  setPresetName('');
+                }
+              }}
+            />
+            <div className='flex justify-end gap-2'>
+              <button
+                onClick={() => {
+                  setShowSaveModal(false);
+                  setPresetName('');
+                }}
+                className='px-3 py-1.5 text-xs text-stone-600 hover:text-stone-700'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveCurrentFilters}
+                disabled={!presetName.trim()}
+                className='px-3 py-1.5 text-xs bg-stone-700 text-white rounded hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Scrollable content */}
       <div className='flex-1 overflow-y-auto'>
         {/* Sort By */}
@@ -325,9 +517,10 @@ export default function FilterPanel({
               <input
                 type='number'
                 value={filters.dateFrom}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
-                }
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value }));
+                  setActivePresetId(null);
+                }}
                 placeholder='From'
                 className='w-full px-2 py-1.5 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm'
               />
@@ -335,9 +528,10 @@ export default function FilterPanel({
               <input
                 type='number'
                 value={filters.dateTo}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
-                }
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, dateTo: e.target.value }));
+                  setActivePresetId(null);
+                }}
                 placeholder='To'
                 className='w-full px-2 py-1.5 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm'
               />
