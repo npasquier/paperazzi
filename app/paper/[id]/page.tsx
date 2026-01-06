@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
-import { ExternalLink, Download } from 'lucide-react';
+import { ExternalLink, Download, BookOpen } from 'lucide-react';
 import parsePapers from '@/utils/parsePapers';
 import buildAbstract from '@/utils/abstract';
 import { Paper } from '@/types/interfaces';
@@ -40,6 +40,15 @@ export default function PaperPage() {
       : Array.isArray(rawId)
       ? rawId[0]
       : undefined;
+
+  // Helper to open Google Scholar
+  const openGoogleScholar = () => {
+    if (!paper) return;
+    const url = `https://scholar.google.com/scholar?q=${encodeURIComponent(
+      paper.title
+    )}`;
+    window.open(url, '_blank');
+  };
 
   // Memoized helper function
   const fetchPapersByIds = useCallback(
@@ -157,7 +166,6 @@ export default function PaperPage() {
   // Fetch related papers when section is visible
   useEffect(() => {
     if (!paperId || !paper || hasLoadedRelated) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !hasLoadedRelated) {
@@ -167,11 +175,9 @@ export default function PaperPage() {
       },
       { threshold: 0.1, rootMargin: '100px' }
     );
-
     if (relatedSectionRef.current) {
       observer.observe(relatedSectionRef.current);
     }
-
     return () => observer.disconnect();
   }, [paperId, paper, hasLoadedRelated]);
 
@@ -179,12 +185,10 @@ export default function PaperPage() {
     if (!paper) return;
     setLoadingRelated(true);
     try {
-      // Use OpenAlex's related-to filter based on title/concepts
       const res = await axios.get(
         `https://api.openalex.org/works?filter=related_to:${paperId}&per-page=6&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`
       );
       const papers = parsePapers(res.data.results);
-      // Filter out the current paper
       setRelatedPapers(papers.filter((p) => p.id !== paper.id));
     } catch (error) {
       console.error('Error fetching related papers:', error);
@@ -198,7 +202,6 @@ export default function PaperPage() {
   if (loadingPaper || !paper)
     return <div className='p-6 text-stone-600'>Loading paper…</div>;
 
-  // Determine which pinned papers appear in references/citations
   const pinnedInReferences = pinnedPapers.filter((pp) =>
     referencedWorks.some((ref) => ref.includes(pp.id.split('/').pop()!))
   );
@@ -262,6 +265,12 @@ export default function PaperPage() {
               {paper.cited_by_count} citations
             </div>
             <div className='flex flex-wrap gap-2 mb-4'>
+              <button
+                onClick={openGoogleScholar}
+                className='inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition'
+              >
+                <BookOpen size={12} /> Scholar
+              </button>
               {paper.doi && (
                 <a
                   href={`https://doi.org/${paper.doi}`}

@@ -286,7 +286,6 @@ function PaperazziAppContent() {
         filters={filters}
         setFilters={setFilters}
         query={searchQuery}
-        setQuery={setSearchQuery}
         openJournalModal={() => setShowJournalModal(true)}
         openAuthorModal={() => setShowAuthorModal(true)}
         openTopicModal={() => setShowTopicModal(true)}

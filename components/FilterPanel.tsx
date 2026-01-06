@@ -12,7 +12,7 @@ import {
   Save,
 } from 'lucide-react';
 
-interface FilterPreset {
+export interface FilterPreset {
   id: string;
   name: string;
   query: string;
@@ -23,7 +23,6 @@ interface FilterPanelProps {
   filters: Filters;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
   query: string;
-  setQuery: React.Dispatch<React.SetStateAction<string>>;
   openJournalModal: () => void;
   openAuthorModal: () => void;
   openTopicModal: () => void;
@@ -51,7 +50,6 @@ export default function FilterPanel({
   filters,
   setFilters,
   query,
-  setQuery,
   openJournalModal,
   openAuthorModal,
   openTopicModal,
@@ -305,73 +303,6 @@ export default function FilterPanel({
         </div>
       </div>
 
-      {/* Saved Presets Section */}
-      {presets.length > 0 && (
-        <div className='px-4 py-3 border-b border-stone-100 flex-shrink-0'>
-          <div className='flex items-center justify-between mb-2'>
-            <span className='text-xs text-stone-500'>Saved Filters</span>
-            <span className='text-xs text-stone-400'>
-              {presets.length}/{MAX_PRESETS}
-            </span>
-          </div>
-          <div className='space-y-1'>
-            {presets.map((preset) => (
-              <div
-                key={preset.id}
-                className='flex items-center justify-between gap-2 group'
-              >
-                <button
-                  onClick={() => loadPreset(preset)}
-                  className={`flex-1 text-left px-2 py-1.5 rounded text-xs transition ${
-                    activePresetId === preset.id
-                      ? 'bg-stone-100 text-stone-900'
-                      : 'text-stone-600 hover:bg-stone-50'
-                  }`}
-                  title={preset.query ? `Query: ${preset.query}` : 'No query'}
-                >
-                  <div className='font-medium'>{preset.name}</div>
-                  {preset.query && (
-                    <div className='text-stone-400 truncate mt-0.5'>
-                      {preset.query}
-                    </div>
-                  )}
-                </button>
-                <button
-                  onClick={() => deletePreset(preset.id)}
-                  className='opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-stone-600 transition'
-                  title='Delete'
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Save Current Filters Button */}
-      {activeFilterCount > 0 && (
-        <div className='px-4 py-2 border-b border-stone-100 flex-shrink-0'>
-          <button
-            onClick={() => {
-              if (presets.length < MAX_PRESETS) {
-                setShowSaveModal(true);
-              }
-            }}
-            disabled={presets.length >= MAX_PRESETS}
-            className='w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-stone-600 hover:text-stone-700 transition disabled:opacity-40 disabled:cursor-not-allowed'
-            title={
-              presets.length >= MAX_PRESETS
-                ? `Maximum ${MAX_PRESETS} presets reached`
-                : 'Save current filters'
-            }
-          >
-            <Save size={12} />
-            Save Current Filters
-          </button>
-        </div>
-      )}
-
       {/* Save Modal */}
       {showSaveModal && (
         <div className='fixed inset-0 bg-black/30 flex items-center justify-center z-50'>
@@ -441,6 +372,90 @@ export default function FilterPanel({
 
         {/* Collapsible filter sections */}
         <div className='px-4'>
+          {/* Saved Presets - Collapsible and Discrete */}
+          <div className='border-b border-stone-100'>
+            <button
+              onClick={() => toggleSection('presets')}
+              className='w-full flex items-center justify-between py-2.5 hover:bg-stone-50 transition'
+            >
+              <div className='flex items-center gap-2'>
+                {expandedSections.has('presets') ? (
+                  <ChevronDown size={12} className='text-stone-300' />
+                ) : (
+                  <ChevronRight size={12} className='text-stone-300' />
+                )}
+                <span className='text-xs text-stone-400'>Saved Filters</span>
+              </div>
+              {/* {presets.length > 0 && (
+                <span className='text-xs text-stone-400'>{presets.length}</span>
+              )} */}
+            </button>
+
+            {expandedSections.has('presets') && (
+              <div className='pb-2.5 pl-5'>
+                {presets.length > 0 && (
+                  <div className='space-y-0.5 mb-2'>
+                    {presets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className='flex items-center justify-between gap-2 group'
+                      >
+                        <button
+                          onClick={() => loadPreset(preset)}
+                          className={`flex-1 text-left px-2 py-1 rounded text-xs transition ${
+                            activePresetId === preset.id
+                              ? 'bg-stone-100 text-stone-700'
+                              : 'text-stone-500 hover:bg-stone-50 hover:text-stone-700'
+                          }`}
+                          title={
+                            preset.query ? `Query: ${preset.query}` : 'No query'
+                          }
+                        >
+                          {preset.name}
+                          {preset.query && (
+                            <span className='text-stone-400 ml-1 text-[11px]'>
+                              · {preset.query.slice(0, 15)}
+                              {preset.query.length > 15 ? '...' : ''}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => deletePreset(preset.id)}
+                          className='opacity-0 group-hover:opacity-100 p-0.5 text-stone-300 hover:text-stone-500 transition'
+                          title='Delete'
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {presets.length < MAX_PRESETS && activeFilterCount > 0 && (
+                  <button
+                    onClick={() => setShowSaveModal(true)}
+                    className='inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 transition'
+                  >
+                    <Save size={11} />
+                    Save Current
+                  </button>
+                )}
+
+                {presets.length >= MAX_PRESETS && (
+                  <div className='text-[11px] text-stone-300'>
+                    Max {MAX_PRESETS} presets
+                  </div>
+                )}
+
+                {presets.length === 0 && (
+                  <div className='text-[11px] text-stone-300 mb-2'>
+                    No saved filters yet
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Topics */}
           {renderSection(
             'topics',
