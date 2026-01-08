@@ -321,8 +321,8 @@ export default function SearchResults({
       }
     } else {
       pages.push(1);
-      let start = Math.max(2, page - 3);
-      let end = Math.min(totalPages - 1, page + 3);
+      const start = Math.max(2, page - 3);
+      const end = Math.min(totalPages - 1, page + 3);
 
       if (start > 2) pages.push('...');
       for (let i = start; i <= end; i++) pages.push(i);
