@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
-import { X, Quote, Library, BookOpen } from 'lucide-react';
+import { X, Quote, Library, BookOpen, User } from 'lucide-react';
 
 // Helper to clean HTML tags
 function cleanHtml(text: string | null | undefined): string {
@@ -35,6 +35,8 @@ interface Props {
   onClearCitingAll?: () => void;
   onClearReferencedBy?: () => void;
   onClearReferencesAll?: () => void;
+  onAuthorSearch?: (authorName: string) => void;
+  onClearAuthor?: () => void;
 }
 
 export default function SearchResults({
@@ -57,6 +59,8 @@ export default function SearchResults({
   onClearCitingAll,
   onClearReferencedBy,
   onClearReferencesAll,
+  onAuthorSearch,
+  onClearAuthor,
 }: Props) {
   const [results, setResults] = useState<Paper[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -73,8 +77,47 @@ export default function SearchResults({
   const [referencesAllPapers, setReferencesAllPapers] = useState<Paper[]>([]);
   const [loadingReferencesAllPapers, setLoadingReferencesAllPapers] =
     useState(false);
+  const [authorInfo, setAuthorInfo] = useState<any>(null);
+  const [loadingAuthorInfo, setLoadingAuthorInfo] = useState(false);
 
   const { pinnedIds } = usePins();
+
+  // Fetch author info when filtering by a single author
+  useEffect(() => {
+    // Show author banner when there's exactly one author (regardless of other filters)
+    const hasSingleAuthor = authors.length === 1;
+
+    if (!hasSingleAuthor) {
+      setAuthorInfo(null);
+      return;
+    }
+
+    const authorId = authors[0].id;
+    setLoadingAuthorInfo(true);
+
+    fetch(`https://api.openalex.org/authors/${authorId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setAuthorInfo({
+          id: data.id,
+          display_name: data.display_name,
+          orcid: data.orcid,
+          works_count: data.works_count,
+          cited_by_count: data.cited_by_count,
+          h_index: data.summary_stats?.h_index,
+          i10_index: data.summary_stats?.i10_index,
+          last_known_institution: data.last_known_institution?.display_name,
+          last_known_institution_country:
+            data.last_known_institution?.country_code,
+          affiliations: data.affiliations?.slice(0, 3) || [],
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to fetch author info:', err);
+        setAuthorInfo(null);
+      })
+      .finally(() => setLoadingAuthorInfo(false));
+  }, [authors]);
 
   // Fetch the paper being cited when `citing` changes
   useEffect(() => {
@@ -352,6 +395,88 @@ export default function SearchResults({
 
   return (
     <div className='flex flex-col h-full'>
+      {/* Author Info Banner - Single Author View */}
+      {authorInfo && (
+        <div className='mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='flex items-start gap-3 flex-1 min-w-0'>
+              <User size={20} className='text-blue-600 mt-1 flex-shrink-0' />
+              <div className='flex-1 min-w-0'>
+                <p className='text-xs font-medium text-blue-800 mb-2'>
+                  Filtering by author:
+                </p>
+                <div className='flex items-center gap-2 mb-2'>
+                  <h3 className='text-lg font-semibold text-stone-900'>
+                    {authorInfo.display_name}
+                  </h3>
+                  {authorInfo.orcid && (
+                    <a
+                      href={authorInfo.orcid}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-xs text-blue-600 hover:underline'
+                    >
+                      ORCID
+                    </a>
+                  )}
+                </div>
+
+                {/* Institution Info */}
+                {authorInfo.last_known_institution && (
+                  <p className='text-sm text-stone-700 mb-1'>
+                    <span className='text-stone-500'>Institution:</span>{' '}
+                    {authorInfo.last_known_institution}
+                    {authorInfo.last_known_institution_country && (
+                      <span className='text-stone-400 ml-1'>
+                        ({authorInfo.last_known_institution_country})
+                      </span>
+                    )}
+                  </p>
+                )}
+
+                {/* Additional Affiliations */}
+                {authorInfo.affiliations &&
+                  authorInfo.affiliations.length > 0 && (
+                    <p className='text-xs text-stone-600 mb-2'>
+                      <span className='text-stone-500'>Also affiliated with:</span>{' '}
+                      {authorInfo.affiliations
+                        .map((aff: any) => aff.institution.display_name)
+                        .join(', ')}
+                    </p>
+                  )}
+
+                {/* Stats */}
+                <div className='flex flex-wrap gap-4 text-xs text-stone-600'>
+                  {authorInfo.works_count !== undefined && (
+                    <span>
+                      <span className='font-medium text-stone-700'>
+                        {authorInfo.works_count.toLocaleString()}
+                      </span>{' '}
+                      works
+                    </span>
+                  )}
+                  {authorInfo.cited_by_count !== undefined && (
+                    <span>
+                      <span className='font-medium text-stone-700'>
+                        {authorInfo.cited_by_count.toLocaleString()}
+                      </span>{' '}
+                      citations
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={onClearAuthor}
+              className='p-1 hover:bg-blue-100 rounded transition flex-shrink-0'
+              title='Clear author filter'
+            >
+              <X size={16} className='text-blue-600' />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Citing Single Paper Banner */}
       {citing && (
         <div className='mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg'>
@@ -582,6 +707,7 @@ export default function SearchResults({
               showPinButton={true}
               showActions={true}
               preserveParams={preserveParams}
+              onAuthorClick={onAuthorSearch}
             />
           ))}
         </div>

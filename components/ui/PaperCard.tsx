@@ -21,6 +21,7 @@ interface PaperCardProps {
   preserveParams?: string;
   highlighted?: boolean;
   onClick?: () => void;
+  onAuthorClick?: (authorName: string) => void;
 }
 
 export default function PaperCard({
@@ -31,6 +32,7 @@ export default function PaperCard({
   preserveParams = '',
   highlighted = false,
   onClick,
+  onAuthorClick,
 }: PaperCardProps) {
   const [isAbstractExpanded, setIsAbstractExpanded] = useState(false);
   const router = useRouter();
@@ -64,6 +66,41 @@ export default function PaperCard({
     e.preventDefault();
     e.stopPropagation();
     setIsAbstractExpanded(!isAbstractExpanded);
+  };
+
+  const handleAuthorClick = (e: React.MouseEvent, authorName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onAuthorClick) {
+      onAuthorClick(authorName);
+    }
+  };
+
+  const renderAuthors = (maxAuthors: number, textSize: string = 'text-sm') => {
+    const displayAuthors = paper.authors.slice(0, maxAuthors);
+    const hasMore = paper.authors.length > maxAuthors;
+
+    return (
+      <div className={`${textSize} text-stone-600 mb-1`}>
+        {displayAuthors.map((author, idx) => (
+          <span key={idx}>
+            <button
+              onClick={(e) => handleAuthorClick(e, author)}
+              className="hover:text-stone-900 hover:underline transition-colors cursor-pointer inline"
+              title={`Search papers by ${author}`}
+            >
+              {author}
+            </button>
+            {idx < displayAuthors.length - 1 && ', '}
+          </span>
+        ))}
+        {hasMore && (
+          <span className="text-stone-500">
+            , +{paper.authors.length - maxAuthors} more
+          </span>
+        )}
+      </div>
+    );
   };
 
   if (variant === 'pinned') {
@@ -121,10 +158,7 @@ export default function PaperCard({
         <div className='font-semibold text-stone-900 text-sm leading-snug mb-1'>
           {paper.title}
         </div>
-        <div className='text-xs text-stone-600 mb-1'>
-          {paper.authors.slice(0, 3).join(', ')}
-          {paper.authors.length > 3 && '...'}
-        </div>
+        {renderAuthors(3, 'text-xs')}
         <div className='text-xs text-stone-500'>
           {paper.journal_name} • {paper.publication_year} •{' '}
           {paper.cited_by_count} citations
@@ -153,11 +187,7 @@ export default function PaperCard({
               {paper.title}
             </h3>
 
-            <div className='text-sm text-stone-600 mb-1 truncate'>
-              {paper.authors.slice(0, 5).join(', ')}
-              {paper.authors.length > 5 &&
-                `, +${paper.authors.length - 5} more`}
-            </div>
+            {renderAuthors(5)}
 
             <div className='text-xs text-stone-500'>
               {paper.journal_name} • {paper.publication_year} •{' '}

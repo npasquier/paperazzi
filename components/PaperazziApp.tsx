@@ -280,6 +280,40 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  const handleClearAuthor = () => {
+    const params = buildURLParams({ authors: [], page: 1 });
+    params.delete('authors');
+    router.push(`/search?${params.toString()}`);
+  };
+
+  // Handle author click from PaperCard
+  const handleAuthorSearch = async (authorName: string) => {
+    try {
+      // Search for the author in OpenAlex
+      const response = await fetch(
+        `https://api.openalex.org/authors?search=${encodeURIComponent(
+          authorName
+        )}`
+      );
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        // Get the first (most relevant) author match
+        const author = data.results[0];
+        const authorId = author.id.replace('https://openalex.org/', '');
+
+        // Reset ALL filters and navigate with only this author
+        const params = new URLSearchParams();
+        params.set('authors', authorId);
+        params.set('page', '1');
+
+        router.push(`/search?${params.toString()}`);
+      }
+    } catch (error) {
+      console.error('Failed to search for author:', error);
+    }
+  };
+
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
       <FilterPanel
@@ -333,6 +367,8 @@ function PaperazziAppContent() {
             onClearReferencedBy={handleClearReferencedBy}
             referencesAll={searchFilters.referencesAll}
             onClearReferencesAll={handleClearReferencesAll}
+            onAuthorSearch={handleAuthorSearch}
+            onClearAuthor={handleClearAuthor}
           />
         </div>
       </main>
