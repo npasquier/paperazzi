@@ -106,9 +106,8 @@ export default function PaperCard({
   if (variant === 'pinned') {
     return (
       <div
-        onClick={handleCardClick}
         className={`
-          bg-stone-50 border rounded-lg p-3 relative cursor-pointer
+          bg-stone-50 border rounded-lg p-3 relative group
           ${
             highlighted
               ? 'border-amber-400 bg-amber-50'
@@ -122,13 +121,49 @@ export default function PaperCard({
           </div>
         )}
         <div className='pr-8'>
-          <div className='font-semibold text-stone-900 text-xs leading-snug mb-1 line-clamp-2'>
+          <div 
+            onClick={handleCardClick}
+            className='font-semibold text-stone-900 text-xs leading-snug mb-1 line-clamp-2 cursor-pointer'
+          >
             {paper.title}
           </div>
-          <div className='text-xs text-stone-500'>
-            {paper.publication_year} • {paper.cited_by_count} cites{' '}
+          <div className='text-xs text-stone-500 flex items-center gap-2'>
+            <span>{paper.publication_year}</span>
+            <span>•</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onClick) onClick();
+                // Will be handled by PinSidebar's handleSearchCiting
+                const event = new CustomEvent('paper-citing-click', { 
+                  detail: { paper } 
+                });
+                window.dispatchEvent(event);
+              }}
+              className='hover:text-stone-700 hover:underline transition cursor-pointer'
+              title='Find papers that cite this paper'
+            >
+              {paper.cited_by_count} cites
+            </button>
             {paper.referenced_works_count !== undefined && (
-              <> • {paper.referenced_works_count} refs</>
+              <>
+                <span>•</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onClick) onClick();
+                    // Will be handled by PinSidebar's handleSearchReferences
+                    const event = new CustomEvent('paper-refs-click', { 
+                      detail: { paper } 
+                    });
+                    window.dispatchEvent(event);
+                  }}
+                  className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                  title='Find papers cited by this paper'
+                >
+                  {paper.referenced_works_count} refs
+                </button>
+              </>
             )}
           </div>
         </div>
