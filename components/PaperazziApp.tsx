@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
 import SearchResults from './SearchResults';
@@ -24,6 +24,10 @@ function PaperazziAppContent() {
   const [showInstitutionModal, setShowInstitutionModal] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(false);
+  const [isSearchingAuthor, setIsSearchingAuthor] = useState(false);
+
+  // Cache for author searches to avoid repeated API calls
+  const authorCacheRef = useRef<Map<string, string>>(new Map());
 
   // --- Local state for controlled inputs ---
   const [filters, setFilters] = useState<Filters>({
@@ -286,23 +290,40 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
-  // Handle author click from PaperCard
+  // Handle author click from PaperCard - optimized with caching
   const handleAuthorSearch = async (authorName: string) => {
+    // Check cache first
+    const cachedId = authorCacheRef.current.get(authorName);
+    
+    if (cachedId) {
+      // Instant navigation with cached ID
+      const params = new URLSearchParams();
+      params.set('authors', cachedId);
+      params.set('page', '1');
+      router.push(`/search?${params.toString()}`);
+      return;
+    }
+
+    // Show loading state
+    setIsSearchingAuthor(true);
+
     try {
-      // Search for the author in OpenAlex
       const response = await fetch(
         `https://api.openalex.org/authors?search=${encodeURIComponent(
           authorName
-        )}`
+        )}`,
+        { next: { revalidate: 3600 } } // Cache for 1 hour
       );
       const data = await response.json();
 
       if (data.results && data.results.length > 0) {
-        // Get the first (most relevant) author match
         const author = data.results[0];
         const authorId = author.id.replace('https://openalex.org/', '');
 
-        // Reset ALL filters and navigate with only this author
+        // Cache the result
+        authorCacheRef.current.set(authorName, authorId);
+
+        // Navigate with only this author
         const params = new URLSearchParams();
         params.set('authors', authorId);
         params.set('page', '1');
@@ -311,11 +332,23 @@ function PaperazziAppContent() {
       }
     } catch (error) {
       console.error('Failed to search for author:', error);
+    } finally {
+      setIsSearchingAuthor(false);
     }
   };
 
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
+      {/* Loading overlay for author search */}
+      {isSearchingAuthor && (
+        <div className='fixed inset-0 bg-black/20 flex items-center justify-center z-50'>
+          <div className='bg-white rounded-lg shadow-lg p-6 flex items-center gap-3'>
+            <div className='animate-spin h-5 w-5 border-2 border-stone-300 border-t-stone-700 rounded-full' />
+            <span className='text-sm text-stone-700'>Searching for author...</span>
+          </div>
+        </div>
+      )}
+
       <FilterPanel
         filters={filters}
         setFilters={setFilters}
@@ -376,6 +409,7 @@ function PaperazziAppContent() {
       <PinSidebar
         isOpen={isPinSidebarOpen}
         onToggle={() => setIsPinSidebarOpen((v) => !v)}
+        onAuthorSearch={handleAuthorSearch}
       />
 
       <CreateAlertButton filters={searchFilters} query={searchQuery} />

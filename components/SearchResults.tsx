@@ -79,8 +79,80 @@ export default function SearchResults({
     useState(false);
   const [authorInfo, setAuthorInfo] = useState<any>(null);
   const [loadingAuthorInfo, setLoadingAuthorInfo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string>('Searching OpenAlex...');
+  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+  const [showSlowLoadingHelp, setShowSlowLoadingHelp] = useState(false);
 
   const { pinnedIds } = usePins();
+
+  // Progressive loading messages based on time elapsed
+  useEffect(() => {
+    if (!isPending || !loadingStartTime) return;
+
+    const updateLoadingMessage = () => {
+      const elapsed = Date.now() - loadingStartTime;
+      
+      if (elapsed < 3000) {
+        setLoadingMessage('Searching OpenAlex...');
+        setShowSlowLoadingHelp(false);
+      } else if (elapsed < 6000) {
+        setLoadingMessage('Processing results...');
+        setShowSlowLoadingHelp(false);
+      } else if (elapsed < 10000) {
+        setLoadingMessage('Still loading... OpenAlex is busy');
+        setShowSlowLoadingHelp(false);
+      } else {
+        setLoadingMessage('Taking longer than usual...');
+        setShowSlowLoadingHelp(true);
+      }
+    };
+
+    // Update immediately
+    updateLoadingMessage();
+
+    // Then update every second
+    const interval = setInterval(updateLoadingMessage, 1000);
+
+    return () => clearInterval(interval);
+  }, [isPending, loadingStartTime]);
+
+  // Listen for citation click events from PaperCard
+  useEffect(() => {
+    const handleCitingClick = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const paper = customEvent.detail.paper;
+      
+      // Navigate to citing search
+      const paperId = paper.id.replace('https://openalex.org/', '');
+      const params = new URLSearchParams();
+      params.set('citing', paperId);
+      params.set('sort', 'cited_by_count:desc');
+      params.set('page', '1');
+      window.location.href = `/search?${params.toString()}`;
+    };
+
+    const handleRefsClick = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const paper = customEvent.detail.paper;
+      
+      // Navigate to references search
+      const paperId = paper.id.replace('https://openalex.org/', '');
+      const params = new URLSearchParams();
+      params.set('referencedBy', paperId);
+      params.set('sort', 'cited_by_count:desc');
+      params.set('page', '1');
+      window.location.href = `/search?${params.toString()}`;
+    };
+
+    window.addEventListener('paper-citing-click', handleCitingClick);
+    window.addEventListener('paper-refs-click', handleRefsClick);
+
+    return () => {
+      window.removeEventListener('paper-citing-click', handleCitingClick);
+      window.removeEventListener('paper-refs-click', handleRefsClick);
+    };
+  }, []);
 
   // Fetch author info when filtering by a single author
   useEffect(() => {
@@ -273,11 +345,16 @@ export default function SearchResults({
     ) {
       setResults([]);
       setTotalCount(0);
+      setError(null);
       return;
     }
 
     startTransition(async () => {
       try {
+        setError(null);
+        setLoadingStartTime(Date.now());
+        setShowSlowLoadingHelp(false);
+        
         const journalIssns = journals.map((j) => j.issn);
         const authorIds = authors.map((a) => a.id);
         const topicIds = topics.map((t) =>
@@ -309,11 +386,23 @@ export default function SearchResults({
 
         const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
-        setResults(data.results);
-        setTotalCount(data.meta?.count || 0);
-      } catch {
+        
+        if (data.error) {
+          setError(data.error);
+          setResults([]);
+          setTotalCount(0);
+        } else {
+          setResults(data.results);
+          setTotalCount(data.meta?.count || 0);
+        }
+      } catch (err) {
+        console.error('Search error:', err);
+        setError('An error occurred while searching. Please try again.');
         setResults([]);
         setTotalCount(0);
+      } finally {
+        setLoadingStartTime(null);
+        setShowSlowLoadingHelp(false);
       }
     });
   }, [
@@ -385,9 +474,39 @@ export default function SearchResults({
 
   if (isPending) {
     return (
-      <div className='animate-pulse space-y-3'>
+      <div className='space-y-3'>
+        {/* Loading message */}
+        <div className='text-center py-4'>
+          <div className='inline-flex items-center gap-2 text-sm text-stone-600'>
+            <div className='animate-spin h-4 w-4 border-2 border-stone-300 border-t-stone-600 rounded-full' />
+            <span>{loadingMessage}</span>
+          </div>
+        </div>
+
+        {/* Slow loading help banner */}
+        {showSlowLoadingHelp && (
+          <div className='mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg'>
+            <p className='text-sm font-medium text-amber-800 mb-2'>
+              Taking longer than expected
+            </p>
+            <p className='text-xs text-amber-700 mb-3'>
+              This usually means your search is very broad or OpenAlex is experiencing high traffic.
+            </p>
+            <div className='flex gap-2 text-xs'>
+              <button
+                onClick={() => window.location.reload()}
+                className='px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded transition'
+              >
+                Retry Search
+              </button>
+              <span className='text-amber-600'>or try adding more filters to narrow results</span>
+            </div>
+          </div>
+        )}
+
+        {/* Skeleton cards */}
         {[1, 2, 3].map((i) => (
-          <div key={i} className='bg-stone-200 h-24 rounded-lg' />
+          <div key={i} className='bg-stone-200 h-24 rounded-lg animate-pulse' />
         ))}
       </div>
     );
@@ -687,6 +806,26 @@ export default function SearchResults({
           </span>
         )}
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className='mb-4 p-4 bg-red-50 border border-red-200 rounded-lg'>
+          <div className='flex items-start gap-2'>
+            <div className='flex-1'>
+              <p className='text-sm font-medium text-red-800 mb-1'>
+                Search Error
+              </p>
+              <p className='text-sm text-red-700'>{error}</p>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className='text-xs text-red-600 hover:text-red-800 underline'
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* No results message */}
       {results.length === 0 && !isPending && (

@@ -25,9 +25,10 @@ import PaperCard from './ui/PaperCard';
 interface PinSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
+  onAuthorSearch?: (authorName: string) => void;
 }
 
-export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
+export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSidebarProps) {
   const router = useRouter();
   const {
     pinnedPapers,
@@ -443,6 +444,7 @@ export default function PinSidebar({ isOpen, onToggle }: PinSidebarProps) {
                 variant='pinned'
                 showPinButton={!selectionMode}
                 preserveParams={preserveParams}
+                onAuthorClick={onAuthorSearch}
               />
             </div>
           </div>

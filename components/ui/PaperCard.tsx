@@ -127,6 +127,30 @@ export default function PaperCard({
           >
             {paper.title}
           </div>
+          
+          {/* Authors - clickable */}
+          {paper.authors && paper.authors.length > 0 && (
+            <div className='text-xs text-stone-600 mb-1 line-clamp-1'>
+              {paper.authors.slice(0, 2).map((author, idx) => (
+                <span key={idx}>
+                  <button
+                    onClick={(e) => handleAuthorClick(e, author)}
+                    className="hover:text-stone-900 hover:underline transition-colors cursor-pointer inline"
+                    title={`Search papers by ${author}`}
+                  >
+                    {author}
+                  </button>
+                  {idx < Math.min(paper.authors.length, 2) - 1 && ', '}
+                </span>
+              ))}
+              {paper.authors.length > 2 && (
+                <span className="text-stone-500">
+                  , +{paper.authors.length - 2} more
+                </span>
+              )}
+            </div>
+          )}
+          
           <div className='text-xs text-stone-500 flex items-center gap-2'>
             <span>{paper.publication_year}</span>
             <span>•</span>
@@ -224,11 +248,43 @@ export default function PaperCard({
 
             {renderAuthors(5)}
 
-            <div className='text-xs text-stone-500'>
-              {paper.journal_name} • {paper.publication_year} •{' '}
-              {paper.cited_by_count} citations
+            <div className='text-xs text-stone-500 flex items-center gap-2 flex-wrap'>
+              <span>{paper.journal_name}</span>
+              <span>•</span>
+              <span>{paper.publication_year}</span>
+              <span>•</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Dispatch event for citing
+                  const event = new CustomEvent('paper-citing-click', { 
+                    detail: { paper } 
+                  });
+                  window.dispatchEvent(event);
+                }}
+                className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                title='Find papers that cite this paper'
+              >
+                {paper.cited_by_count} citations
+              </button>
               {paper.referenced_works_count !== undefined && (
-                <> • {paper.referenced_works_count} refs</>
+                <>
+                  <span>•</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Dispatch event for references
+                      const event = new CustomEvent('paper-refs-click', { 
+                        detail: { paper } 
+                      });
+                      window.dispatchEvent(event);
+                    }}
+                    className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                    title='Find papers cited by this paper'
+                  >
+                    {paper.referenced_works_count} refs
+                  </button>
+                </>
               )}
             </div>
           </div>

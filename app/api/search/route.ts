@@ -97,6 +97,58 @@ function buildSort(sort: string, hasQuery: boolean): string {
   return '';
 }
 
+// Helper to fetch with error handling and retry logic
+async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      
+      // Handle 503 with retry
+      if (res.status === 503 && attempt < retries) {
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+        console.log(`OpenAlex 503 error, retrying in ${waitTime}ms (attempt ${attempt}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      if (!res.ok) {
+        console.error(`OpenAlex API error: ${res.status} ${res.statusText}`);
+        console.error(`URL: ${url}`);
+        
+        // For 503, give a more user-friendly error
+        if (res.status === 503) {
+          throw new Error('OpenAlex API is temporarily unavailable. Please try again in a moment.');
+        }
+        
+        throw new Error(`OpenAlex API returned ${res.status}`);
+      }
+      
+      const text = await res.text();
+      
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error('Failed to parse JSON response');
+        console.error('URL:', url);
+        console.error('Response preview:', text.substring(0, 500));
+        throw new Error('Invalid JSON response from OpenAlex');
+      }
+    } catch (error) {
+      // If it's the last attempt or not a network error, throw
+      if (attempt === retries || !(error instanceof TypeError)) {
+        throw error;
+      }
+      
+      // Network error, retry
+      const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      console.log(`Network error, retrying in ${waitTime}ms (attempt ${attempt}/${retries})`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+  
+  throw new Error('Failed to fetch from OpenAlex after retries');
+}
+
 // Helper to search within a set of IDs
 async function searchWithinIds(
   workIds: string[],
@@ -123,12 +175,12 @@ async function searchWithinIds(
     let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(
       query
     )}&per-page=200&mailto=${mailTo}`;
+    
     if (filters.length) {
       searchUrl += `&filter=${filters.join(',')}`;
     }
 
-    const searchRes = await fetch(searchUrl);
-    const searchData = await searchRes.json();
+    const searchData = await fetchOpenAlex(searchUrl);
     const searchIds = (searchData.results || []).map((w: any) =>
       normalizeId(w.id)
     );
@@ -150,8 +202,7 @@ async function searchWithinIds(
     let url = `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=20&mailto=${mailTo}`;
     url += buildSort(sort, true);
 
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await fetchOpenAlex(url);
 
     return {
       results: data.results || [],
@@ -160,14 +211,12 @@ async function searchWithinIds(
   }
 
   const filters = buildFilters({ ...filterParams, workIds });
-
   let url = `https://api.openalex.org/works?filter=${filters.join(
     ','
   )}&per-page=20&page=${page}&mailto=${mailTo}`;
   url += buildSort(sort, false);
 
-  const res = await fetch(url);
-  const data = await res.json();
+  const data = await fetchOpenAlex(url);
 
   return {
     results: data.results || [],
@@ -195,6 +244,7 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get('to');
   const sort = searchParams.get('sort') || 'relevance_score';
   const page = Number(searchParams.get('page') || 1);
+
   const citing = searchParams.get('citing');
   const citingAll = (searchParams.get('citingAll') || '')
     .split(',')
@@ -218,12 +268,12 @@ export async function GET(req: NextRequest) {
     // CASE 1: referencedBy
     if (referencedBy) {
       const cleanId = normalizeId(referencedBy);
-      const paperRes = await fetch(
+      const paperData = await fetchOpenAlex(
         `https://api.openalex.org/works/${cleanId}?mailto=${mailTo}`
       );
-      const paperData = await paperRes.json();
 
       const referencedWorks = paperData.referenced_works || [];
+
       if (referencedWorks.length === 0) {
         return NextResponse.json({
           results: [],
@@ -233,6 +283,7 @@ export async function GET(req: NextRequest) {
       }
 
       const referenceIds = referencedWorks.map(normalizeId);
+
       const { results, count } = await searchWithinIds(
         referenceIds,
         query,
@@ -254,10 +305,9 @@ export async function GET(req: NextRequest) {
       const referenceSets = await Promise.all(
         referencesAll.map(async (id) => {
           const cleanId = normalizeId(id);
-          const res = await fetch(
+          const data = await fetchOpenAlex(
             `https://api.openalex.org/works/${cleanId}?mailto=${mailTo}`
           );
-          const data = await res.json();
           return (data.referenced_works || []).map(normalizeId);
         })
       );
@@ -293,10 +343,9 @@ export async function GET(req: NextRequest) {
       const citingSets = await Promise.all(
         citingAll.map(async (id) => {
           const fullId = toFullId(id);
-          const res = await fetch(
+          const data = await fetchOpenAlex(
             `https://api.openalex.org/works?per-page=200&filter=cites:${fullId}&mailto=${mailTo}`
           );
-          const data = await res.json();
           return (data.results || []).map((w: any) => normalizeId(w.id));
         })
       );
@@ -329,7 +378,6 @@ export async function GET(req: NextRequest) {
 
     // CASE 4: Regular search
     const filters = buildFilters({ ...filterParams, citing });
-
     let url = `https://api.openalex.org/works?per-page=20&page=${page}&mailto=${mailTo}`;
 
     if (filters.length) {
@@ -342,18 +390,37 @@ export async function GET(req: NextRequest) {
 
     url += buildSort(sort, !!query);
 
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await fetchOpenAlex(url);
 
-    return NextResponse.json({
-      results: mapToPapers(data.results || []),
-      meta: { count: data.meta?.count || 0, page, per_page: 20 },
-    });
+    return NextResponse.json(
+      {
+        results: mapToPapers(data.results || []),
+        meta: { count: data.meta?.count || 0, page, per_page: 20 },
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      }
+    );
   } catch (error) {
     console.error('Search API error:', error);
-    return NextResponse.json({
-      results: [],
-      meta: { count: 0, page, per_page: 20 },
-    });
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isServiceUnavailable = errorMessage.includes('temporarily unavailable');
+    
+    return NextResponse.json(
+      {
+        results: [],
+        meta: { count: 0, page, per_page: 20 },
+        error: errorMessage,
+      },
+      { 
+        status: isServiceUnavailable ? 503 : 500,
+        headers: {
+          'Cache-Control': 'no-store, must-revalidate',
+        },
+      }
+    );
   }
 }
