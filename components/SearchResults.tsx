@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
-import { X, Quote, Library, BookOpen, User } from 'lucide-react';
+import { X, Quote, Library, BookOpen, User, Info, Copy, Check, ExternalLink, CheckCircle } from 'lucide-react';
 
 // Helper to clean HTML tags
 function cleanHtml(text: string | null | undefined): string {
@@ -86,6 +86,11 @@ export default function SearchResults({
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
   const [showSlowLoadingHelp, setShowSlowLoadingHelp] = useState(false);
 
+  // Author info panel state
+  const [isAuthorInfoExpanded, setIsAuthorInfoExpanded] = useState(false);
+  const [isAuthorIdCopied, setIsAuthorIdCopied] = useState(false);
+  const [hasAuthorReported, setHasAuthorReported] = useState(false);
+
   const { pinnedIds } = usePins();
 
   // Progressive loading messages based on time elapsed
@@ -163,6 +168,7 @@ export default function SearchResults({
 
     if (!hasSingleAuthor) {
       setAuthorInfo(null);
+      setIsAuthorInfoExpanded(false);
       return;
     }
 
@@ -424,6 +430,50 @@ export default function SearchResults({
     referencesAll,
   ]);
 
+  // Author info helper functions
+  const toggleAuthorInfo = () => {
+    setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
+  };
+
+  const copyAuthorId = async () => {
+    if (!authorInfo) return;
+    const authorId = authorInfo.id.replace('https://openalex.org/', '');
+    try {
+      await navigator.clipboard.writeText(authorId);
+      setIsAuthorIdCopied(true);
+      setTimeout(() => setIsAuthorIdCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const openAuthorCorrectionForm = () => {
+    window.open('https://docs.google.com/forms/d/e/1FAIpQLSeHpt3yWbWoB5MK1K6wVWThI5fglZzk-GPniaih0JT_rCMdYA/viewform', '_blank');
+  };
+
+  // Check localStorage for author reported status
+  const authorReportedKey = authorInfo ? `reported-author-${authorInfo.id.replace('https://openalex.org/', '')}` : '';
+  const isAuthorReportedStored = typeof window !== 'undefined' && authorReportedKey 
+    ? localStorage.getItem(authorReportedKey) === 'true' 
+    : false;
+
+  const handleAuthorReportedToggle = () => {
+    if (!hasAuthorReported && !isAuthorReportedStored) {
+      setHasAuthorReported(true);
+      localStorage.setItem(authorReportedKey, 'true');
+      
+      // Dispatch celebration event
+      window.dispatchEvent(new CustomEvent('paper-reported', { 
+        detail: { authorId: authorReportedKey } 
+      }));
+    } else {
+      setHasAuthorReported(false);
+      localStorage.removeItem(authorReportedKey);
+    }
+  };
+
+  const isAuthorReported = hasAuthorReported || isAuthorReportedStored;
+
   // Empty state check
   if (
     !citing &&
@@ -514,11 +564,14 @@ export default function SearchResults({
     );
   }
 
+  // Get author ID for display
+  const authorId = authorInfo?.id?.replace('https://openalex.org/', '') || '';
+
   return (
     <div className='flex flex-col h-full'>
       {/* Author Info Banner - Single Author View */}
       {authorInfo && (
-        <div className='mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg'>
+        <div className='mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg relative group'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-3 flex-1 min-w-0'>
               <User size={20} className='text-blue-600 mt-1 flex-shrink-0' />
@@ -595,6 +648,73 @@ export default function SearchResults({
               <X size={16} className='text-blue-600' />
             </button>
           </div>
+
+          {/* Expandable Info Section */}
+          <div
+            className={`
+              overflow-hidden transition-all duration-300 ease-in-out
+              ${isAuthorInfoExpanded ? 'max-h-32 opacity-100 mt-3' : 'max-h-0 opacity-0'}
+            `}
+          >
+            <div className='pt-3 border-t border-blue-200 space-y-2'>
+              <p className='text-xs text-stone-500'>
+                Report errors or missing data to OpenAlex
+              </p>
+
+              {/* Compact inline Author ID with copy */}
+              <div className='flex items-center gap-2 text-xs'>
+                <span className='text-stone-500'>ID:</span>
+                <code className='px-1.5 py-0.5 bg-white/60 rounded text-stone-600 font-mono text-[11px]'>
+                  {authorId}
+                </code>
+                <button
+                  onClick={copyAuthorId}
+                  className='p-0.5 text-stone-400 hover:text-stone-600 transition'
+                  title='Copy Author ID'
+                >
+                  {isAuthorIdCopied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                </button>
+              </div>
+
+              {/* Action row with submit correction and mark button */}
+              <div className='flex items-center gap-3 pt-1'>
+                <button
+                  onClick={openAuthorCorrectionForm}
+                  className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'
+                >
+                  <ExternalLink size={11} />
+                  Submit correction
+                </button>
+
+                <button
+                  onClick={handleAuthorReportedToggle}
+                  className={`inline-flex items-center gap-1 text-xs transition ${
+                    isAuthorReported
+                      ? 'text-green-600'
+                      : 'text-stone-400 hover:text-stone-600'
+                  }`}
+                  title={isAuthorReported ? 'Unmark as reported' : 'Mark as reported'}
+                >
+                  <CheckCircle size={12} className={isAuthorReported ? 'fill-green-600 text-white' : ''} />
+                  <span>{isAuthorReported ? 'Reported' : 'Mark as reported'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Info toggle button */}
+          <button
+            onClick={toggleAuthorInfo}
+            className='absolute bottom-2 right-2 p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded transition opacity-0 group-hover:opacity-100'
+            aria-expanded={isAuthorInfoExpanded}
+            aria-label='Report error or missing data'
+            title='Report error or missing data'
+          >
+            <Info
+              size={16}
+              className={`transition-colors ${isAuthorInfoExpanded ? 'text-blue-600' : ''}`}
+            />
+          </button>
         </div>
       )}
 
