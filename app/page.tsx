@@ -20,7 +20,7 @@ export default function Page() {
 
       {/* Subtext */}
       <p className='text-stone-500 text-center max-w-md mb-12'>
-        Filter top journals. Trace citation networks. Pin and compare.
+        Filter by journals. Trace citations. Pin important papers.
       </p>
 
       {/* Visual preview of the app layout */}
