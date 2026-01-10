@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
@@ -62,6 +63,7 @@ export default function SearchResults({
   onAuthorSearch,
   onClearAuthor,
 }: Props) {
+  const router = useRouter();
   const [results, setResults] = useState<Paper[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isPending, startTransition] = useTransition();
@@ -123,26 +125,26 @@ export default function SearchResults({
       const customEvent = e as CustomEvent;
       const paper = customEvent.detail.paper;
       
-      // Navigate to citing search
+      // Navigate to citing search - CHANGED: Use router.push instead of window.location.href
       const paperId = paper.id.replace('https://openalex.org/', '');
       const params = new URLSearchParams();
       params.set('citing', paperId);
       params.set('sort', 'cited_by_count:desc');
       params.set('page', '1');
-      window.location.href = `/search?${params.toString()}`;
+      router.push(`/search?${params.toString()}`);
     };
 
     const handleRefsClick = (e: Event) => {
       const customEvent = e as CustomEvent;
       const paper = customEvent.detail.paper;
       
-      // Navigate to references search
+      // Navigate to references search - CHANGED: Use router.push instead of window.location.href
       const paperId = paper.id.replace('https://openalex.org/', '');
       const params = new URLSearchParams();
       params.set('referencedBy', paperId);
       params.set('sort', 'cited_by_count:desc');
       params.set('page', '1');
-      window.location.href = `/search?${params.toString()}`;
+      router.push(`/search?${params.toString()}`);
     };
 
     window.addEventListener('paper-citing-click', handleCitingClick);
@@ -152,7 +154,7 @@ export default function SearchResults({
       window.removeEventListener('paper-citing-click', handleCitingClick);
       window.removeEventListener('paper-refs-click', handleRefsClick);
     };
-  }, []);
+  }, [router]);
 
   // Fetch author info when filtering by a single author
   useEffect(() => {

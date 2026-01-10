@@ -12,6 +12,7 @@ import { Filters, Topic, Institution } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import PinSidebar from './PinSidebar';
 import CreateAlertButton from './CreateAlertButton';
+import CelebrationOverlay from './ui/CelebrationOverlay';
 
 function PaperazziAppContent() {
   const router = useRouter();
@@ -25,6 +26,9 @@ function PaperazziAppContent() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(false);
   const [isSearchingAuthor, setIsSearchingAuthor] = useState(false);
+
+  // --- Celebration state ---
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // Cache for author searches to avoid repeated API calls
   const authorCacheRef = useRef<Map<string, string>>(new Map());
@@ -62,6 +66,16 @@ function PaperazziAppContent() {
     referencesAll: undefined,
   });
   const [page, setPage] = useState(1);
+
+  // Listen for paper-reported events to show celebration
+  useEffect(() => {
+    const handlePaperReported = () => {
+      setShowCelebration(true);
+    };
+
+    window.addEventListener('paper-reported', handlePaperReported);
+    return () => window.removeEventListener('paper-reported', handlePaperReported);
+  }, []);
 
   // Sync state with URL parameters
   useEffect(() => {
@@ -339,6 +353,12 @@ function PaperazziAppContent() {
 
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
+      {/* Celebration overlay - renders at top level for full-page effect */}
+      <CelebrationOverlay 
+        show={showCelebration} 
+        onComplete={() => setShowCelebration(false)} 
+      />
+
       {/* Loading overlay for author search */}
       {isSearchingAuthor && (
         <div className='fixed inset-0 bg-black/20 flex items-center justify-center z-50'>
