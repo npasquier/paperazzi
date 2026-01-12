@@ -6,9 +6,8 @@ import FilterPanel from './FilterPanel';
 import SearchResults from './SearchResults';
 import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
-import TopicModal from './TopicModal';
 import InstitutionModal from './InstitutionModal';
-import { Filters, Topic, Institution } from '../types/interfaces';
+import { Filters, Institution } from '../types/interfaces';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import PinSidebar from './PinSidebar';
 import CreateAlertButton from './CreateAlertButton';
@@ -21,10 +20,9 @@ function PaperazziAppContent() {
   // --- Modal state ---
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [showAuthorModal, setShowAuthorModal] = useState(false);
-  const [showTopicModal, setShowTopicModal] = useState(false);
   const [showInstitutionModal, setShowInstitutionModal] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(true);
   const [isSearchingAuthor, setIsSearchingAuthor] = useState(false);
 
   // --- Celebration state ---
@@ -37,7 +35,6 @@ function PaperazziAppContent() {
   const [filters, setFilters] = useState<Filters>({
     journals: [],
     authors: [],
-    topics: [],
     institutions: [],
     publicationType: '',
     dateFrom: '',
@@ -54,7 +51,6 @@ function PaperazziAppContent() {
   const [searchFilters, setSearchFilters] = useState<Filters>({
     journals: [],
     authors: [],
-    topics: [],
     institutions: [],
     publicationType: '',
     dateFrom: '',
@@ -85,8 +81,6 @@ function PaperazziAppContent() {
         searchParams.get('journals')?.split(',').filter(Boolean) || [];
       const authorIds =
         searchParams.get('authors')?.split(',').filter(Boolean) || [];
-      const topicIds =
-        searchParams.get('topics')?.split(',').filter(Boolean) || [];
       const institutionIds =
         searchParams.get('institutions')?.split(',').filter(Boolean) || [];
       const pubType = searchParams.get('type') || '';
@@ -116,24 +110,6 @@ function PaperazziAppContent() {
         })
       );
 
-      // Fetch topics
-      const topics: Topic[] = await Promise.all(
-        topicIds.map(async (id) => {
-          try {
-            const res = await fetch(`https://api.openalex.org/topics/${id}`);
-            const data = await res.json();
-            return {
-              id: data.id,
-              display_name: data.display_name || 'Unknown Topic',
-              subfield: data.subfield,
-              field: data.field,
-              domain: data.domain,
-            };
-          } catch {
-            return { id, display_name: 'Unknown Topic' };
-          }
-        })
-      );
 
       // Fetch institutions
       const institutions: Institution[] = await Promise.all(
@@ -158,7 +134,6 @@ function PaperazziAppContent() {
       const newFilters: Filters = {
         journals,
         authors,
-        topics,
         institutions,
         publicationType: pubType,
         dateFrom: from,
@@ -196,14 +171,6 @@ function PaperazziAppContent() {
     const authors = overrides.authors ?? filters.authors;
     if (authors.length) {
       params.set('authors', authors.map((a) => a.id).join(','));
-    }
-
-    const topics = overrides.topics ?? filters.topics;
-    if (topics.length) {
-      params.set(
-        'topics',
-        topics.map((t) => t.id.replace('https://openalex.org/', '')).join(',')
-      );
     }
 
     const institutions = overrides.institutions ?? filters.institutions;
@@ -375,7 +342,6 @@ function PaperazziAppContent() {
         query={searchQuery}
         openJournalModal={() => setShowJournalModal(true)}
         openAuthorModal={() => setShowAuthorModal(true)}
-        openTopicModal={() => setShowTopicModal(true)}
         openInstitutionModal={() => setShowInstitutionModal(true)}
         onSortChange={handleSortChange}
         isOpen={isFilterOpen}
@@ -386,7 +352,6 @@ function PaperazziAppContent() {
             query: preset.query,
             journals: preset.filters.journals,
             authors: preset.filters.authors,
-            topics: preset.filters.topics,
             institutions: preset.filters.institutions,
             publicationType: preset.filters.publicationType,
             dateFrom: preset.filters.dateFrom,
@@ -404,7 +369,6 @@ function PaperazziAppContent() {
             query={searchQuery}
             journals={searchFilters.journals}
             authors={searchFilters.authors}
-            topics={searchFilters.topics}
             institutions={searchFilters.institutions}
             publicationType={searchFilters.publicationType}
             from={searchFilters.dateFrom}
@@ -456,15 +420,6 @@ function PaperazziAppContent() {
         onClose={() => setShowJournalModal(false)}
         onApply={(selected) =>
           setFilters((prev) => ({ ...prev, journals: selected }))
-        }
-      />
-
-      <TopicModal
-        isOpen={showTopicModal}
-        selectedTopics={filters.topics}
-        onClose={() => setShowTopicModal(false)}
-        onApply={(selected) =>
-          setFilters((prev) => ({ ...prev, topics: selected }))
         }
       />
 

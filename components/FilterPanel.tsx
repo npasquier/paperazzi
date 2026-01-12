@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import { Filters } from '../types/interfaces';
 import {
@@ -11,28 +10,24 @@ import {
   Plus,
   Save,
 } from 'lucide-react';
-
 export interface FilterPreset {
   id: string;
   name: string;
   query: string;
   filters: Filters;
 }
-
 interface FilterPanelProps {
   filters: Filters;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
   query: string;
   openJournalModal: () => void;
   openAuthorModal: () => void;
-  openTopicModal: () => void;
   openInstitutionModal: () => void;
   onSortChange?: (sortBy: string) => void;
   onPresetLoad?: (preset: FilterPreset) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
-
 const PUBLICATION_TYPES = [
   { value: '', label: 'All Types' },
   { value: 'article', label: 'Journal Article' },
@@ -43,16 +38,13 @@ const PUBLICATION_TYPES = [
   { value: 'dissertation', label: 'Dissertation' },
   { value: 'dataset', label: 'Dataset' },
 ];
-
 const MAX_PRESETS = 3;
-
 export default function FilterPanel({
   filters,
   setFilters,
   query,
   openJournalModal,
   openAuthorModal,
-  openTopicModal,
   openInstitutionModal,
   onSortChange,
   onPresetLoad,
@@ -60,9 +52,8 @@ export default function FilterPanel({
   onToggle,
 }: FilterPanelProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(['topics', 'journals'])
+    new Set(['journals'])
   );
-
   // Load presets from localStorage on mount
   const [presets, setPresets] = useState<FilterPreset[]>(() => {
     if (typeof window !== 'undefined') {
@@ -71,11 +62,9 @@ export default function FilterPanel({
     }
     return [];
   });
-
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
-
   // Save presets to localStorage whenever they change
   const updatePresets = (newPresets: FilterPreset[]) => {
     setPresets(newPresets);
@@ -83,38 +72,32 @@ export default function FilterPanel({
       localStorage.setItem('filterPresets', JSON.stringify(newPresets));
     }
   };
-
   const saveCurrentFilters = () => {
     if (!presetName.trim()) return;
     if (presets.length >= MAX_PRESETS) return;
-
     const newPreset: FilterPreset = {
       id: Date.now().toString(),
       name: presetName.trim(),
       query: query,
       filters: { ...filters },
     };
-
     updatePresets([...presets, newPreset]);
     setPresetName('');
     setShowSaveModal(false);
     setActivePresetId(newPreset.id);
   };
-
   const loadPreset = (preset: FilterPreset) => {
     setActivePresetId(preset.id);
     if (onPresetLoad) {
       onPresetLoad(preset);
     }
   };
-
   const deletePreset = (presetId: string) => {
     updatePresets(presets.filter((p) => p.id !== presetId));
     if (activePresetId === presetId) {
       setActivePresetId(null);
     }
   };
-
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
@@ -126,7 +109,6 @@ export default function FilterPanel({
       return next;
     });
   };
-
   const removeJournal = (issn: string) => {
     setFilters((prev) => ({
       ...prev,
@@ -134,15 +116,6 @@ export default function FilterPanel({
     }));
     setActivePresetId(null);
   };
-
-  const removeTopic = (topicId: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      topics: prev.topics.filter((t) => t.id !== topicId),
-    }));
-    setActivePresetId(null);
-  };
-
   const removeAuthor = (authorId: string) => {
     setFilters((prev) => ({
       ...prev,
@@ -150,7 +123,6 @@ export default function FilterPanel({
     }));
     setActivePresetId(null);
   };
-
   const removeInstitution = (instId: string) => {
     setFilters((prev) => ({
       ...prev,
@@ -158,7 +130,6 @@ export default function FilterPanel({
     }));
     setActivePresetId(null);
   };
-
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newSort = e.target.value;
     setFilters((prev) => ({ ...prev, sortBy: newSort }));
@@ -167,23 +138,19 @@ export default function FilterPanel({
     }
     setActivePresetId(null);
   };
-
   const handlePublicationTypeChange = (
     e: React.ChangeEvent<HTMLSelectElement>
   ) => {
     setFilters((prev) => ({ ...prev, publicationType: e.target.value }));
     setActivePresetId(null);
   };
-
   const activeFilterCount =
     filters.journals.length +
     filters.authors.length +
-    filters.topics.length +
     filters.institutions.length +
     (filters.publicationType ? 1 : 0) +
     (filters.dateFrom ? 1 : 0) +
     (filters.dateTo ? 1 : 0);
-
   // Collapsed panel
   if (!isOpen) {
     return (
@@ -208,7 +175,6 @@ export default function FilterPanel({
       </button>
     );
   }
-
   // Render a badge/pill
   const renderPill = (key: string, label: string, onRemove: () => void) => (
     <span
@@ -225,7 +191,6 @@ export default function FilterPanel({
       </button>
     </span>
   );
-
   // Render collapsible section
   const renderSection = (
     id: string,
@@ -235,7 +200,6 @@ export default function FilterPanel({
     items: { key: string; label: string; onRemove: () => void }[]
   ) => {
     const isExpanded = expandedSections.has(id);
-
     return (
       <div className='border-b border-stone-100 last:border-b-0'>
         <button
@@ -256,7 +220,6 @@ export default function FilterPanel({
             </span>
           )}
         </button>
-
         {isExpanded && (
           <div className='pb-3 pl-6'>
             {items.length > 0 && (
@@ -278,7 +241,6 @@ export default function FilterPanel({
       </div>
     );
   };
-
   return (
     <aside className='w-64 bg-white border-r border-stone-200 flex flex-col h-full overflow-hidden'>
       {/* Header */}
@@ -302,7 +264,6 @@ export default function FilterPanel({
           </button>
         </div>
       </div>
-
       {/* Save Modal */}
       {showSaveModal && (
         <div className='fixed inset-0 bg-black/30 flex items-center justify-center z-50'>
@@ -352,7 +313,6 @@ export default function FilterPanel({
           </div>
         </div>
       )}
-
       {/* Scrollable content */}
       <div className='flex-1 overflow-y-auto'>
         {/* Sort By */}
@@ -369,7 +329,6 @@ export default function FilterPanel({
             <option value='publication_date:asc'>Oldest First</option>
           </select>
         </div>
-
         {/* Collapsible filter sections */}
         <div className='px-4'>
           {/* Saved Presets - Collapsible and Discrete */}
@@ -390,7 +349,6 @@ export default function FilterPanel({
                 <span className='text-xs text-stone-400'>{presets.length}</span>
               )} */}
             </button>
-
             {expandedSections.has('presets') && (
               <div className='pb-2.5 pl-5'>
                 {presets.length > 0 && (
@@ -430,7 +388,6 @@ export default function FilterPanel({
                     ))}
                   </div>
                 )}
-
                 {presets.length < MAX_PRESETS && activeFilterCount > 0 && (
                   <button
                     onClick={() => setShowSaveModal(true)}
@@ -440,13 +397,11 @@ export default function FilterPanel({
                     Save Current
                   </button>
                 )}
-
                 {presets.length >= MAX_PRESETS && (
                   <div className='text-[11px] text-stone-300'>
                     Max {MAX_PRESETS} presets
                   </div>
                 )}
-
                 {presets.length === 0 && (
                   <div className='text-[11px] text-stone-300 mb-2'>
                     No saved filters yet
@@ -455,20 +410,6 @@ export default function FilterPanel({
               </div>
             )}
           </div>
-
-          {/* Topics */}
-          {renderSection(
-            'topics',
-            'Topics',
-            filters.topics.length,
-            openTopicModal,
-            filters.topics.map((t) => ({
-              key: t.id,
-              label: t.display_name || 'Unknown Topic',
-              onRemove: () => removeTopic(t.id),
-            }))
-          )}
-
           {/* Journals */}
           {renderSection(
             'journals',
@@ -481,7 +422,6 @@ export default function FilterPanel({
               onRemove: () => removeJournal(j.issn),
             }))
           )}
-
           {/* Authors */}
           {renderSection(
             'authors',
@@ -494,7 +434,6 @@ export default function FilterPanel({
               onRemove: () => removeAuthor(a.id),
             }))
           )}
-
           {/* Institutions */}
           {renderSection(
             'institutions',
@@ -508,7 +447,6 @@ export default function FilterPanel({
             }))
           )}
         </div>
-
         {/* Type & Year */}
         <div className='px-4 py-3 border-t border-stone-100 space-y-3'>
           <div>
@@ -525,7 +463,6 @@ export default function FilterPanel({
               ))}
             </select>
           </div>
-
           <div>
             <label className='text-xs text-stone-400 block mb-1.5'>Year</label>
             <div className='flex items-center gap-2'>

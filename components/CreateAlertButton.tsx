@@ -18,7 +18,6 @@ export default function CreateAlertButton({ filters, query }: CreateAlertButtonP
     query ||
     filters.journals.length ||
     filters.authors.length ||
-    filters.topics.length ||
     filters.institutions.length ||
     filters.publicationType ||
     filters.dateFrom ||

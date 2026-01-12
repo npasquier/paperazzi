@@ -20,7 +20,6 @@ interface Props {
   query: string;
   journals: { issn: string; name?: string }[];
   authors: { id: string; name?: string }[];
-  topics: { id: string; display_name: string }[];
   institutions: { id: string; display_name: string }[];
   publicationType?: string;
   from?: string;
@@ -44,7 +43,6 @@ export default function SearchResults({
   query,
   journals,
   authors,
-  topics,
   institutions,
   publicationType,
   from,
@@ -348,7 +346,6 @@ export default function SearchResults({
       !query &&
       journals.length === 0 &&
       authors.length === 0 &&
-      topics.length === 0 &&
       institutions.length === 0
     ) {
       setResults([]);
@@ -365,9 +362,6 @@ export default function SearchResults({
         
         const journalIssns = journals.map((j) => j.issn);
         const authorIds = authors.map((a) => a.id);
-        const topicIds = topics.map((t) =>
-          t.id.replace('https://openalex.org/', '')
-        );
         const institutionIds = institutions.map((i) =>
           i.id.replace('https://openalex.org/', '')
         );
@@ -377,7 +371,6 @@ export default function SearchResults({
         if (query) params.set('query', query);
         if (journalIssns.length) params.set('journals', journalIssns.join(','));
         if (authorIds.length) params.set('authors', authorIds.join(','));
-        if (topicIds.length) params.set('topics', topicIds.join(','));
         if (institutionIds.length)
           params.set('institutions', institutionIds.join(','));
         if (publicationType) params.set('type', publicationType);
@@ -417,7 +410,6 @@ export default function SearchResults({
     query,
     journals,
     authors,
-    topics,
     institutions,
     publicationType,
     from,
@@ -483,7 +475,6 @@ export default function SearchResults({
     !query &&
     journals.length === 0 &&
     authors.length === 0 &&
-    topics.length === 0 &&
     institutions.length === 0
   ) {
     return (

@@ -54,14 +54,6 @@ export default function ExportAlertModal({
       );
     }
 
-    if (filters.topics.length) {
-      filterParts.push(
-        `topics.id:${filters.topics
-          .map((t) => t.id.replace('https://openalex.org/', ''))
-          .join('|')}`
-      );
-    }
-
     if (filters.institutions.length) {
       filterParts.push(
         `authorships.institutions.id:${filters.institutions
@@ -233,7 +225,6 @@ jobs:
       .map((j) => j.name || j.issn)
       .join(', ');
     const authorNames = filters.authors.map((a) => a.name || a.id).join(', ');
-    const topicNames = filters.topics.map((t) => t.display_name).join(', ');
     const instNames = filters.institutions
       .map((i) => i.display_name)
       .join(', ');
@@ -247,7 +238,6 @@ Automatically checks for new papers published last month and sends an email via 
 ${query ? `- **Query:** ${query}` : ''}
 ${journalNames ? `- **Journals:** ${journalNames}` : ''}
 ${authorNames ? `- **Authors:** ${authorNames}` : ''}
-${topicNames ? `- **Topics:** ${topicNames}` : ''}
 ${instNames ? `- **Institutions:** ${instNames}` : ''}
 ${filters.publicationType ? `- **Type:** ${filters.publicationType}` : ''}
 

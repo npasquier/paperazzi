@@ -53,7 +53,6 @@ export interface Institution {
 export interface Filters {
   journals: SelectedJournal[];
   authors: SelectedAuthor[];
-  topics: Topic[];
   institutions: Institution[];
   publicationType: string;
   dateFrom: string;
