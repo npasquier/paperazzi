@@ -21,18 +21,21 @@ export default function JournalModal({
 }: Props) {
   const [domainFilter, setDomainFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const MAX_JOURNALS = 15;
-  const [limitWarning, setLimitWarning] = useState(false);
+  const MAX_JOURNALS = 20;
 
-  const applyWithCap = (list: SelectedJournal[]) => {
-    if (list.length <= MAX_JOURNALS) {
-      setLimitWarning(false);
-      onApply(list);
-    } else {
-      setLimitWarning(true);
-      onApply(list.slice(0, MAX_JOURNALS));
-    }
-  };
+  // Local state for pending selections (not yet applied)
+  const [pendingJournals, setPendingJournals] = useState<SelectedJournal[]>(selectedJournals);
+
+  // Sync pending state when modal opens with new selectedJournals
+  const [lastSelectedJournals, setLastSelectedJournals] = useState(selectedJournals);
+  if (selectedJournals !== lastSelectedJournals) {
+    setLastSelectedJournals(selectedJournals);
+    setPendingJournals(selectedJournals);
+  }
+
+  const isOverLimit = pendingJournals.length > MAX_JOURNALS;
+  const isAtLimit = pendingJournals.length === MAX_JOURNALS;
+  const canApply = pendingJournals.length <= MAX_JOURNALS;
 
   // Filter journals according to domain and category
   const filteredJournals = journals.filter(
@@ -46,12 +49,12 @@ export default function JournalModal({
     label: `${j.name} [${j.domain}, Rank ${j.category}]`,
   }));
 
-  // Select all filtered journals immediately
+  // Select all filtered journals
   const handleSelectAllFiltered = () => {
     const merged = [
-      ...selectedJournals,
+      ...pendingJournals,
       ...filteredJournals
-        .filter((j) => !selectedJournals.some((s) => s.issn === j.issn))
+        .filter((j) => !pendingJournals.some((s) => s.issn === j.issn))
         .map((j) => ({
           issn: j.issn,
           name: j.name,
@@ -59,8 +62,36 @@ export default function JournalModal({
           category: j.category,
         })),
     ];
+    setPendingJournals(merged);
+  };
 
-    applyWithCap(merged);
+  const handleAddJournals = (newJournals: SelectedJournal[]) => {
+    const merged = [...pendingJournals, ...newJournals];
+    setPendingJournals(merged);
+  };
+
+  const handleRemoveJournal = (issn: string) => {
+    setPendingJournals(pendingJournals.filter((j) => j.issn !== issn));
+  };
+
+  const handleClearAll = () => {
+    setPendingJournals([]);
+  };
+
+  const handleApply = () => {
+    if (canApply) {
+      onApply(pendingJournals);
+      onClose();
+      setDomainFilter('');
+      setCategoryFilter(null);
+    }
+  };
+
+  const handleCancel = () => {
+    setPendingJournals(selectedJournals); // Reset to original
+    onClose();
+    setDomainFilter('');
+    setCategoryFilter(null);
   };
 
   if (!isOpen) return null;
@@ -68,7 +99,7 @@ export default function JournalModal({
   return (
     <Modal
       isOpen={isOpen}
-      onRequestClose={onClose}
+      onRequestClose={handleCancel}
       contentLabel='Select Journals'
       ariaHideApp={false}
       className='bg-white rounded-lg p-6 max-w-5xl w-full max-h-[80vh] overflow-y-auto outline-none'
@@ -83,38 +114,40 @@ export default function JournalModal({
         <div className='w-2/5 flex flex-col'>
           <div className='mb-2 flex items-center justify-between'>
             <h3 className='font-medium text-stone-900'>
-              Selected ({selectedJournals.length}/{MAX_JOURNALS})
+              Selected ({pendingJournals.length}/{MAX_JOURNALS})
             </h3>
             <button
-              onClick={() => {
-                onApply([]);
-                setLimitWarning(false);
-              }}
+              onClick={handleClearAll}
               className='text-xs text-stone-600 hover:text-stone-800 underline'
             >
               Clear All
             </button>
           </div>
 
-          {selectedJournals.length === MAX_JOURNALS && !limitWarning && (
+          {/* Over limit warning */}
+          {isOverLimit && (
+            <div className='text-red-700 text-sm mb-2 p-2 bg-red-50 border border-red-200 rounded'>
+              <span className='font-medium'>Too many journals selected.</span>{' '}
+              Remove {pendingJournals.length - MAX_JOURNALS} journal(s) to apply.
+            </div>
+          )}
+
+          {/* At limit info */}
+          {isAtLimit && (
             <div className='text-amber-700 text-sm mb-2 p-2 bg-amber-50 border border-amber-200 rounded'>
               Maximum of {MAX_JOURNALS} journals reached.
             </div>
           )}
 
-          {limitWarning && (
-            <div className='text-red-700 text-sm mb-2 p-2 bg-red-50 border border-red-200 rounded'>
-              You can&apos;t add more than {MAX_JOURNALS} journals.
-            </div>
-          )}
-
           <div className='flex-1 border border-stone-200 rounded-lg overflow-hidden'>
-            {selectedJournals.length > 0 ? (
+            {pendingJournals.length > 0 ? (
               <div className='divide-y divide-stone-200 max-h-96 overflow-y-auto'>
-                {selectedJournals.map((journal) => (
+                {pendingJournals.map((journal, index) => (
                   <div
                     key={journal.issn}
-                    className='flex items-start justify-between p-3 hover:bg-stone-50 group'
+                    className={`flex items-start justify-between p-3 hover:bg-stone-50 group ${
+                      index >= MAX_JOURNALS ? 'bg-red-50' : ''
+                    }`}
                   >
                     <div className='flex-1 min-w-0 pr-2'>
                       <div className='font-medium text-sm text-stone-900 truncate'>
@@ -125,14 +158,12 @@ export default function JournalModal({
                       </div>
                     </div>
                     <button
-                      onClick={() => {
-                        const updated = selectedJournals.filter(
-                          (j) => j.issn !== journal.issn
-                        );
-                        onApply(updated);
-                        setLimitWarning(false);
-                      }}
-                      className='text-stone-400 hover:text-red-600 flex-shrink-0 opacity-0 group-hover:opacity-100 transition'
+                      onClick={() => handleRemoveJournal(journal.issn)}
+                      className={`flex-shrink-0 transition ${
+                        index >= MAX_JOURNALS
+                          ? 'text-red-500 hover:text-red-700 opacity-100'
+                          : 'text-stone-400 hover:text-red-600 opacity-0 group-hover:opacity-100'
+                      }`}
                       title='Remove'
                     >
                       <svg
@@ -225,37 +256,34 @@ export default function JournalModal({
           {/* Select All Filtered button */}
           <button
             onClick={handleSelectAllFiltered}
-            className='mb-3 px-3 py-1.5 text-sm border border-stone-300 rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-700 font-medium transition w-full'
-            disabled={
-              filteredJournals.length === 0 ||
-              selectedJournals.length >= MAX_JOURNALS
-            }
+            className='mb-3 px-3 py-1.5 text-sm border border-stone-300 rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-700 font-medium transition w-full disabled:opacity-50 disabled:cursor-not-allowed'
+            disabled={filteredJournals.length === 0}
           >
             Select All Filtered ({filteredJournals.length})
           </button>
 
-          {/* Journal multi-select - ONLY SHOWS AVAILABLE JOURNALS */}
+          {/* Journal multi-select */}
           <Select
             isMulti
             options={options.filter(
-              (opt) => !selectedJournals.some((j) => j.issn === opt.value)
+              (opt) => !pendingJournals.some((j) => j.issn === opt.value)
             )}
-            value={null} // Use null instead of []
+            value={null}
             onChange={(opts) => {
               if (opts && opts.length > 0) {
                 const newJournals = opts
-                  .filter((o) => o !== null) // Filter out any null values
-                  .map((o) => journals.find((j) => j.issn === o.value)!);
-                const merged = [...selectedJournals, ...newJournals];
-                applyWithCap(merged);
+                  .filter((o) => o !== null)
+                  .map((o) => journals.find((j) => j.issn === o.value)!)
+                  .map((j) => ({
+                    issn: j.issn,
+                    name: j.name,
+                    domain: j.domain,
+                    category: j.category,
+                  }));
+                handleAddJournals(newJournals);
               }
             }}
-            isDisabled={selectedJournals.length >= MAX_JOURNALS}
-            placeholder={
-              selectedJournals.length >= MAX_JOURNALS
-                ? 'Maximum journals selected'
-                : 'Search to add journals...'
-            }
+            placeholder='Search to add journals...'
             menuPortalTarget={document.body}
             styles={{
               menuPortal: (base) => ({ ...base, zIndex: 9999 }),
@@ -268,9 +296,9 @@ export default function JournalModal({
             }}
           />
 
-          {selectedJournals.length < MAX_JOURNALS && (
+          {!isOverLimit && pendingJournals.length < MAX_JOURNALS && (
             <div className='mt-2 text-xs text-stone-600'>
-              {MAX_JOURNALS - selectedJournals.length} slot(s) remaining
+              {MAX_JOURNALS - pendingJournals.length} slot(s) remaining
             </div>
           )}
         </div>
@@ -279,24 +307,17 @@ export default function JournalModal({
       {/* Bottom buttons */}
       <div className='flex justify-end gap-2 mt-6 pt-4 border-t border-stone-200'>
         <button
-          onClick={() => {
-            onClose();
-            setDomainFilter('');
-            setCategoryFilter(null);
-          }}
+          onClick={handleCancel}
           className='px-4 py-2 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition font-medium'
         >
           Cancel
         </button>
         <button
-          onClick={() => {
-            onClose();
-            setDomainFilter('');
-            setCategoryFilter(null);
-          }}
-          className='px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition font-medium'
+          onClick={handleApply}
+          disabled={!canApply}
+          className='px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed'
         >
-          Apply
+          Apply{isOverLimit && ` (remove ${pendingJournals.length - MAX_JOURNALS})`}
         </button>
       </div>
     </Modal>
