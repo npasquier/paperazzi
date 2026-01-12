@@ -46,9 +46,9 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   } = usePins();
 
   // Resize state
-  const MIN_WIDTH = 320;
-  const MAX_WIDTH = 500;
-  const DEFAULT_WIDTH = 320;
+  const MIN_WIDTH = 360;
+  const MAX_WIDTH = 600;
+  const DEFAULT_WIDTH = 360;
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pinSidebarWidth');

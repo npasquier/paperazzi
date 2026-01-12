@@ -46,8 +46,9 @@ function buildFilters(params: {
   }
 
   if (params.authors.length) {
-    const authorFilter = params.authors.map((id) => toFullId(id)).join('|');
-    filters.push(`authorships.author.id:${authorFilter}`);
+    params.authors.forEach((id) => {
+      filters.push(`authorships.author.id:${toFullId(id)}`);
+    });
   }
 
   if (params.topics.length) {
@@ -102,29 +103,33 @@ async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url);
-      
+
       // Handle 503 with retry
       if (res.status === 503 && attempt < retries) {
         const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
-        console.log(`OpenAlex 503 error, retrying in ${waitTime}ms (attempt ${attempt}/${retries})`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        console.log(
+          `OpenAlex 503 error, retrying in ${waitTime}ms (attempt ${attempt}/${retries})`
+        );
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
         continue;
       }
-      
+
       if (!res.ok) {
         console.error(`OpenAlex API error: ${res.status} ${res.statusText}`);
         console.error(`URL: ${url}`);
-        
+
         // For 503, give a more user-friendly error
         if (res.status === 503) {
-          throw new Error('OpenAlex API is temporarily unavailable. Please try again in a moment.');
+          throw new Error(
+            'OpenAlex API is temporarily unavailable. Please try again in a moment.'
+          );
         }
-        
+
         throw new Error(`OpenAlex API returned ${res.status}`);
       }
-      
+
       const text = await res.text();
-      
+
       try {
         return JSON.parse(text);
       } catch (e) {
@@ -138,14 +143,16 @@ async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
       if (attempt === retries || !(error instanceof TypeError)) {
         throw error;
       }
-      
+
       // Network error, retry
       const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-      console.log(`Network error, retrying in ${waitTime}ms (attempt ${attempt}/${retries})`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log(
+        `Network error, retrying in ${waitTime}ms (attempt ${attempt}/${retries})`
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
   }
-  
+
   throw new Error('Failed to fetch from OpenAlex after retries');
 }
 
@@ -175,7 +182,7 @@ async function searchWithinIds(
     let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(
       query
     )}&per-page=200&mailto=${mailTo}`;
-    
+
     if (filters.length) {
       searchUrl += `&filter=${filters.join(',')}`;
     }
@@ -399,23 +406,27 @@ export async function GET(req: NextRequest) {
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+          'Cache-Control':
+            'public, s-maxage=3600, stale-while-revalidate=86400',
         },
       }
     );
   } catch (error) {
     console.error('Search API error:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isServiceUnavailable = errorMessage.includes('temporarily unavailable');
-    
+
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    const isServiceUnavailable = errorMessage.includes(
+      'temporarily unavailable'
+    );
+
     return NextResponse.json(
       {
         results: [],
         meta: { count: 0, page, per_page: 20 },
         error: errorMessage,
       },
-      { 
+      {
         status: isServiceUnavailable ? 503 : 500,
         headers: {
           'Cache-Control': 'no-store, must-revalidate',

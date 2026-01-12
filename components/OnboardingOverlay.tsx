@@ -36,7 +36,7 @@ export default function OnboardingOverlay() {
             <span className='font-medium text-stone-900 text-sm'>Filters</span>
           </div>
           <p className='text-xs text-stone-500'>
-            Filter by journal, topic, author, institution, and year
+            Filter by journals, author, institution, and year
           </p>
         </div>
         <div className='w-8 h-0.5 bg-stone-300 ml-4 mt-2' />
