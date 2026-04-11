@@ -13,9 +13,6 @@ import {
 
 import { ECON_DOMAINS, ECON_CATEGORIES } from '@/data/econDomains';
 import econJournalList from '@/data/journals';
- 
-
-
 
 export interface FilterPreset {
   id: string;
@@ -199,16 +196,17 @@ export default function FilterPanel({
     </span>
   );
 
-const getEconJournalCount = () => {
-  if (!filters.econFilter?.enabled) return 0;
-  let filtered = econJournalList as any[];
-  const cats = filters.econFilter.categories;
-  const doms = filters.econFilter.domains;
-  if (cats.length > 0) filtered = filtered.filter((j: any) => cats.includes(j.category));
-  if (doms.length > 0) filtered = filtered.filter((j: any) => doms.includes(j.domain));
-  return filtered.length;
-};
-
+  const getEconJournalCount = () => {
+    if (!filters.econFilter?.enabled) return 0;
+    let filtered = econJournalList as any[];
+    const cats = filters.econFilter.categories;
+    const doms = filters.econFilter.domains;
+    if (cats.length > 0)
+      filtered = filtered.filter((j: any) => cats.includes(j.category));
+    if (doms.length > 0)
+      filtered = filtered.filter((j: any) => doms.includes(j.domain));
+    return filtered.length;
+  };
 
   // Render collapsible section
   const renderSection = (
@@ -619,23 +617,34 @@ const getEconJournalCount = () => {
                   </div>
                 )}
 
-                {/* Manual journal pills */}
-                {filters.journals.length > 0 && (
-                  <div className='flex flex-wrap gap-1.5 mb-2'>
-                    {filters.journals.map((j) =>
-                      renderPill(j.issn, j.name || 'Unknown Journal', () =>
-                        removeJournal(j.issn),
-                      ),
-                    )}
-                  </div>
+                {filters.econFilter?.enabled && filters.journals.length > 0 && (
+                  <p className='text-[10px] text-amber-600 mb-2'>
+                    Specific journal filters are paused while economics filter
+                    is active
+                  </p>
                 )}
-                <button
-                  onClick={openJournalModal}
-                  className='inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition'
-                >
-                  <Plus size={12} />
-                  Add
-                </button>
+
+                {/* Manual journal pills — only when econ filter is OFF */}
+                {!filters.econFilter?.enabled && (
+                  <>
+                    {filters.journals.length > 0 && (
+                      <div className='flex flex-wrap gap-1.5 mb-2'>
+                        {filters.journals.map((j) =>
+                          renderPill(j.issn, j.name || 'Unknown Journal', () =>
+                            removeJournal(j.issn),
+                          ),
+                        )}
+                      </div>
+                    )}
+                    <button
+                      onClick={openJournalModal}
+                      className='inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition'
+                    >
+                      <Plus size={12} />
+                      Add specific journal
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

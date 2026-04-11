@@ -73,7 +73,9 @@ function buildFilters(params: {
     filters.push(`topics.id:${params.topics.map(toFullId).join('|')}`);
   }
   if (params.institutions.length) {
-    filters.push(`authorships.institutions.id:${params.institutions.map(toFullId).join('|')}`);
+    filters.push(
+      `authorships.institutions.id:${params.institutions.map(toFullId).join('|')}`,
+    );
   }
   if (params.publicationType) {
     filters.push(`type:${params.publicationType}`);
@@ -120,7 +122,9 @@ async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
 
       if (res.status === 503 && attempt < retries) {
         const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        console.log(`OpenAlex 503, retrying in ${waitTime}ms (${attempt}/${retries})`);
+        console.log(
+          `OpenAlex 503, retrying in ${waitTime}ms (${attempt}/${retries})`,
+        );
         await new Promise((resolve) => setTimeout(resolve, waitTime));
         continue;
       }
@@ -128,7 +132,9 @@ async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
       if (!res.ok) {
         console.error(`OpenAlex API error: ${res.status} ${res.statusText}`);
         if (res.status === 503) {
-          throw new Error('OpenAlex API is temporarily unavailable. Please try again in a moment.');
+          throw new Error(
+            'OpenAlex API is temporarily unavailable. Please try again in a moment.',
+          );
         }
         throw new Error(`OpenAlex API returned ${res.status}`);
       }
@@ -145,7 +151,9 @@ async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
         throw error;
       }
       const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-      console.log(`Network error, retrying in ${waitTime}ms (${attempt}/${retries})`);
+      console.log(
+        `Network error, retrying in ${waitTime}ms (${attempt}/${retries})`,
+      );
       await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
   }
@@ -247,14 +255,23 @@ async function searchWithinIds(
     if (filters.length) searchUrl += `&filter=${filters.join(',')}`;
 
     const searchData = await fetchOpenAlex(searchUrl);
-    const searchIds = (searchData.results || []).map((w: any) => normalizeId(w.id));
+    const searchIds = (searchData.results || []).map((w: any) =>
+      normalizeId(w.id),
+    );
     const intersectedIds = workIds.filter((id) => searchIds.includes(id));
 
     if (intersectedIds.length === 0) return { results: [], count: 0 };
 
     if (issnBatches) {
       const idsFilter = `openalex_id:${intersectedIds.map(toFullId).join('|')}`;
-      return econBatchedSearch([idsFilter], '', sort, page, apiKey, issnBatches);
+      return econBatchedSearch(
+        [idsFilter],
+        '',
+        sort,
+        page,
+        apiKey,
+        issnBatches,
+      );
     }
 
     const totalCount = intersectedIds.length;
@@ -290,10 +307,16 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.OPEN_ALEX_API_KEY || '';
 
   const query = searchParams.get('query') || '';
-  const journals = (searchParams.get('journals') || '').split(',').filter(Boolean);
-  const authors = (searchParams.get('authors') || '').split(',').filter(Boolean);
+  const journals = (searchParams.get('journals') || '')
+    .split(',')
+    .filter(Boolean);
+  const authors = (searchParams.get('authors') || '')
+    .split(',')
+    .filter(Boolean);
   const topics = (searchParams.get('topics') || '').split(',').filter(Boolean);
-  const institutions = (searchParams.get('institutions') || '').split(',').filter(Boolean);
+  const institutions = (searchParams.get('institutions') || '')
+    .split(',')
+    .filter(Boolean);
   const publicationType = searchParams.get('type') || '';
   const from = searchParams.get('from');
   const to = searchParams.get('to');
@@ -301,14 +324,23 @@ export async function GET(req: NextRequest) {
   const page = Number(searchParams.get('page') || 1);
 
   const citing = searchParams.get('citing');
-  const citingAll = (searchParams.get('citingAll') || '').split(',').filter(Boolean);
+  const citingAll = (searchParams.get('citingAll') || '')
+    .split(',')
+    .filter(Boolean);
   const referencedBy = searchParams.get('referencedBy');
-  const referencesAll = (searchParams.get('referencesAll') || '').split(',').filter(Boolean);
+  const referencesAll = (searchParams.get('referencesAll') || '')
+    .split(',')
+    .filter(Boolean);
 
   // Econ filter
   const econEnabled = searchParams.get('econEnabled') === 'true';
-  const econCat = (searchParams.get('econCat') || '').split(',').filter(Boolean).map(Number);
-  const econDom = (searchParams.get('econDom') || '').split(',').filter(Boolean);
+  const econCat = (searchParams.get('econCat') || '')
+    .split(',')
+    .filter(Boolean)
+    .map(Number);
+  const econDom = (searchParams.get('econDom') || '')
+    .split(',')
+    .filter(Boolean);
 
   let issnBatches: string[][] | null = null;
   if (econEnabled) {
@@ -318,13 +350,27 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const filterParams = { journals, authors, topics, institutions, publicationType, from, to };
+  const filterParams = {
+    journals,
+    authors,
+    topics,
+    institutions,
+    publicationType,
+    from,
+    to,
+  };
+
+  if (issnBatches && filterParams.journals.length > 0) {
+    filterParams.journals = []; // econ ISSN filter takes precedence
+  }
 
   try {
     // CASE 1: referencedBy
     if (referencedBy) {
       const cleanId = normalizeId(referencedBy);
-      const paperData = await fetchOpenAlex(`https://api.openalex.org/works/${cleanId}?api_key=${apiKey}`);
+      const paperData = await fetchOpenAlex(
+        `https://api.openalex.org/works/${cleanId}?api_key=${apiKey}`,
+      );
       const referencedWorks = paperData.referenced_works || [];
 
       if (referencedWorks.length === 0) {
@@ -336,7 +382,15 @@ export async function GET(req: NextRequest) {
       }
 
       const referenceIds = referencedWorks.map(normalizeId);
-      const { results, count } = await searchWithinIds(referenceIds, query, filterParams, sort, page, apiKey, issnBatches);
+      const { results, count } = await searchWithinIds(
+        referenceIds,
+        query,
+        filterParams,
+        sort,
+        page,
+        apiKey,
+        issnBatches,
+      );
 
       return NextResponse.json({
         results: mapToPapers(results),
@@ -349,44 +403,90 @@ export async function GET(req: NextRequest) {
     if (referencesAll.length > 0) {
       const referenceSets = await Promise.all(
         referencesAll.map(async (id) => {
-          const data = await fetchOpenAlex(`https://api.openalex.org/works/${normalizeId(id)}?api_key=${apiKey}`);
+          const data = await fetchOpenAlex(
+            `https://api.openalex.org/works/${normalizeId(id)}?api_key=${apiKey}`,
+          );
           return (data.referenced_works || []).map(normalizeId);
         }),
       );
-      const commonIds = referenceSets.reduce((a, b) => a.filter((id: string) => b.includes(id)));
+      const commonIds = referenceSets.reduce((a, b) =>
+        a.filter((id: string) => b.includes(id)),
+      );
 
       if (commonIds.length === 0) {
-        return NextResponse.json({ results: [], meta: { count: 0, page, per_page: 20 } });
+        return NextResponse.json({
+          results: [],
+          meta: { count: 0, page, per_page: 20 },
+        });
       }
 
-      const { results, count } = await searchWithinIds(commonIds, query, filterParams, sort, page, apiKey, issnBatches);
-      return NextResponse.json({ results: mapToPapers(results), meta: { count, page, per_page: 20 } });
+      const { results, count } = await searchWithinIds(
+        commonIds,
+        query,
+        filterParams,
+        sort,
+        page,
+        apiKey,
+        issnBatches,
+      );
+      return NextResponse.json({
+        results: mapToPapers(results),
+        meta: { count, page, per_page: 20 },
+      });
     }
 
     // CASE 3: citingAll
     if (citingAll.length > 0) {
       const citingSets = await Promise.all(
         citingAll.map(async (id) => {
-          const data = await fetchOpenAlex(`https://api.openalex.org/works?per-page=200&filter=cites:${toFullId(id)}&api_key=${apiKey}`);
+          const data = await fetchOpenAlex(
+            `https://api.openalex.org/works?per-page=200&filter=cites:${toFullId(id)}&api_key=${apiKey}`,
+          );
           return (data.results || []).map((w: any) => normalizeId(w.id));
         }),
       );
-      const commonIds = citingSets.reduce((a, b) => a.filter((id: string) => b.includes(id)));
+      const commonIds = citingSets.reduce((a, b) =>
+        a.filter((id: string) => b.includes(id)),
+      );
 
       if (commonIds.length === 0) {
-        return NextResponse.json({ results: [], meta: { count: 0, page, per_page: 20 } });
+        return NextResponse.json({
+          results: [],
+          meta: { count: 0, page, per_page: 20 },
+        });
       }
 
-      const { results, count } = await searchWithinIds(commonIds, query, filterParams, sort, page, apiKey, issnBatches);
-      return NextResponse.json({ results: mapToPapers(results), meta: { count, page, per_page: 20 } });
+      const { results, count } = await searchWithinIds(
+        commonIds,
+        query,
+        filterParams,
+        sort,
+        page,
+        apiKey,
+        issnBatches,
+      );
+      return NextResponse.json({
+        results: mapToPapers(results),
+        meta: { count, page, per_page: 20 },
+      });
     }
 
     // CASE 4: Regular search
     const filters = buildFilters({ ...filterParams, citing });
 
     if (issnBatches) {
-      const { results, count } = await econBatchedSearch(filters, query, sort, page, apiKey, issnBatches);
-      return NextResponse.json({ results: mapToPapers(results), meta: { count, page, per_page: 20 } });
+      const { results, count } = await econBatchedSearch(
+        filters,
+        query,
+        sort,
+        page,
+        apiKey,
+        issnBatches,
+      );
+      return NextResponse.json({
+        results: mapToPapers(results),
+        meta: { count, page, per_page: 20 },
+      });
     }
 
     let url = `https://api.openalex.org/works?per-page=20&page=${page}&api_key=${apiKey}`;
@@ -397,17 +497,35 @@ export async function GET(req: NextRequest) {
     const data = await fetchOpenAlex(url);
 
     return NextResponse.json(
-      { results: mapToPapers(data.results || []), meta: { count: data.meta?.count || 0, page, per_page: 20 } },
-      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
+      {
+        results: mapToPapers(data.results || []),
+        meta: { count: data.meta?.count || 0, page, per_page: 20 },
+      },
+      {
+        headers: {
+          'Cache-Control':
+            'public, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      },
     );
   } catch (error) {
     console.error('Search API error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isServiceUnavailable = errorMessage.includes('temporarily unavailable');
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    const isServiceUnavailable = errorMessage.includes(
+      'temporarily unavailable',
+    );
 
     return NextResponse.json(
-      { results: [], meta: { count: 0, page, per_page: 20 }, error: errorMessage },
-      { status: isServiceUnavailable ? 503 : 500, headers: { 'Cache-Control': 'no-store, must-revalidate' } },
+      {
+        results: [],
+        meta: { count: 0, page, per_page: 20 },
+        error: errorMessage,
+      },
+      {
+        status: isServiceUnavailable ? 503 : 500,
+        headers: { 'Cache-Control': 'no-store, must-revalidate' },
+      },
     );
   }
 }
