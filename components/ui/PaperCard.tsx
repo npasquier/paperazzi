@@ -61,16 +61,6 @@ export default function PaperCard({
     return false;
   });
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, [role="button"]')) {
-      return;
-    }
-    if (onClick) {
-      onClick();
-    }
-    window.open(paperUrl, '_blank');
-  };
-
   const openGoogleScholar = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -274,7 +264,6 @@ export default function PaperCard({
 
         <div className='pr-8'>
           <div
-            onClick={handleCardClick}
             className='font-semibold text-stone-900 text-xs leading-snug mb-1 line-clamp-2 cursor-pointer'
           >
             {paper.title || (
@@ -340,7 +329,6 @@ export default function PaperCard({
   if (variant === 'compact') {
     return (
       <div
-        onClick={handleCardClick}
         className={`
           border rounded-lg p-3 transition bg-white cursor-pointer
           ${
@@ -384,7 +372,7 @@ export default function PaperCard({
       }
     `}
     >
-      <div onClick={handleCardClick} className='p-3 cursor-pointer'>
+      <div className='p-3 cursor-pointer'>
         <div className='flex items-start justify-between gap-4'>
           <div className='flex-1 min-w-0'>
             <h3 className='font-semibold text-stone-900 text-base leading-snug mb-1'>

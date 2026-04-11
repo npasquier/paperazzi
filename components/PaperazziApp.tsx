@@ -44,6 +44,7 @@ function PaperazziAppContent() {
     citingAll: undefined,
     referencedBy: undefined,
     referencesAll: undefined,
+    econFilter: { enabled: false, categories: [], domains: [] },
   });
 
   // --- Search state ---
@@ -60,6 +61,7 @@ function PaperazziAppContent() {
     citingAll: undefined,
     referencedBy: undefined,
     referencesAll: undefined,
+    econFilter: { enabled: false, categories: [], domains: [] },
   });
   const [page, setPage] = useState(1);
 
@@ -70,7 +72,8 @@ function PaperazziAppContent() {
     };
 
     window.addEventListener('paper-reported', handlePaperReported);
-    return () => window.removeEventListener('paper-reported', handlePaperReported);
+    return () =>
+      window.removeEventListener('paper-reported', handlePaperReported);
   }, []);
 
   // Sync state with URL parameters
@@ -107,16 +110,15 @@ function PaperazziAppContent() {
           } catch {
             return { id, name: 'Unknown Author' };
           }
-        })
+        }),
       );
-
 
       // Fetch institutions
       const institutions: Institution[] = await Promise.all(
         institutionIds.map(async (id) => {
           try {
             const res = await fetch(
-              `https://api.openalex.org/institutions/${id}`
+              `https://api.openalex.org/institutions/${id}`,
             );
             const data = await res.json();
             return {
@@ -128,7 +130,7 @@ function PaperazziAppContent() {
           } catch {
             return { id, display_name: 'Unknown Institution' };
           }
-        })
+        }),
       );
 
       const newFilters: Filters = {
@@ -145,9 +147,12 @@ function PaperazziAppContent() {
         referencesAll,
       };
 
-      setFilters(newFilters);
+      setFilters((prev) => ({ ...newFilters, econFilter: prev.econFilter }));
+      setSearchFilters((prev) => ({
+        ...newFilters,
+        econFilter: prev.econFilter,
+      }));
       setSearchQuery(q);
-      setSearchFilters(newFilters);
       setPage(p);
     };
 
@@ -156,7 +161,7 @@ function PaperazziAppContent() {
 
   // Build URL params helper
   const buildURLParams = (
-    overrides: Partial<Filters & { query?: string; page?: number }> = {}
+    overrides: Partial<Filters & { query?: string; page?: number }> = {},
   ) => {
     const params = new URLSearchParams();
 
@@ -179,7 +184,7 @@ function PaperazziAppContent() {
         'institutions',
         institutions
           .map((i) => i.id.replace('https://openalex.org/', ''))
-          .join(',')
+          .join(','),
       );
     }
 
@@ -222,12 +227,12 @@ function PaperazziAppContent() {
 
     window.addEventListener(
       'navbar-search',
-      handleNavbarSearch as EventListener
+      handleNavbarSearch as EventListener,
     );
     return () =>
       window.removeEventListener(
         'navbar-search',
-        handleNavbarSearch as EventListener
+        handleNavbarSearch as EventListener,
       );
   }, [filters, router, searchParams]);
 
@@ -275,7 +280,7 @@ function PaperazziAppContent() {
   const handleAuthorSearch = async (authorName: string) => {
     // Check cache first
     const cachedId = authorCacheRef.current.get(authorName);
-    
+
     if (cachedId) {
       // Instant navigation with cached ID
       const params = new URLSearchParams();
@@ -291,9 +296,9 @@ function PaperazziAppContent() {
     try {
       const response = await fetch(
         `https://api.openalex.org/authors?search=${encodeURIComponent(
-          authorName
+          authorName,
         )}`,
-        { next: { revalidate: 3600 } } // Cache for 1 hour
+        { next: { revalidate: 3600 } }, // Cache for 1 hour
       );
       const data = await response.json();
 
@@ -321,9 +326,9 @@ function PaperazziAppContent() {
   return (
     <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
       {/* Celebration overlay - renders at top level for full-page effect */}
-      <CelebrationOverlay 
-        show={showCelebration} 
-        onComplete={() => setShowCelebration(false)} 
+      <CelebrationOverlay
+        show={showCelebration}
+        onComplete={() => setShowCelebration(false)}
       />
 
       {/* Loading overlay for author search */}
@@ -331,7 +336,9 @@ function PaperazziAppContent() {
         <div className='fixed inset-0 bg-black/20 flex items-center justify-center z-50'>
           <div className='bg-white rounded-lg shadow-lg p-6 flex items-center gap-3'>
             <div className='animate-spin h-5 w-5 border-2 border-stone-300 border-t-stone-700 rounded-full' />
-            <span className='text-sm text-stone-700'>Searching for author...</span>
+            <span className='text-sm text-stone-700'>
+              Searching for author...
+            </span>
           </div>
         </div>
       )}
@@ -386,6 +393,7 @@ function PaperazziAppContent() {
             onClearReferencesAll={handleClearReferencesAll}
             onAuthorSearch={handleAuthorSearch}
             onClearAuthor={handleClearAuthor}
+            econFilter={filters.econFilter}
           />
         </div>
       </main>

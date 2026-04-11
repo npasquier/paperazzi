@@ -5,15 +5,22 @@ import { useRouter } from 'next/navigation';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { usePins } from '@/contexts/PinContext';
-import { X, Quote, Library, BookOpen, User, Info, Copy, Check, ExternalLink, CheckCircle } from 'lucide-react';
+import {
+  X,
+  Quote,
+  Library,
+  BookOpen,
+  User,
+  Info,
+  Copy,
+  Check,
+  ExternalLink,
+  CheckCircle,
+} from 'lucide-react';
 
-// Helper to clean HTML tags
 function cleanHtml(text: string | null | undefined): string {
   if (!text) return '';
-  return text
-    .replace(/<[^>]*>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
 interface Props {
@@ -30,6 +37,11 @@ interface Props {
   citingAll?: string[];
   referencedBy?: string;
   referencesAll?: string[];
+  econFilter?: {
+    enabled: boolean;
+    categories: number[];
+    domains: string[];
+  };
   loadMore?: (page: number) => void;
   onClearCiting?: () => void;
   onClearCitingAll?: () => void;
@@ -53,6 +65,7 @@ export default function SearchResults({
   citingAll,
   referencedBy,
   referencesAll,
+  econFilter,
   loadMore,
   onClearCiting,
   onClearCitingAll,
@@ -69,14 +82,10 @@ export default function SearchResults({
   const [citingAllPapers, setCitingAllPapers] = useState<Paper[]>([]);
   const [loadingCitingPaper, setLoadingCitingPaper] = useState(false);
   const [loadingCitingAllPapers, setLoadingCitingAllPapers] = useState(false);
-  const [referencedByPaper, setReferencedByPaper] = useState<Paper | null>(
-    null
-  );
-  const [loadingReferencedByPaper, setLoadingReferencedByPaper] =
-    useState(false);
+  const [referencedByPaper, setReferencedByPaper] = useState<Paper | null>(null);
+  const [loadingReferencedByPaper, setLoadingReferencedByPaper] = useState(false);
   const [referencesAllPapers, setReferencesAllPapers] = useState<Paper[]>([]);
-  const [loadingReferencesAllPapers, setLoadingReferencesAllPapers] =
-    useState(false);
+  const [loadingReferencesAllPapers, setLoadingReferencesAllPapers] = useState(false);
   const [authorInfo, setAuthorInfo] = useState<any>(null);
   const [loadingAuthorInfo, setLoadingAuthorInfo] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,51 +93,33 @@ export default function SearchResults({
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
   const [showSlowLoadingHelp, setShowSlowLoadingHelp] = useState(false);
 
-  // Author info panel state
   const [isAuthorInfoExpanded, setIsAuthorInfoExpanded] = useState(false);
   const [isAuthorIdCopied, setIsAuthorIdCopied] = useState(false);
   const [hasAuthorReported, setHasAuthorReported] = useState(false);
 
   const { pinnedIds } = usePins();
 
-  // Progressive loading messages based on time elapsed
+  const isEconActive = econFilter?.enabled ?? false;
+
+  // Progressive loading messages
   useEffect(() => {
     if (!isPending || !loadingStartTime) return;
-
     const updateLoadingMessage = () => {
       const elapsed = Date.now() - loadingStartTime;
-      
-      if (elapsed < 3000) {
-        setLoadingMessage('Searching OpenAlex...');
-        setShowSlowLoadingHelp(false);
-      } else if (elapsed < 6000) {
-        setLoadingMessage('Processing results...');
-        setShowSlowLoadingHelp(false);
-      } else if (elapsed < 10000) {
-        setLoadingMessage('Still loading... OpenAlex is busy');
-        setShowSlowLoadingHelp(false);
-      } else {
-        setLoadingMessage('Taking longer than usual...');
-        setShowSlowLoadingHelp(true);
-      }
+      if (elapsed < 3000) { setLoadingMessage('Searching OpenAlex...'); setShowSlowLoadingHelp(false); }
+      else if (elapsed < 6000) { setLoadingMessage('Processing results...'); setShowSlowLoadingHelp(false); }
+      else if (elapsed < 10000) { setLoadingMessage('Still loading... OpenAlex is busy'); setShowSlowLoadingHelp(false); }
+      else { setLoadingMessage('Taking longer than usual...'); setShowSlowLoadingHelp(true); }
     };
-
-    // Update immediately
     updateLoadingMessage();
-
-    // Then update every second
     const interval = setInterval(updateLoadingMessage, 1000);
-
     return () => clearInterval(interval);
   }, [isPending, loadingStartTime]);
 
-  // Listen for citation click events from PaperCard
+  // Citation click events
   useEffect(() => {
     const handleCitingClick = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const paper = customEvent.detail.paper;
-      
-      // Navigate to citing search - CHANGED: Use router.push instead of window.location.href
+      const paper = (e as CustomEvent).detail.paper;
       const paperId = paper.id.replace('https://openalex.org/', '');
       const params = new URLSearchParams();
       params.set('citing', paperId);
@@ -136,12 +127,8 @@ export default function SearchResults({
       params.set('page', '1');
       router.push(`/search?${params.toString()}`);
     };
-
     const handleRefsClick = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const paper = customEvent.detail.paper;
-      
-      // Navigate to references search - CHANGED: Use router.push instead of window.location.href
+      const paper = (e as CustomEvent).detail.paper;
       const paperId = paper.id.replace('https://openalex.org/', '');
       const params = new URLSearchParams();
       params.set('referencedBy', paperId);
@@ -149,209 +136,124 @@ export default function SearchResults({
       params.set('page', '1');
       router.push(`/search?${params.toString()}`);
     };
-
     window.addEventListener('paper-citing-click', handleCitingClick);
     window.addEventListener('paper-refs-click', handleRefsClick);
-
     return () => {
       window.removeEventListener('paper-citing-click', handleCitingClick);
       window.removeEventListener('paper-refs-click', handleRefsClick);
     };
   }, [router]);
 
-  // Fetch author info when filtering by a single author
+  // Fetch author info
   useEffect(() => {
-    // Show author banner when there's exactly one author (regardless of other filters)
-    const hasSingleAuthor = authors.length === 1;
-
-    if (!hasSingleAuthor) {
-      setAuthorInfo(null);
-      setIsAuthorInfoExpanded(false);
-      return;
-    }
-
+    if (authors.length !== 1) { setAuthorInfo(null); setIsAuthorInfoExpanded(false); return; }
     const authorId = authors[0].id;
     setLoadingAuthorInfo(true);
-
     fetch(`https://api.openalex.org/authors/${authorId}`)
       .then((res) => res.json())
       .then((data) => {
         setAuthorInfo({
-          id: data.id,
-          display_name: data.display_name,
-          orcid: data.orcid,
-          works_count: data.works_count,
-          cited_by_count: data.cited_by_count,
-          h_index: data.summary_stats?.h_index,
-          i10_index: data.summary_stats?.i10_index,
+          id: data.id, display_name: data.display_name, orcid: data.orcid,
+          works_count: data.works_count, cited_by_count: data.cited_by_count,
+          h_index: data.summary_stats?.h_index, i10_index: data.summary_stats?.i10_index,
           last_known_institution: data.last_known_institution?.display_name,
-          last_known_institution_country:
-            data.last_known_institution?.country_code,
+          last_known_institution_country: data.last_known_institution?.country_code,
           affiliations: data.affiliations?.slice(0, 3) || [],
         });
       })
-      .catch((err) => {
-        console.error('Failed to fetch author info:', err);
-        setAuthorInfo(null);
-      })
+      .catch(() => setAuthorInfo(null))
       .finally(() => setLoadingAuthorInfo(false));
   }, [authors]);
 
-  // Fetch the paper being cited when `citing` changes
+  // Fetch citing paper
   useEffect(() => {
-    if (!citing) {
-      setCitingPaper(null);
-      return;
-    }
-
+    if (!citing) { setCitingPaper(null); return; }
     setLoadingCitingPaper(true);
     fetch(`https://api.openalex.org/works/${citing}`)
       .then((res) => res.json())
       .then((data) => {
         setCitingPaper({
-          id: data.id,
-          title: cleanHtml(data.title),
-          authors:
-            data.authorships?.map((a: any) => a.author.display_name) || [],
+          id: data.id, title: cleanHtml(data.title),
+          authors: data.authorships?.map((a: any) => a.author.display_name) || [],
           publication_year: data.publication_year,
-          journal_name:
-            data.primary_location?.source?.display_name || 'Unknown',
-          doi: data.doi,
-          cited_by_count: data.cited_by_count,
-          abstract: '',
+          journal_name: data.primary_location?.source?.display_name || 'Unknown',
+          doi: data.doi, cited_by_count: data.cited_by_count, abstract: '',
         });
       })
-      .catch((err) => {
-        console.error('Failed to fetch citing paper:', err);
-        setCitingPaper(null);
-      })
+      .catch(() => setCitingPaper(null))
       .finally(() => setLoadingCitingPaper(false));
   }, [citing]);
 
-  // Fetch the paper whose references we're viewing
+  // Fetch referencedBy paper
   useEffect(() => {
-    if (!referencedBy) {
-      setReferencedByPaper(null);
-      return;
-    }
-
+    if (!referencedBy) { setReferencedByPaper(null); return; }
     setLoadingReferencedByPaper(true);
     fetch(`https://api.openalex.org/works/${referencedBy}`)
       .then((res) => res.json())
       .then((data) => {
         setReferencedByPaper({
-          id: data.id,
-          title: cleanHtml(data.title),
-          authors:
-            data.authorships?.map((a: any) => a.author.display_name) || [],
+          id: data.id, title: cleanHtml(data.title),
+          authors: data.authorships?.map((a: any) => a.author.display_name) || [],
           publication_year: data.publication_year,
-          journal_name:
-            data.primary_location?.source?.display_name || 'Unknown',
-          doi: data.doi,
-          cited_by_count: data.cited_by_count,
-          abstract: '',
+          journal_name: data.primary_location?.source?.display_name || 'Unknown',
+          doi: data.doi, cited_by_count: data.cited_by_count, abstract: '',
         });
       })
-      .catch((err) => {
-        console.error('Failed to fetch referenced by paper:', err);
-        setReferencedByPaper(null);
-      })
+      .catch(() => setReferencedByPaper(null))
       .finally(() => setLoadingReferencedByPaper(false));
   }, [referencedBy]);
 
-  // Fetch all papers being cited when `citingAll` changes
+  // Fetch citingAll papers
   useEffect(() => {
-    if (!citingAll || citingAll.length === 0) {
-      setCitingAllPapers([]);
-      return;
-    }
-
+    if (!citingAll || citingAll.length === 0) { setCitingAllPapers([]); return; }
     setLoadingCitingAllPapers(true);
-
     Promise.all(
       citingAll.map((id) =>
         fetch(`https://api.openalex.org/works/${id}`)
           .then((res) => res.json())
-          .then(
-            (data): Paper => ({
-              id: data.id,
-              title: cleanHtml(data.title),
-              authors:
-                data.authorships?.map((a: any) => a.author.display_name) || [],
-              publication_year: data.publication_year,
-              journal_name:
-                data.primary_location?.source?.display_name || 'Unknown',
-              doi: data.doi,
-              cited_by_count: data.cited_by_count,
-              abstract: '',
-            })
-          )
-          .catch((err) => {
-            console.error(`Failed to fetch paper ${id}:`, err);
-            return null;
-          })
-      )
+          .then((data): Paper => ({
+            id: data.id, title: cleanHtml(data.title),
+            authors: data.authorships?.map((a: any) => a.author.display_name) || [],
+            publication_year: data.publication_year,
+            journal_name: data.primary_location?.source?.display_name || 'Unknown',
+            doi: data.doi, cited_by_count: data.cited_by_count, abstract: '',
+          }))
+          .catch(() => null),
+      ),
     )
-      .then((papers) => {
-        const validPapers: Paper[] = papers.filter(
-          (p): p is Paper => p !== null
-        );
-        setCitingAllPapers(validPapers);
-      })
+      .then((papers) => setCitingAllPapers(papers.filter((p): p is Paper => p !== null)))
       .finally(() => setLoadingCitingAllPapers(false));
   }, [citingAll]);
 
+  // Fetch referencesAll papers
   useEffect(() => {
-    if (!referencesAll || referencesAll.length === 0) {
-      setReferencesAllPapers([]);
-      return;
-    }
-
+    if (!referencesAll || referencesAll.length === 0) { setReferencesAllPapers([]); return; }
     setLoadingReferencesAllPapers(true);
-
     Promise.all(
       referencesAll.map((id) =>
         fetch(`https://api.openalex.org/works/${id}`)
           .then((res) => res.json())
-          .then(
-            (data): Paper => ({
-              id: data.id,
-              title: cleanHtml(data.title),
-              authors:
-                data.authorships?.map((a: any) => a.author.display_name) || [],
-              publication_year: data.publication_year,
-              journal_name:
-                data.primary_location?.source?.display_name || 'Unknown',
-              doi: data.doi,
-              cited_by_count: data.cited_by_count,
-              abstract: '',
-            })
-          )
-          .catch(() => null)
-      )
+          .then((data): Paper => ({
+            id: data.id, title: cleanHtml(data.title),
+            authors: data.authorships?.map((a: any) => a.author.display_name) || [],
+            publication_year: data.publication_year,
+            journal_name: data.primary_location?.source?.display_name || 'Unknown',
+            doi: data.doi, cited_by_count: data.cited_by_count, abstract: '',
+          }))
+          .catch(() => null),
+      ),
     )
-      .then((papers) =>
-        setReferencesAllPapers(papers.filter((p): p is Paper => p !== null))
-      )
+      .then((papers) => setReferencesAllPapers(papers.filter((p): p is Paper => p !== null)))
       .finally(() => setLoadingReferencesAllPapers(false));
   }, [referencesAll]);
 
-  // Main search effect
+  // ─── Main search effect ───
   useEffect(() => {
     if (
-      !citing &&
-      !citingAll?.length &&
-      !referencedBy &&
-      !referencesAll?.length &&
-      !query &&
-      journals.length === 0 &&
-      authors.length === 0 &&
-      institutions.length === 0
+      !citing && !citingAll?.length && !referencedBy && !referencesAll?.length &&
+      !query && journals.length === 0 && authors.length === 0 && institutions.length === 0
     ) {
-      setResults([]);
-      setTotalCount(0);
-      setError(null);
-      return;
+      setResults([]); setTotalCount(0); setError(null); return;
     }
 
     startTransition(async () => {
@@ -359,550 +261,270 @@ export default function SearchResults({
         setError(null);
         setLoadingStartTime(Date.now());
         setShowSlowLoadingHelp(false);
-        
-        const journalIssns = journals.map((j) => j.issn);
-        const authorIds = authors.map((a) => a.id);
-        const institutionIds = institutions.map((i) =>
-          i.id.replace('https://openalex.org/', '')
-        );
 
         const params = new URLSearchParams();
-
         if (query) params.set('query', query);
-        if (journalIssns.length) params.set('journals', journalIssns.join(','));
-        if (authorIds.length) params.set('authors', authorIds.join(','));
-        if (institutionIds.length)
-          params.set('institutions', institutionIds.join(','));
+        if (journals.length) params.set('journals', journals.map((j) => j.issn).join(','));
+        if (authors.length) params.set('authors', authors.map((a) => a.id).join(','));
+        if (institutions.length) params.set('institutions', institutions.map((i) => i.id.replace('https://openalex.org/', '')).join(','));
         if (publicationType) params.set('type', publicationType);
         if (from) params.set('from', from);
         if (to) params.set('to', to);
         if (sortBy) params.set('sort', sortBy);
         params.set('page', page.toString());
-
         if (citing) params.set('citing', citing);
         if (citingAll?.length) params.set('citingAll', citingAll.join(','));
         if (referencedBy) params.set('referencedBy', referencedBy);
-        if (referencesAll?.length)
-          params.set('referencesAll', referencesAll.join(','));
+        if (referencesAll?.length) params.set('referencesAll', referencesAll.join(','));
+
+        // Econ filter params
+        if (econFilter?.enabled) {
+          params.set('econEnabled', 'true');
+          if (econFilter.categories.length) params.set('econCat', econFilter.categories.join(','));
+          if (econFilter.domains.length) params.set('econDom', econFilter.domains.join(','));
+        }
 
         const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
-        
+
         if (data.error) {
-          setError(data.error);
-          setResults([]);
-          setTotalCount(0);
+          setError(data.error); setResults([]); setTotalCount(0);
         } else {
-          setResults(data.results);
-          setTotalCount(data.meta?.count || 0);
+          setResults(data.results); setTotalCount(data.meta?.count || 0);
         }
       } catch (err) {
         console.error('Search error:', err);
         setError('An error occurred while searching. Please try again.');
-        setResults([]);
-        setTotalCount(0);
+        setResults([]); setTotalCount(0);
       } finally {
-        setLoadingStartTime(null);
-        setShowSlowLoadingHelp(false);
+        setLoadingStartTime(null); setShowSlowLoadingHelp(false);
       }
     });
-  }, [
-    query,
-    journals,
-    authors,
-    institutions,
-    publicationType,
-    from,
-    to,
-    sortBy,
-    page,
-    citing,
-    citingAll,
-    referencedBy,
-    referencesAll,
-  ]);
+  }, [query, journals, authors, institutions, publicationType, from, to, sortBy, page, citing, citingAll, referencedBy, referencesAll, econFilter]);
 
-  // Author info helper functions
-  const toggleAuthorInfo = () => {
-    setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
-  };
-
+  // Author helpers
+  const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
   const copyAuthorId = async () => {
     if (!authorInfo) return;
-    const authorId = authorInfo.id.replace('https://openalex.org/', '');
-    try {
-      await navigator.clipboard.writeText(authorId);
-      setIsAuthorIdCopied(true);
-      setTimeout(() => setIsAuthorIdCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+    const id = authorInfo.id.replace('https://openalex.org/', '');
+    try { await navigator.clipboard.writeText(id); setIsAuthorIdCopied(true); setTimeout(() => setIsAuthorIdCopied(false), 2000); } catch {}
   };
-
   const openAuthorCorrectionForm = () => {
     window.open('https://docs.google.com/forms/d/e/1FAIpQLSeHpt3yWbWoB5MK1K6wVWThI5fglZzk-GPniaih0JT_rCMdYA/viewform', '_blank');
   };
-
-  // Check localStorage for author reported status
   const authorReportedKey = authorInfo ? `reported-author-${authorInfo.id.replace('https://openalex.org/', '')}` : '';
-  const isAuthorReportedStored = typeof window !== 'undefined' && authorReportedKey 
-    ? localStorage.getItem(authorReportedKey) === 'true' 
-    : false;
-
+  const isAuthorReportedStored = typeof window !== 'undefined' && authorReportedKey ? localStorage.getItem(authorReportedKey) === 'true' : false;
   const handleAuthorReportedToggle = () => {
     if (!hasAuthorReported && !isAuthorReportedStored) {
-      setHasAuthorReported(true);
-      localStorage.setItem(authorReportedKey, 'true');
-      
-      // Dispatch celebration event
-      window.dispatchEvent(new CustomEvent('paper-reported', { 
-        detail: { authorId: authorReportedKey } 
-      }));
+      setHasAuthorReported(true); localStorage.setItem(authorReportedKey, 'true');
+      window.dispatchEvent(new CustomEvent('paper-reported', { detail: { authorId: authorReportedKey } }));
     } else {
-      setHasAuthorReported(false);
-      localStorage.removeItem(authorReportedKey);
+      setHasAuthorReported(false); localStorage.removeItem(authorReportedKey);
     }
   };
-
   const isAuthorReported = hasAuthorReported || isAuthorReportedStored;
 
-  // Empty state check
-  if (
-    !citing &&
-    !citingAll?.length &&
-    !referencedBy &&
-    !referencesAll?.length &&
-    !query &&
-    journals.length === 0 &&
-    authors.length === 0 &&
-    institutions.length === 0
-  ) {
-    return (
-      <div className='text-center py-12 text-stone-500'>
-        Please enter a search query or select filters to begin.
-      </div>
-    );
+  // Empty state
+  if (!citing && !citingAll?.length && !referencedBy && !referencesAll?.length && !query && journals.length === 0 && authors.length === 0 && institutions.length === 0) {
+    return <div className='text-center py-12 text-stone-500'>Please enter a search query or select filters to begin.</div>;
   }
 
   const totalPages = Math.ceil(totalCount / RESULTS_PER_PAGE);
-
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
-    const maxVisible = 10;
-
-    if (totalPages <= maxVisible) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
+    if (totalPages <= 10) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
+    else {
       pages.push(1);
       const start = Math.max(2, page - 3);
       const end = Math.min(totalPages - 1, page + 3);
-
       if (start > 2) pages.push('...');
       for (let i = start; i <= end; i++) pages.push(i);
       if (end < totalPages - 1) pages.push('...');
       if (totalPages > 1) pages.push(totalPages);
     }
-
     return pages;
   };
-
-  const handlePageChange = (newPage: number) => {
-    if (loadMore) loadMore(newPage);
-  };
-
-  const preserveParams =
-    pinnedIds.length > 0 ? `pinned=${pinnedIds.join(',')}` : '';
+  const handlePageChange = (newPage: number) => { if (loadMore) loadMore(newPage); };
+  const preserveParams = pinnedIds.length > 0 ? `pinned=${pinnedIds.join(',')}` : '';
 
   if (isPending) {
     return (
       <div className='space-y-3'>
-        {/* Loading message */}
         <div className='text-center py-4'>
           <div className='inline-flex items-center gap-2 text-sm text-stone-600'>
             <div className='animate-spin h-4 w-4 border-2 border-stone-300 border-t-stone-600 rounded-full' />
             <span>{loadingMessage}</span>
           </div>
         </div>
-
-        {/* Slow loading help banner */}
         {showSlowLoadingHelp && (
           <div className='mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg'>
-            <p className='text-sm font-medium text-amber-800 mb-2'>
-              Taking longer than expected
-            </p>
-            <p className='text-xs text-amber-700 mb-3'>
-              This usually means your search is very broad or OpenAlex is experiencing high traffic.
-            </p>
+            <p className='text-sm font-medium text-amber-800 mb-2'>Taking longer than expected</p>
+            <p className='text-xs text-amber-700 mb-3'>This usually means your search is very broad or OpenAlex is experiencing high traffic.</p>
             <div className='flex gap-2 text-xs'>
-              <button
-                onClick={() => window.location.reload()}
-                className='px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded transition'
-              >
-                Retry Search
-              </button>
+              <button onClick={() => window.location.reload()} className='px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded transition'>Retry Search</button>
               <span className='text-amber-600'>or try adding more filters to narrow results</span>
             </div>
           </div>
         )}
-
-        {/* Skeleton cards */}
-        {[1, 2, 3].map((i) => (
-          <div key={i} className='bg-stone-200 h-24 rounded-lg animate-pulse' />
-        ))}
+        {[1, 2, 3].map((i) => <div key={i} className='bg-stone-200 h-24 rounded-lg animate-pulse' />)}
       </div>
     );
   }
 
-  // Get author ID for display
   const authorId = authorInfo?.id?.replace('https://openalex.org/', '') || '';
 
   return (
     <div className='flex flex-col h-full'>
-      {/* Author Info Banner - Single Author View */}
+      {/* Author Info Banner */}
       {authorInfo && (
         <div className='mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg relative group'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-3 flex-1 min-w-0'>
               <User size={20} className='text-blue-600 mt-1 flex-shrink-0' />
               <div className='flex-1 min-w-0'>
-                <p className='text-xs font-medium text-blue-800 mb-2'>
-                  Filtering by author:
-                </p>
+                <p className='text-xs font-medium text-blue-800 mb-2'>Filtering by author:</p>
                 <div className='flex items-center gap-2 mb-2'>
-                  <h3 className='text-lg font-semibold text-stone-900'>
-                    {authorInfo.display_name}
-                  </h3>
-                  {authorInfo.orcid && (
-                    <a
-                      href={authorInfo.orcid}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='text-xs text-blue-600 hover:underline'
-                    >
-                      ORCID
-                    </a>
-                  )}
+                  <h3 className='text-lg font-semibold text-stone-900'>{authorInfo.display_name}</h3>
+                  {authorInfo.orcid && <a href={authorInfo.orcid} target='_blank' rel='noopener noreferrer' className='text-xs text-blue-600 hover:underline'>ORCID</a>}
                 </div>
-
-                {/* Institution Info */}
                 {authorInfo.last_known_institution && (
                   <p className='text-sm text-stone-700 mb-1'>
-                    <span className='text-stone-500'>Institution:</span>{' '}
-                    {authorInfo.last_known_institution}
-                    {authorInfo.last_known_institution_country && (
-                      <span className='text-stone-400 ml-1'>
-                        ({authorInfo.last_known_institution_country})
-                      </span>
-                    )}
+                    <span className='text-stone-500'>Institution:</span> {authorInfo.last_known_institution}
+                    {authorInfo.last_known_institution_country && <span className='text-stone-400 ml-1'>({authorInfo.last_known_institution_country})</span>}
                   </p>
                 )}
-
-                {/* Additional Affiliations */}
-                {authorInfo.affiliations &&
-                  authorInfo.affiliations.length > 0 && (
-                    <p className='text-xs text-stone-600 mb-2'>
-                      <span className='text-stone-500'>Also affiliated with:</span>{' '}
-                      {authorInfo.affiliations
-                        .map((aff: any) => aff.institution.display_name)
-                        .join(', ')}
-                    </p>
-                  )}
-
-                {/* Stats */}
+                {authorInfo.affiliations?.length > 0 && (
+                  <p className='text-xs text-stone-600 mb-2'>
+                    <span className='text-stone-500'>Also affiliated with:</span> {authorInfo.affiliations.map((aff: any) => aff.institution.display_name).join(', ')}
+                  </p>
+                )}
                 <div className='flex flex-wrap gap-4 text-xs text-stone-600'>
-                  {authorInfo.works_count !== undefined && (
-                    <span>
-                      <span className='font-medium text-stone-700'>
-                        {authorInfo.works_count.toLocaleString()}
-                      </span>{' '}
-                      works
-                    </span>
-                  )}
-                  {authorInfo.cited_by_count !== undefined && (
-                    <span>
-                      <span className='font-medium text-stone-700'>
-                        {authorInfo.cited_by_count.toLocaleString()}
-                      </span>{' '}
-                      citations
-                    </span>
-                  )}
+                  {authorInfo.works_count !== undefined && <span><span className='font-medium text-stone-700'>{authorInfo.works_count.toLocaleString()}</span> works</span>}
+                  {authorInfo.cited_by_count !== undefined && <span><span className='font-medium text-stone-700'>{authorInfo.cited_by_count.toLocaleString()}</span> citations</span>}
                 </div>
               </div>
             </div>
-            <button
-              onClick={onClearAuthor}
-              className='p-1 hover:bg-blue-100 rounded transition flex-shrink-0'
-              title='Clear author filter'
-            >
+            <button onClick={onClearAuthor} className='p-1 hover:bg-blue-100 rounded transition flex-shrink-0' title='Clear author filter'>
               <X size={16} className='text-blue-600' />
             </button>
           </div>
-
-          {/* Expandable Info Section */}
-          <div
-            className={`
-              overflow-hidden transition-all duration-300 ease-in-out
-              ${isAuthorInfoExpanded ? 'max-h-32 opacity-100 mt-3' : 'max-h-0 opacity-0'}
-            `}
-          >
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isAuthorInfoExpanded ? 'max-h-32 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
             <div className='pt-3 border-t border-blue-200 space-y-2'>
-              <p className='text-xs text-stone-500'>
-                Report errors or missing data to OpenAlex
-              </p>
-
-              {/* Compact inline Author ID with copy */}
+              <p className='text-xs text-stone-500'>Report errors or missing data to OpenAlex</p>
               <div className='flex items-center gap-2 text-xs'>
                 <span className='text-stone-500'>ID:</span>
-                <code className='px-1.5 py-0.5 bg-white/60 rounded text-stone-600 font-mono text-[11px]'>
-                  {authorId}
-                </code>
-                <button
-                  onClick={copyAuthorId}
-                  className='p-0.5 text-stone-400 hover:text-stone-600 transition'
-                  title='Copy Author ID'
-                >
-                  {isAuthorIdCopied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                <code className='px-1.5 py-0.5 bg-white/60 rounded text-stone-600 font-mono text-[11px]'>{authorId}</code>
+                <button onClick={copyAuthorId} className='p-0.5 text-stone-400 hover:text-stone-600 transition' title='Copy Author ID'>
+                  {isAuthorIdCopied ? <Check size={12} className='text-green-600' /> : <Copy size={12} />}
                 </button>
               </div>
-
-              {/* Action row with submit correction and mark button */}
               <div className='flex items-center gap-3 pt-1'>
-                <button
-                  onClick={openAuthorCorrectionForm}
-                  className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'
-                >
-                  <ExternalLink size={11} />
-                  Submit correction
+                <button onClick={openAuthorCorrectionForm} className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'>
+                  <ExternalLink size={11} /> Submit correction
                 </button>
-
-                <button
-                  onClick={handleAuthorReportedToggle}
-                  className={`inline-flex items-center gap-1 text-xs transition ${
-                    isAuthorReported
-                      ? 'text-green-600'
-                      : 'text-stone-400 hover:text-stone-600'
-                  }`}
-                  title={isAuthorReported ? 'Unmark as reported' : 'Mark as reported'}
-                >
+                <button onClick={handleAuthorReportedToggle} className={`inline-flex items-center gap-1 text-xs transition ${isAuthorReported ? 'text-green-600' : 'text-stone-400 hover:text-stone-600'}`}>
                   <CheckCircle size={12} className={isAuthorReported ? 'fill-green-600 text-white' : ''} />
                   <span>{isAuthorReported ? 'Reported' : 'Mark as reported'}</span>
                 </button>
               </div>
             </div>
           </div>
-
-          {/* Info toggle button */}
-          <button
-            onClick={toggleAuthorInfo}
-            className='absolute bottom-2 right-2 p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded transition opacity-0 group-hover:opacity-100'
-            aria-expanded={isAuthorInfoExpanded}
-            aria-label='Report error or missing data'
-            title='Report error or missing data'
-          >
-            <Info
-              size={16}
-              className={`transition-colors ${isAuthorInfoExpanded ? 'text-blue-600' : ''}`}
-            />
+          <button onClick={toggleAuthorInfo} className='absolute bottom-2 right-2 p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded transition opacity-0 group-hover:opacity-100'>
+            <Info size={16} className={`transition-colors ${isAuthorInfoExpanded ? 'text-blue-600' : ''}`} />
           </button>
         </div>
       )}
 
-      {/* Citing Single Paper Banner */}
+      {/* Citing banner */}
       {citing && (
         <div className='mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <Quote
-                size={16}
-                className='text-amber-600 mt-0.5 flex-shrink-0'
-              />
+              <Quote size={16} className='text-amber-600 mt-0.5 flex-shrink-0' />
               <div className='min-w-0'>
-                <p className='text-xs font-medium text-amber-800 mb-1'>
-                  Showing papers that cite:
-                </p>
-                {loadingCitingPaper ? (
-                  <p className='text-sm text-amber-700 animate-pulse'>
-                    Loading paper info...
-                  </p>
-                ) : citingPaper ? (
-                  <div>
-                    <p className='text-sm font-medium text-stone-900 line-clamp-2'>
-                      {citingPaper.title}
-                    </p>
-                    <p className='text-xs text-stone-600 truncate'>
-                      {citingPaper.authors?.slice(0, 3).join(', ')}
-                      {citingPaper.authors?.length > 3 && ' et al.'}
-                      {citingPaper.publication_year &&
-                        ` (${citingPaper.publication_year})`}
-                    </p>
-                  </div>
-                ) : (
-                  <p className='text-sm text-amber-700'>Paper ID: {citing}</p>
-                )}
+                <p className='text-xs font-medium text-amber-800 mb-1'>Showing papers that cite:</p>
+                {loadingCitingPaper ? <p className='text-sm text-amber-700 animate-pulse'>Loading...</p>
+                  : citingPaper ? (
+                    <div>
+                      <p className='text-sm font-medium text-stone-900 line-clamp-2'>{citingPaper.title}</p>
+                      <p className='text-xs text-stone-600 truncate'>{citingPaper.authors?.slice(0, 3).join(', ')}{citingPaper.authors?.length > 3 && ' et al.'}{citingPaper.publication_year && ` (${citingPaper.publication_year})`}</p>
+                    </div>
+                  ) : <p className='text-sm text-amber-700'>Paper ID: {citing}</p>}
               </div>
             </div>
-            <button
-              onClick={onClearCiting}
-              className='p-1 hover:bg-amber-100 rounded transition flex-shrink-0'
-              title='Clear citing filter'
-            >
-              <X size={16} className='text-amber-600' />
-            </button>
+            <button onClick={onClearCiting} className='p-1 hover:bg-amber-100 rounded transition flex-shrink-0'><X size={16} className='text-amber-600' /></button>
           </div>
         </div>
       )}
 
-      {/* Citing ALL Papers Banner */}
+      {/* CitingAll banner */}
       {citingAll && citingAll.length > 0 && (
         <div className='mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <Library
-                size={16}
-                className='text-purple-600 mt-0.5 flex-shrink-0'
-              />
+              <Library size={16} className='text-purple-600 mt-0.5 flex-shrink-0' />
               <div className='min-w-0 flex-1'>
-                <p className='text-xs font-medium text-purple-800 mb-2'>
-                  Showing papers that cite ALL {citingAll.length} papers:
-                </p>
-                {loadingCitingAllPapers ? (
-                  <p className='text-sm text-purple-700 animate-pulse'>
-                    Loading papers info...
-                  </p>
-                ) : citingAllPapers.length > 0 ? (
-                  <div className='space-y-2'>
-                    {citingAllPapers.map((paper, index) => (
-                      <div
-                        key={paper.id}
-                        className='text-sm bg-white/60 rounded p-2 border border-purple-100'
-                      >
-                        <p className='font-medium text-stone-900 line-clamp-1'>
-                          {index + 1}. {paper.title}
-                        </p>
-                        <p className='text-xs text-stone-600 truncate'>
-                          {paper.authors?.slice(0, 2).join(', ')}
-                          {paper.authors?.length > 2 && ' et al.'}
-                          {paper.publication_year &&
-                            ` (${paper.publication_year})`}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className='text-sm text-purple-700'>
-                    {citingAll.length} papers selected
-                  </p>
-                )}
+                <p className='text-xs font-medium text-purple-800 mb-2'>Showing papers that cite ALL {citingAll.length} papers:</p>
+                {loadingCitingAllPapers ? <p className='text-sm text-purple-700 animate-pulse'>Loading...</p>
+                  : citingAllPapers.length > 0 ? (
+                    <div className='space-y-2'>
+                      {citingAllPapers.map((paper, i) => (
+                        <div key={paper.id} className='text-sm bg-white/60 rounded p-2 border border-purple-100'>
+                          <p className='font-medium text-stone-900 line-clamp-1'>{i + 1}. {paper.title}</p>
+                          <p className='text-xs text-stone-600 truncate'>{paper.authors?.slice(0, 2).join(', ')}{paper.authors?.length > 2 && ' et al.'}{paper.publication_year && ` (${paper.publication_year})`}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className='text-sm text-purple-700'>{citingAll.length} papers selected</p>}
               </div>
             </div>
-            <button
-              onClick={onClearCitingAll}
-              className='p-1 hover:bg-purple-100 rounded transition flex-shrink-0'
-              title='Clear citing all filter'
-            >
-              <X size={16} className='text-purple-600' />
-            </button>
+            <button onClick={onClearCitingAll} className='p-1 hover:bg-purple-100 rounded transition flex-shrink-0'><X size={16} className='text-purple-600' /></button>
           </div>
         </div>
       )}
 
-      {/* Referenced By Paper Banner (backward citations) */}
+      {/* ReferencedBy banner */}
       {referencedBy && (
         <div className='mb-4 p-3 bg-green-50 border border-green-200 rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <BookOpen
-                size={16}
-                className='text-green-600 mt-0.5 flex-shrink-0'
-              />
+              <BookOpen size={16} className='text-green-600 mt-0.5 flex-shrink-0' />
               <div className='min-w-0'>
-                <p className='text-xs font-medium text-green-800 mb-1'>
-                  Showing references from:
-                </p>
-                {loadingReferencedByPaper ? (
-                  <p className='text-sm text-green-700 animate-pulse'>
-                    Loading paper info...
-                  </p>
-                ) : referencedByPaper ? (
-                  <div>
-                    <p className='text-sm font-medium text-stone-900 line-clamp-2'>
-                      {referencedByPaper.title}
-                    </p>
-                    <p className='text-xs text-stone-600 truncate'>
-                      {referencedByPaper.authors?.slice(0, 3).join(', ')}
-                      {referencedByPaper.authors?.length > 3 && ' et al.'}
-                      {referencedByPaper.publication_year &&
-                        ` (${referencedByPaper.publication_year})`}
-                    </p>
-                  </div>
-                ) : (
-                  <p className='text-sm text-green-700'>
-                    Paper ID: {referencedBy}
-                  </p>
-                )}
+                <p className='text-xs font-medium text-green-800 mb-1'>Showing references from:</p>
+                {loadingReferencedByPaper ? <p className='text-sm text-green-700 animate-pulse'>Loading...</p>
+                  : referencedByPaper ? (
+                    <div>
+                      <p className='text-sm font-medium text-stone-900 line-clamp-2'>{referencedByPaper.title}</p>
+                      <p className='text-xs text-stone-600 truncate'>{referencedByPaper.authors?.slice(0, 3).join(', ')}{referencedByPaper.authors?.length > 3 && ' et al.'}{referencedByPaper.publication_year && ` (${referencedByPaper.publication_year})`}</p>
+                    </div>
+                  ) : <p className='text-sm text-green-700'>Paper ID: {referencedBy}</p>}
               </div>
             </div>
-            <button
-              onClick={onClearReferencedBy}
-              className='p-1 hover:bg-green-100 rounded transition flex-shrink-0'
-              title='Clear references filter'
-            >
-              <X size={16} className='text-green-600' />
-            </button>
+            <button onClick={onClearReferencedBy} className='p-1 hover:bg-green-100 rounded transition flex-shrink-0'><X size={16} className='text-green-600' /></button>
           </div>
         </div>
       )}
 
-      {/* Referenced ALL Paper Banner (backward citations) */}
+      {/* ReferencesAll banner */}
       {referencesAll && referencesAll.length > 0 && (
         <div className='mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <Library
-                size={16}
-                className='text-emerald-600 mt-0.5 flex-shrink-0'
-              />
+              <Library size={16} className='text-emerald-600 mt-0.5 flex-shrink-0' />
               <div className='min-w-0 flex-1'>
-                <p className='text-xs font-medium text-emerald-800 mb-2'>
-                  Showing common references from {referencesAll.length} papers:
-                </p>
-
-                {loadingReferencesAllPapers ? (
-                  <p className='text-sm text-emerald-700 animate-pulse'>
-                    Loading papers info...
-                  </p>
-                ) : (
-                  <div className='space-y-2'>
-                    {referencesAllPapers.map((paper, index) => (
-                      <div
-                        key={paper.id}
-                        className='text-sm bg-white/60 rounded p-2 border border-emerald-100'
-                      >
-                        <p className='font-medium text-stone-900 line-clamp-1'>
-                          {index + 1}. {paper.title}
-                        </p>
-                        <p className='text-xs text-stone-600 truncate'>
-                          {paper.authors?.slice(0, 2).join(', ')}
-                          {paper.authors?.length > 2 && ' et al.'}
-                          {paper.publication_year &&
-                            ` (${paper.publication_year})`}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <p className='text-xs font-medium text-emerald-800 mb-2'>Showing common references from {referencesAll.length} papers:</p>
+                {loadingReferencesAllPapers ? <p className='text-sm text-emerald-700 animate-pulse'>Loading...</p>
+                  : <div className='space-y-2'>
+                      {referencesAllPapers.map((paper, i) => (
+                        <div key={paper.id} className='text-sm bg-white/60 rounded p-2 border border-emerald-100'>
+                          <p className='font-medium text-stone-900 line-clamp-1'>{i + 1}. {paper.title}</p>
+                          <p className='text-xs text-stone-600 truncate'>{paper.authors?.slice(0, 2).join(', ')}{paper.authors?.length > 2 && ' et al.'}{paper.publication_year && ` (${paper.publication_year})`}</p>
+                        </div>
+                      ))}
+                    </div>}
               </div>
             </div>
-
-            <button
-              onClick={onClearReferencesAll}
-              className='p-1 hover:bg-emerald-100 rounded transition flex-shrink-0'
-              title='Clear common references filter'
-            >
-              <X size={16} className='text-emerald-600' />
-            </button>
+            <button onClick={onClearReferencesAll} className='p-1 hover:bg-emerald-100 rounded transition flex-shrink-0'><X size={16} className='text-emerald-600' /></button>
           </div>
         </div>
       )}
@@ -910,37 +532,27 @@ export default function SearchResults({
       {/* Results count */}
       <div className='text-sm text-stone-600 mb-4'>
         {totalCount === 0 ? (
-          <span>No results found</span>
+          <span>No results found{isEconActive ? ' in economics journals' : ''}</span>
         ) : (
           <span>
-            Showing {(page - 1) * RESULTS_PER_PAGE + 1}–
-            {Math.min(page * RESULTS_PER_PAGE, totalCount)} of{' '}
-            {totalCount.toLocaleString()} results
+            Showing {(page - 1) * RESULTS_PER_PAGE + 1}–{Math.min(page * RESULTS_PER_PAGE, totalCount)} of {totalCount.toLocaleString()}
+            {isEconActive ? ' economics' : ''} results
           </span>
         )}
       </div>
 
-      {/* Error message */}
       {error && (
         <div className='mb-4 p-4 bg-red-50 border border-red-200 rounded-lg'>
           <div className='flex items-start gap-2'>
             <div className='flex-1'>
-              <p className='text-sm font-medium text-red-800 mb-1'>
-                Search Error
-              </p>
+              <p className='text-sm font-medium text-red-800 mb-1'>Search Error</p>
               <p className='text-sm text-red-700'>{error}</p>
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className='text-xs text-red-600 hover:text-red-800 underline'
-            >
-              Retry
-            </button>
+            <button onClick={() => window.location.reload()} className='text-xs text-red-600 hover:text-red-800 underline'>Retry</button>
           </div>
         </div>
       )}
 
-      {/* No results message */}
       {results.length === 0 && !isPending && (
         <div className='text-center py-12 text-stone-500'>
           <p>No papers found.</p>
@@ -948,66 +560,24 @@ export default function SearchResults({
         </div>
       )}
 
-      {/* Results list */}
       {results.length > 0 && (
         <div className='flex-1 overflow-y-auto space-y-3 mb-4'>
           {results.map((paper) => (
-            <PaperCard
-              key={paper.id}
-              paper={paper}
-              variant='default'
-              showPinButton={true}
-              showActions={true}
-              preserveParams={preserveParams}
-              onAuthorClick={onAuthorSearch}
-            />
+            <PaperCard key={paper.id} paper={paper} variant='default' showPinButton={true} showActions={true} preserveParams={preserveParams} onAuthorClick={onAuthorSearch} />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className='flex items-center justify-center gap-1 py-4 border-t bg-white'>
-          <button
-            onClick={() => handlePageChange(page - 1)}
-            disabled={page === 1}
-            className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 disabled:hover:bg-transparent transition'
-          >
-            Previous
-          </button>
-
+          <button onClick={() => handlePageChange(page - 1)} disabled={page === 1} className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 transition'>Previous</button>
           {getPageNumbers().map((pageNum, idx) => {
-            if (pageNum === '...') {
-              return (
-                <span key={`ellipsis-${idx}`} className='px-2 text-stone-400'>
-                  ...
-                </span>
-              );
-            }
-
-            const isCurrentPage = pageNum === page;
+            if (pageNum === '...') return <span key={`ellipsis-${idx}`} className='px-2 text-stone-400'>...</span>;
             return (
-              <button
-                key={pageNum}
-                onClick={() => handlePageChange(pageNum as number)}
-                className={`min-w-[40px] px-3 py-2 text-sm rounded transition ${
-                  isCurrentPage
-                    ? 'bg-stone-800 text-white font-semibold'
-                    : 'text-stone-700 hover:bg-stone-50'
-                }`}
-              >
-                {pageNum}
-              </button>
+              <button key={pageNum} onClick={() => handlePageChange(pageNum as number)} className={`min-w-[40px] px-3 py-2 text-sm rounded transition ${pageNum === page ? 'bg-stone-800 text-white font-semibold' : 'text-stone-700 hover:bg-stone-50'}`}>{pageNum}</button>
             );
           })}
-
-          <button
-            onClick={() => handlePageChange(page + 1)}
-            disabled={page === totalPages}
-            className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 disabled:hover:bg-transparent transition'
-          >
-            Next
-          </button>
+          <button onClick={() => handlePageChange(page + 1)} disabled={page === totalPages} className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 transition'>Next</button>
         </div>
       )}
     </div>

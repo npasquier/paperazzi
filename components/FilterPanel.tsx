@@ -10,6 +10,13 @@ import {
   Plus,
   Save,
 } from 'lucide-react';
+
+import { ECON_DOMAINS, ECON_CATEGORIES } from '@/data/econDomains';
+import econJournalList from '@/data/journals';
+ 
+
+
+
 export interface FilterPreset {
   id: string;
   name: string;
@@ -52,7 +59,7 @@ export default function FilterPanel({
   onToggle,
 }: FilterPanelProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(['journals'])
+    new Set(['journals']),
   );
   // Load presets from localStorage on mount
   const [presets, setPresets] = useState<FilterPreset[]>(() => {
@@ -139,7 +146,7 @@ export default function FilterPanel({
     setActivePresetId(null);
   };
   const handlePublicationTypeChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
+    e: React.ChangeEvent<HTMLSelectElement>,
   ) => {
     setFilters((prev) => ({ ...prev, publicationType: e.target.value }));
     setActivePresetId(null);
@@ -191,13 +198,25 @@ export default function FilterPanel({
       </button>
     </span>
   );
+
+const getEconJournalCount = () => {
+  if (!filters.econFilter?.enabled) return 0;
+  let filtered = econJournalList as any[];
+  const cats = filters.econFilter.categories;
+  const doms = filters.econFilter.domains;
+  if (cats.length > 0) filtered = filtered.filter((j: any) => cats.includes(j.category));
+  if (doms.length > 0) filtered = filtered.filter((j: any) => doms.includes(j.domain));
+  return filtered.length;
+};
+
+
   // Render collapsible section
   const renderSection = (
     id: string,
     label: string,
     count: number,
     onAdd: () => void,
-    items: { key: string; label: string; onRemove: () => void }[]
+    items: { key: string; label: string; onRemove: () => void }[],
   ) => {
     const isExpanded = expandedSections.has(id);
     return (
@@ -225,7 +244,7 @@ export default function FilterPanel({
             {items.length > 0 && (
               <div className='flex flex-wrap gap-1.5 mb-2'>
                 {items.map((item) =>
-                  renderPill(item.key, item.label, item.onRemove)
+                  renderPill(item.key, item.label, item.onRemove),
                 )}
               </div>
             )}
@@ -329,6 +348,7 @@ export default function FilterPanel({
             <option value='publication_date:asc'>Oldest First</option>
           </select>
         </div>
+
         {/* Collapsible filter sections */}
         <div className='px-4'>
           {/* Saved Presets - Collapsible and Discrete */}
@@ -411,17 +431,215 @@ export default function FilterPanel({
             )}
           </div>
           {/* Journals */}
-          {renderSection(
-            'journals',
-            'Journals',
-            filters.journals.length,
-            openJournalModal,
-            filters.journals.map((j) => ({
-              key: j.issn,
-              label: j.name || 'Unknown Journal',
-              onRemove: () => removeJournal(j.issn),
-            }))
-          )}
+          <div className='border-b border-stone-100'>
+            <button
+              onClick={() => toggleSection('journals')}
+              className='w-full flex items-center justify-between py-3 hover:bg-stone-50 transition'
+            >
+              <div className='flex items-center gap-2'>
+                {expandedSections.has('journals') ? (
+                  <ChevronDown size={14} className='text-stone-400' />
+                ) : (
+                  <ChevronRight size={14} className='text-stone-400' />
+                )}
+                <span className='text-sm text-stone-600'>Journals</span>
+              </div>
+              {(filters.journals.length > 0 || filters.econFilter?.enabled) && (
+                <span className='text-xs bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded'>
+                  {filters.econFilter?.enabled
+                    ? 'Econ'
+                    : filters.journals.length}
+                </span>
+              )}
+            </button>
+            {expandedSections.has('journals') && (
+              <div className='pb-3 pl-6'>
+                {/* Econ toggle */}
+                <label className='flex items-center gap-2 cursor-pointer mb-2'>
+                  <input
+                    type='checkbox'
+                    checked={!!filters.econFilter?.enabled}
+                    onChange={(e) => {
+                      setFilters((prev) => ({
+                        ...prev,
+                        econFilter: {
+                          enabled: e.target.checked,
+                          categories: prev.econFilter?.categories || [],
+                          domains: prev.econFilter?.domains || [],
+                        },
+                      }));
+                      setActivePresetId(null);
+                    }}
+                    className='rounded border-stone-300 text-stone-700 focus:ring-stone-300'
+                  />
+                  <span className='text-xs text-stone-600'>Economics only</span>
+                </label>
+
+                {/* Category & Domain selectors — only when enabled */}
+                {filters.econFilter?.enabled && (
+                  <div className='space-y-2 mb-3'>
+                    {/* Categories */}
+                    <div>
+                      <p className='text-[11px] text-stone-400 mb-1'>
+                        Category
+                      </p>
+                      <div className='flex gap-1'>
+                        {ECON_CATEGORIES.map((cat) => {
+                          const isSelected =
+                            filters.econFilter!.categories.length === 0 ||
+                            filters.econFilter!.categories.includes(cat);
+                          return (
+                            <button
+                              key={cat}
+                              onClick={() => {
+                                setFilters((prev) => {
+                                  const current = prev.econFilter!.categories;
+                                  let next: number[];
+                                  if (current.length === 0) {
+                                    // "All" is active, clicking a cat means "only this one"
+                                    next = [cat];
+                                  } else if (current.includes(cat)) {
+                                    next = current.filter((c) => c !== cat);
+                                  } else {
+                                    next = [...current, cat];
+                                  }
+                                  // If all 4 selected, reset to empty (= all)
+                                  if (next.length === 4) next = [];
+                                  return {
+                                    ...prev,
+                                    econFilter: {
+                                      ...prev.econFilter!,
+                                      categories: next,
+                                    },
+                                  };
+                                });
+                                setActivePresetId(null);
+                              }}
+                              className={`px-2 py-0.5 text-[11px] rounded transition ${
+                                isSelected
+                                  ? 'bg-stone-700 text-white'
+                                  : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                              }`}
+                            >
+                              {cat}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              econFilter: {
+                                ...prev.econFilter!,
+                                categories: [],
+                              },
+                            }));
+                            setActivePresetId(null);
+                          }}
+                          className={`px-2 py-0.5 text-[11px] rounded transition ${
+                            filters.econFilter!.categories.length === 0
+                              ? 'bg-stone-700 text-white'
+                              : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                          }`}
+                        >
+                          All
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Domains */}
+                    <div>
+                      <p className='text-[11px] text-stone-400 mb-1'>Domain</p>
+                      <div className='flex flex-wrap gap-1 max-h-24 overflow-y-auto'>
+                        {ECON_DOMAINS.map(({ key, label }) => {
+                          const isSelected =
+                            filters.econFilter!.domains.length === 0 ||
+                            filters.econFilter!.domains.includes(key);
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => {
+                                setFilters((prev) => {
+                                  const current = prev.econFilter!.domains;
+                                  let next: string[];
+                                  if (current.length === 0) {
+                                    next = [key];
+                                  } else if (current.includes(key)) {
+                                    next = current.filter((d) => d !== key);
+                                  } else {
+                                    next = [...current, key];
+                                  }
+                                  if (next.length === ECON_DOMAINS.length)
+                                    next = [];
+                                  return {
+                                    ...prev,
+                                    econFilter: {
+                                      ...prev.econFilter!,
+                                      domains: next,
+                                    },
+                                  };
+                                });
+                                setActivePresetId(null);
+                              }}
+                              className={`px-1.5 py-0.5 text-[10px] rounded transition ${
+                                isSelected
+                                  ? 'bg-stone-600 text-white'
+                                  : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {filters.econFilter!.domains.length === 0 ? (
+                        <p className='text-[10px] text-stone-400 mt-1'>
+                          All domains
+                        </p>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              econFilter: { ...prev.econFilter!, domains: [] },
+                            }));
+                            setActivePresetId(null);
+                          }}
+                          className='text-[10px] text-stone-400 hover:text-stone-600 mt-1'
+                        >
+                          Reset to all
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Journal count */}
+                    <p className='text-[10px] text-stone-400'>
+                      {getEconJournalCount()} journals selected
+                    </p>
+                  </div>
+                )}
+
+                {/* Manual journal pills */}
+                {filters.journals.length > 0 && (
+                  <div className='flex flex-wrap gap-1.5 mb-2'>
+                    {filters.journals.map((j) =>
+                      renderPill(j.issn, j.name || 'Unknown Journal', () =>
+                        removeJournal(j.issn),
+                      ),
+                    )}
+                  </div>
+                )}
+                <button
+                  onClick={openJournalModal}
+                  className='inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition'
+                >
+                  <Plus size={12} />
+                  Add
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Authors */}
           {renderSection(
             'authors',
@@ -432,7 +650,7 @@ export default function FilterPanel({
               key: a.id,
               label: a.name || 'Unknown Author',
               onRemove: () => removeAuthor(a.id),
-            }))
+            })),
           )}
           {/* Institutions */}
           {renderSection(
@@ -444,7 +662,7 @@ export default function FilterPanel({
               key: i.id,
               label: i.display_name || 'Unknown Institution',
               onRemove: () => removeInstitution(i.id),
-            }))
+            })),
           )}
         </div>
         {/* Type & Year */}

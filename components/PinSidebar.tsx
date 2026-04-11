@@ -28,7 +28,11 @@ interface PinSidebarProps {
   onAuthorSearch?: (authorName: string) => void;
 }
 
-export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSidebarProps) {
+export default function PinSidebar({
+  isOpen,
+  onToggle,
+  onAuthorSearch,
+}: PinSidebarProps) {
   const router = useRouter();
   const {
     pinnedPapers,
@@ -49,13 +53,12 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   const MIN_WIDTH = 360;
   const MAX_WIDTH = 600;
   const DEFAULT_WIDTH = 360;
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pinSidebarWidth');
-      return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
-    }
-    return DEFAULT_WIDTH;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('pinSidebarWidth');
+    if (saved) setSidebarWidth(parseInt(saved, 10));
+  }, []);
   const [isResizing, setIsResizing] = useState(false);
 
   // Selection state
@@ -72,10 +75,10 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   // Drag state
   const [draggingPaperId, setDraggingPaperId] = useState<string | null>(null);
   const [draggingFromGroup, setDraggingFromGroup] = useState<string | null>(
-    null
+    null,
   );
   const [draggingFromIndex, setDraggingFromIndex] = useState<number | null>(
-    null
+    null,
   );
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const [dropIndicatorPosition, setDropIndicatorPosition] = useState<{
@@ -115,7 +118,7 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
-      
+
       // Calculate new width (distance from right edge of viewport)
       const newWidth = window.innerWidth - e.clientX;
       const clampedWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
@@ -270,7 +273,7 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
     e: React.DragEvent,
     paperId: string,
     groupId: string | null,
-    index: number
+    index: number,
   ) => {
     const normalizedId = normalizeId(paperId);
     setDraggingPaperId(normalizedId);
@@ -296,7 +299,7 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   const handleDragOverPaper = (
     e: React.DragEvent,
     targetGroupId: string | null,
-    targetIndex: number
+    targetIndex: number,
   ) => {
     e.preventDefault();
     e.stopPropagation();
@@ -392,7 +395,7 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   const renderPaperItem = (
     paper: Paper,
     groupId: string | null,
-    index: number
+    index: number,
   ) => {
     const normalizedId = normalizeId(paper.id);
     const isSelected = selectedIds.has(normalizedId);
@@ -458,18 +461,20 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   };
 
   // Render group
-  const renderGroup = (groupId: string, groupName: string, papers: Paper[], isLastGroup: boolean) => {
+  const renderGroup = (
+    groupId: string,
+    groupName: string,
+    papers: Paper[],
+    isLastGroup: boolean,
+  ) => {
     const isExpanded = expandedGroups.has(groupId);
     const isEditing = editingGroupId === groupId;
     const isDragOver = dragOverGroupId === groupId && !dropIndicatorPosition;
 
     return (
-      <div
-        key={groupId}
-        className='mb-3'
-      >
+      <div key={groupId} className='mb-3'>
         {/* Group Header */}
-        <div 
+        <div
           className={`group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md transition ${
             isDragOver ? 'bg-stone-100' : 'hover:bg-stone-50'
           }`}
@@ -555,10 +560,12 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
         {isExpanded && (
           <div className='mt-2 space-y-2'>
             {papers.length === 0 ? (
-              <p className='text-xs text-stone-400 italic py-2 pl-2'>Drag papers here</p>
+              <p className='text-xs text-stone-400 italic py-2 pl-2'>
+                Drag papers here
+              </p>
             ) : (
               papers.map((paper, index) =>
-                renderPaperItem(paper, groupId, index)
+                renderPaperItem(paper, groupId, index),
               )
             )}
           </div>
@@ -601,7 +608,7 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
   return (
     <>
       {/* Resizable Sidebar */}
-      <aside 
+      <aside
         className='bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden relative'
         style={{ width: `${sidebarWidth}px` }}
       >
@@ -744,11 +751,11 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
               {/* Groups */}
               {groups.map((group, index) =>
                 renderGroup(
-                  group.id, 
-                  group.name, 
+                  group.id,
+                  group.name,
                   getPapersInGroup(group.id),
-                  index === groups.length - 1 && ungroupedPapers.length === 0
-                )
+                  index === groups.length - 1 && ungroupedPapers.length === 0,
+                ),
               )}
 
               {/* Separator before ungrouped */}
@@ -769,7 +776,7 @@ export default function PinSidebar({ isOpen, onToggle, onAuthorSearch }: PinSide
                   onDrop={(e) => handleDropOnGroup(e, null)}
                 >
                   {ungroupedPapers.map((paper, index) =>
-                    renderPaperItem(paper, null, index)
+                    renderPaperItem(paper, null, index),
                   )}
                 </div>
               )}

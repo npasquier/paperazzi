@@ -62,6 +62,11 @@ export interface Filters {
   citingAll?: string[];
   referencedBy?: string;
   referencesAll?: string[];
+  econFilter?: {
+    enabled: boolean;
+    categories: number[]; // [1,2,3,4] — empty = all
+    domains: string[]; // ['GEN','OrgInd',...] — empty = all
+  };
 }
 
 export interface Paper {
@@ -75,4 +80,5 @@ export interface Paper {
   cited_by_count: number;
   referenced_works_count?: number;
   abstract: string;
+  issns?: string[];
 }

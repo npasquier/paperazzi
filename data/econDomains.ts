@@ -1,0 +1,27 @@
+export const ECON_DOMAINS = [
+  { key: 'GEN', label: 'General' },
+  { key: 'OrgInd', label: 'Ind. Org.' },
+  { key: 'EcoDroit', label: 'Law & Econ' },
+  { key: 'AgrEnEnv', label: 'Agri/Energy/Env' },
+  { key: 'EcoPub', label: 'Public' },
+  { key: 'MKG', label: 'Marketing' },
+  { key: 'Metrie', label: 'Econometrics' },
+  { key: 'Macro', label: 'Macro' },
+  { key: 'ThEco', label: 'Theory' },
+  { key: 'TravPop', label: 'Labor/Pop' },
+  { key: 'Innov', label: 'Innovation' },
+  { key: 'HPEA', label: 'History/Phil.' },
+  { key: 'RO', label: 'Oper. Research' },
+  { key: 'SANT', label: 'Health' },
+  { key: 'Spatiale', label: 'Spatial/Urban' },
+  { key: 'CPT', label: 'Accounting' },
+  { key: 'DevTrans', label: 'Dev/Transition' },
+  { key: 'Fin', label: 'Finance' },
+  { key: 'GRH', label: 'HR/OrgBehavior' },
+  { key: 'LOG', label: 'Logistics' },
+  { key: 'MgPub', label: 'Public Mgmt' },
+  { key: 'SI', label: 'Info Systems' },
+  { key: 'StratOrg', label: 'Strategy/Org' },
+] as const;
+ 
+export const ECON_CATEGORIES = [1, 2, 3, 4] as const;
