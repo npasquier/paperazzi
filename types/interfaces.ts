@@ -1,4 +1,4 @@
-export const MAX_PINS = 10;
+export const MAX_PINS = 30;
 export const RESULTS_PER_PAGE = 20;
 
 export interface Journal {
@@ -66,7 +66,22 @@ export interface Filters {
     enabled: boolean;
     categories: number[]; // [1,2,3,4] — empty = all
     domains: string[]; // ['GEN','OrgInd',...] — empty = all
+    presetId?: string | null; // id of an active built-in or saved preset, if any
+    issns?: string[]; // explicit ISSN whitelist (used for ISSN-based presets like Top 5 GEN)
   };
+  // Which journal-filter source feeds the API. Both subsections retain their
+  // state when inactive; only the active one is sent to /api/search.
+  journalFilterMode?: 'wide' | 'specific' | 'off';
+}
+
+// Snapshot of the Journals subsection state — saved by the user under
+// 'journal-filter-presets' in localStorage.
+export interface JournalFilterPreset {
+  id: string;
+  name: string;
+  econFilter: NonNullable<Filters['econFilter']>;
+  journals: SelectedJournal[];
+  mode?: 'wide' | 'specific' | 'off';
 }
 
 export interface Paper {

@@ -41,7 +41,12 @@ interface Props {
     enabled: boolean;
     categories: number[];
     domains: string[];
+    presetId?: string | null;
+    issns?: string[];
   };
+  // Which journal-filter source feeds the API: 'wide' uses econFilter and
+  // ignores `journals`; 'specific' does the inverse; 'off' sends neither.
+  journalFilterMode?: 'wide' | 'specific' | 'off';
   loadMore?: (page: number) => void;
   onClearCiting?: () => void;
   onClearCitingAll?: () => void;
@@ -66,6 +71,7 @@ export default function SearchResults({
   referencedBy,
   referencesAll,
   econFilter,
+  journalFilterMode = 'wide',
   loadMore,
   onClearCiting,
   onClearCitingAll,
@@ -264,7 +270,11 @@ export default function SearchResults({
 
         const params = new URLSearchParams();
         if (query) params.set('query', query);
-        if (journals.length) params.set('journals', journals.map((j) => j.issn).join(','));
+        // Journal filter source is gated by mode — only the active subsection
+        // sends params, so the two never compete on the API side.
+        if (journalFilterMode === 'specific' && journals.length) {
+          params.set('journals', journals.map((j) => j.issn).join(','));
+        }
         if (authors.length) params.set('authors', authors.map((a) => a.id).join(','));
         if (institutions.length) params.set('institutions', institutions.map((i) => i.id.replace('https://openalex.org/', '')).join(','));
         if (publicationType) params.set('type', publicationType);
@@ -277,11 +287,12 @@ export default function SearchResults({
         if (referencedBy) params.set('referencedBy', referencedBy);
         if (referencesAll?.length) params.set('referencesAll', referencesAll.join(','));
 
-        // Econ filter params
-        if (econFilter?.enabled) {
+        // Econ filter params (only when wide mode is active)
+        if (journalFilterMode === 'wide' && econFilter?.enabled) {
           params.set('econEnabled', 'true');
           if (econFilter.categories.length) params.set('econCat', econFilter.categories.join(','));
           if (econFilter.domains.length) params.set('econDom', econFilter.domains.join(','));
+          if (econFilter.issns?.length) params.set('econIssns', econFilter.issns.join(','));
         }
 
         const res = await fetch(`/api/search?${params.toString()}`);
@@ -300,7 +311,7 @@ export default function SearchResults({
         setLoadingStartTime(null); setShowSlowLoadingHelp(false);
       }
     });
-  }, [query, journals, authors, institutions, publicationType, from, to, sortBy, page, citing, citingAll, referencedBy, referencesAll, econFilter]);
+  }, [query, journals, authors, institutions, publicationType, from, to, sortBy, page, citing, citingAll, referencedBy, referencesAll, econFilter, journalFilterMode]);
 
   // Author helpers
   const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);

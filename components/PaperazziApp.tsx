@@ -44,7 +44,13 @@ function PaperazziAppContent() {
     citingAll: undefined,
     referencedBy: undefined,
     referencesAll: undefined,
-    econFilter: { enabled: false, categories: [], domains: [] },
+    econFilter: {
+      enabled: false,
+      categories: [],
+      domains: [],
+      presetId: null,
+    },
+    journalFilterMode: 'wide',
   });
 
   // --- Search state ---
@@ -61,7 +67,13 @@ function PaperazziAppContent() {
     citingAll: undefined,
     referencedBy: undefined,
     referencesAll: undefined,
-    econFilter: { enabled: false, categories: [], domains: [] },
+    econFilter: {
+      enabled: false,
+      categories: [],
+      domains: [],
+      presetId: null,
+    },
+    journalFilterMode: 'wide',
   });
   const [page, setPage] = useState(1);
 
@@ -147,10 +159,15 @@ function PaperazziAppContent() {
         referencesAll,
       };
 
-      setFilters((prev) => ({ ...newFilters, econFilter: prev.econFilter }));
+      setFilters((prev) => ({
+        ...newFilters,
+        econFilter: prev.econFilter,
+        journalFilterMode: prev.journalFilterMode,
+      }));
       setSearchFilters((prev) => ({
         ...newFilters,
         econFilter: prev.econFilter,
+        journalFilterMode: prev.journalFilterMode,
       }));
       setSearchQuery(q);
       setPage(p);
@@ -394,6 +411,7 @@ function PaperazziAppContent() {
             onAuthorSearch={handleAuthorSearch}
             onClearAuthor={handleClearAuthor}
             econFilter={filters.econFilter}
+            journalFilterMode={filters.journalFilterMode}
           />
         </div>
       </main>
@@ -427,7 +445,12 @@ function PaperazziAppContent() {
         selectedJournals={filters.journals}
         onClose={() => setShowJournalModal(false)}
         onApply={(selected) =>
-          setFilters((prev) => ({ ...prev, journals: selected }))
+          setFilters((prev) => ({
+            ...prev,
+            journals: selected,
+            // Adding any manual journal auto-switches to specific mode.
+            journalFilterMode: selected.length > 0 ? 'specific' : prev.journalFilterMode,
+          }))
         }
       />
 

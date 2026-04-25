@@ -341,14 +341,11 @@ export async function GET(req: NextRequest) {
   const econDom = (searchParams.get('econDom') || '')
     .split(',')
     .filter(Boolean);
-
-  let issnBatches: string[][] | null = null;
-  if (econEnabled) {
-    const issns = getEconISSNs(econCat, econDom);
-    if (issns.length > 0) {
-      issnBatches = batchISSNs(issns);
-    }
-  }
+  // Explicit ISSN whitelist (used by ISSN-based presets like Top 5 GEN).
+  // When provided, overrides econCat/econDom server-side.
+  const econIssns = (searchParams.get('econIssns') || '')
+    .split(',')
+    .filter(Boolean);
 
   const filterParams = {
     journals,
@@ -360,8 +357,18 @@ export async function GET(req: NextRequest) {
     to,
   };
 
-  if (issnBatches && filterParams.journals.length > 0) {
-    filterParams.journals = []; // econ ISSN filter takes precedence
+  // Decide whether the wide econ filter applies for this request.
+  // Manual journals (filterParams.journals) override the wide filter when
+  // non-empty, so we only build issnBatches when there are no manual journals.
+  let issnBatches: string[][] | null = null;
+  if (econEnabled && filterParams.journals.length === 0) {
+    const issns =
+      econIssns.length > 0 ? econIssns : getEconISSNs(econCat, econDom);
+    if (issns.length > 0) {
+      // Small ISSN sets fit in a single OpenAlex filter — skip the batched
+      // count/walk machinery and let the caller use the regular filter path.
+      issnBatches = issns.length <= 100 ? [issns] : batchISSNs(issns);
+    }
   }
 
   try {

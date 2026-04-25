@@ -21,7 +21,7 @@ export default function JournalModal({
 }: Props) {
   const [domainFilter, setDomainFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const MAX_JOURNALS = 20;
+  const MAX_JOURNALS = 50;
 
   // Local state for pending selections (not yet applied)
   const [pendingJournals, setPendingJournals] = useState<SelectedJournal[]>(selectedJournals);

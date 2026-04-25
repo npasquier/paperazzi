@@ -25,3 +25,41 @@ export const ECON_DOMAINS = [
 ] as const;
  
 export const ECON_CATEGORIES = [1, 2, 3, 4] as const;
+
+import journals from './journals';
+
+// Built-in wide presets shown as pills in the Journals > Wide filter subsection.
+// A preset is either a (categories, domains) combo, or an explicit ISSN whitelist
+// (used when the desired set isn't expressible as cat/dom — e.g. "Top 5 GEN").
+export interface EconPreset {
+  id: string;
+  name: string;
+  categories: readonly number[];
+  domains: readonly string[];
+  issns?: readonly string[]; // when set, overrides cat/dom server-side
+}
+
+// Top 5 GEN = first 5 entries in journals.ts with domain='GEN' and category=1.
+// Computed at import time so it stays in sync if journals.ts is reordered.
+const TOP5_GEN_ISSNS: readonly string[] = (
+  journals as { issn: string; domain: string; category: number }[]
+)
+  .filter((j) => j.domain === 'GEN' && j.category === 1)
+  .slice(0, 5)
+  .map((j) => j.issn);
+
+export const ECON_PRESETS: readonly EconPreset[] = [
+  {
+    id: 'all',
+    name: 'All',
+    categories: [],
+    domains: [],
+  },
+  {
+    id: 'top5gen',
+    name: 'Top 5 GEN',
+    categories: [],
+    domains: [],
+    issns: TOP5_GEN_ISSNS,
+  },
+];
