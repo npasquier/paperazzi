@@ -2,8 +2,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search } from 'lucide-react';
+import { Search, Database } from 'lucide-react';
 import { useState, useEffect, Suspense } from 'react';
+import StorageModal from './StorageModal';
 
 function NavBarContent() {
   const pathname = usePathname();
@@ -13,6 +14,8 @@ function NavBarContent() {
 
   // Local search query state (only for search page)
   const [query, setQuery] = useState('');
+  // Storage viewer modal
+  const [showStorage, setShowStorage] = useState(false);
 
   // Sync with URL when on search page
   useEffect(() => {
@@ -90,14 +93,29 @@ function NavBarContent() {
           </div>
         )}
 
+        {/* Stored-data viewer */}
+        <button
+          onClick={() => setShowStorage(true)}
+          className='text-stone-500 hover:text-stone-800 transition flex-shrink-0 ml-auto p-1'
+          title='View stored data'
+          aria-label='View stored data'
+        >
+          <Database size={18} />
+        </button>
+
         {/* About link - always visible */}
         <Link
           href='/about'
-          className='text-sm text-stone-700 hover:text-stone-900 transition flex-shrink-0 ml-auto'
+          className='text-sm text-stone-700 hover:text-stone-900 transition flex-shrink-0'
         >
           About
         </Link>
       </div>
+
+      <StorageModal
+        isOpen={showStorage}
+        onClose={() => setShowStorage(false)}
+      />
     </nav>
   );
 }
