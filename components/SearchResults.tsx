@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
+import CitationsNetwork from './ui/CitationsNetwork';
 import { usePins } from '@/contexts/PinContext';
 import {
   X,
@@ -47,6 +48,9 @@ interface Props {
   // Which journal-filter source feeds the API: 'wide' uses econFilter and
   // ignores `journals`; 'specific' does the inverse; 'off' sends neither.
   journalFilterMode?: 'wide' | 'specific' | 'off';
+  // When set, the main area renders the citation network for this OpenAlex
+  // work id instead of the regular results list.
+  networkId?: string | null;
   loadMore?: (page: number) => void;
   onClearCiting?: () => void;
   onClearCitingAll?: () => void;
@@ -72,6 +76,7 @@ export default function SearchResults({
   referencesAll,
   econFilter,
   journalFilterMode = 'wide',
+  networkId,
   loadMore,
   onClearCiting,
   onClearCitingAll,
@@ -101,6 +106,15 @@ export default function SearchResults({
 
   const [isAuthorInfoExpanded, setIsAuthorInfoExpanded] = useState(false);
   const [isAuthorIdCopied, setIsAuthorIdCopied] = useState(false);
+
+  // ── Network view state ─────────────────────────────────────────────
+  const [networkFocal, setNetworkFocal] = useState<Paper | null>(null);
+  const [networkRefs, setNetworkRefs] = useState<Paper[]>([]);
+  const [networkCites, setNetworkCites] = useState<Paper[]>([]);
+  const [networkRefsTotal, setNetworkRefsTotal] = useState<number | null>(null);
+  const [networkCitesTotal, setNetworkCitesTotal] = useState<number | null>(null);
+  const [networkLoading, setNetworkLoading] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
   const [hasAuthorReported, setHasAuthorReported] = useState(false);
 
   const { pinnedIds } = usePins();
@@ -142,11 +156,20 @@ export default function SearchResults({
       params.set('page', '1');
       router.push(`/search?${params.toString()}`);
     };
+    const handleNetworkClick = (e: Event) => {
+      const paper = (e as CustomEvent).detail.paper;
+      const paperId = paper.id.replace('https://openalex.org/', '');
+      const params = new URLSearchParams();
+      params.set('network', paperId);
+      router.push(`/search?${params.toString()}`);
+    };
     window.addEventListener('paper-citing-click', handleCitingClick);
     window.addEventListener('paper-refs-click', handleRefsClick);
+    window.addEventListener('paper-network-click', handleNetworkClick);
     return () => {
       window.removeEventListener('paper-citing-click', handleCitingClick);
       window.removeEventListener('paper-refs-click', handleRefsClick);
+      window.removeEventListener('paper-network-click', handleNetworkClick);
     };
   }, [router]);
 
@@ -255,6 +278,9 @@ export default function SearchResults({
 
   // ─── Main search effect ───
   useEffect(() => {
+    // Skip the regular search entirely while we're rendering a network — the
+    // network fetch (below) drives that view.
+    if (networkId) return;
     if (
       !citing && !citingAll?.length && !referencedBy && !referencesAll?.length &&
       !query && journals.length === 0 && authors.length === 0 && institutions.length === 0
@@ -311,7 +337,71 @@ export default function SearchResults({
         setLoadingStartTime(null); setShowSlowLoadingHelp(false);
       }
     });
-  }, [query, journals, authors, institutions, publicationType, from, to, sortBy, page, citing, citingAll, referencedBy, referencesAll, econFilter, journalFilterMode]);
+  }, [query, journals, authors, institutions, publicationType, from, to, sortBy, page, citing, citingAll, referencedBy, referencesAll, econFilter, journalFilterMode, networkId]);
+
+  // ── Network view fetch ───────────────────────────────────────────
+  // When a `networkId` is set, fire three calls in parallel:
+  //   1) the focal paper itself (OpenAlex direct, so we have referenced_works)
+  //   2) refs       — papers the focal cites
+  //   3) cites      — papers that cite the focal
+  // Both /api/search calls return papers with `referenced_works`, which is
+  // what CitationsNetwork needs to compute non-trivial edges.
+  useEffect(() => {
+    if (!networkId) {
+      setNetworkFocal(null);
+      setNetworkRefs([]);
+      setNetworkCites([]);
+      setNetworkRefsTotal(null);
+      setNetworkCitesTotal(null);
+      setNetworkError(null);
+      return;
+    }
+    let aborted = false;
+    setNetworkLoading(true);
+    setNetworkError(null);
+
+    Promise.all([
+      fetch(`https://api.openalex.org/works/${networkId}`).then((r) => r.json()),
+      fetch(`/api/search?referencedBy=${networkId}&perPage=200&sort=cited_by_count:desc`).then((r) => r.json()),
+      fetch(`/api/search?citing=${networkId}&perPage=200&sort=cited_by_count:desc`).then((r) => r.json()),
+    ])
+      .then(([focalRaw, refsResp, citesResp]) => {
+        if (aborted) return;
+        if (refsResp.error || citesResp.error) {
+          setNetworkError(refsResp.error || citesResp.error);
+          return;
+        }
+        const focal: Paper = {
+          id: focalRaw.id,
+          title: cleanHtml(focalRaw.title),
+          authors: (focalRaw.authorships || []).map((a: { author: { display_name: string } }) => a.author.display_name),
+          publication_year: focalRaw.publication_year,
+          journal_name: focalRaw.primary_location?.source?.display_name || 'Unknown',
+          doi: focalRaw.doi,
+          cited_by_count: focalRaw.cited_by_count || 0,
+          referenced_works_count: focalRaw.referenced_works_count || 0,
+          abstract: '',
+          referenced_works: (focalRaw.referenced_works || []).map((id: string) => id.replace('https://openalex.org/', '')),
+        };
+        setNetworkFocal(focal);
+        setNetworkRefs(refsResp.results || []);
+        setNetworkCites(citesResp.results || []);
+        setNetworkRefsTotal(refsResp.meta?.count ?? null);
+        setNetworkCitesTotal(citesResp.meta?.count ?? null);
+      })
+      .catch((err: unknown) => {
+        if (aborted) return;
+        const msg = err instanceof Error ? err.message : 'Network error';
+        setNetworkError(msg);
+      })
+      .finally(() => {
+        if (!aborted) setNetworkLoading(false);
+      });
+
+    return () => {
+      aborted = true;
+    };
+  }, [networkId]);
 
   // Author helpers
   const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
@@ -335,8 +425,9 @@ export default function SearchResults({
   };
   const isAuthorReported = hasAuthorReported || isAuthorReportedStored;
 
-  // Empty state
-  if (!citing && !citingAll?.length && !referencedBy && !referencesAll?.length && !query && journals.length === 0 && authors.length === 0 && institutions.length === 0) {
+  // Empty state — but only when we're not in network mode (the network view
+  // has its own focal-paper banner and doesn't need a query).
+  if (!networkId && !citing && !citingAll?.length && !referencedBy && !referencesAll?.length && !query && journals.length === 0 && authors.length === 0 && institutions.length === 0) {
     return <div className='text-center py-12 text-stone-500'>Please enter a search query or select filters to begin.</div>;
   }
 
@@ -383,6 +474,87 @@ export default function SearchResults({
   }
 
   const authorId = authorInfo?.id?.replace('https://openalex.org/', '') || '';
+
+  // ── Network view short-circuits the rest of the page ────────────
+  if (networkId) {
+    return (
+      <div className='flex flex-col h-full'>
+        {/* Header banner with focal info + clear button */}
+        <div className='mb-3 p-3 bg-stone-50 border border-stone-200 rounded-lg flex items-start gap-3'>
+          <div className='flex-1 min-w-0'>
+            <p className='text-xs font-medium text-stone-600 mb-1'>
+              Network for:
+            </p>
+            {networkFocal ? (
+              <>
+                <p className='text-sm font-semibold text-stone-900 line-clamp-2 leading-snug'>
+                  {networkFocal.title}
+                </p>
+                <p className='text-xs text-stone-500 mt-0.5'>
+                  {networkFocal.authors?.slice(0, 3).join(', ')}
+                  {networkFocal.authors && networkFocal.authors.length > 3 ? ' et al.' : ''}
+                  {' · '}
+                  {networkFocal.publication_year}
+                  {' · '}
+                  {networkFocal.cited_by_count?.toLocaleString() || 0} citations
+                  {networkFocal.referenced_works_count !== undefined &&
+                    ` · ${networkFocal.referenced_works_count} references`}
+                </p>
+              </>
+            ) : networkLoading ? (
+              <p className='text-sm text-stone-500'>Loading focal paper…</p>
+            ) : (
+              <p className='text-sm text-stone-500'>Paper ID: {networkId}</p>
+            )}
+          </div>
+          <button
+            onClick={() => router.push('/search')}
+            className='p-1 hover:bg-stone-200 rounded transition flex-shrink-0'
+            title='Exit network view'
+          >
+            <X size={16} className='text-stone-600' />
+          </button>
+        </div>
+
+        {/* Body */}
+        {networkLoading ? (
+          <div className='flex items-center justify-center py-16 gap-3'>
+            <div className='animate-spin h-5 w-5 border-2 border-stone-300 border-t-stone-700 rounded-full' />
+            <span className='text-sm text-stone-600'>
+              Building network — fetching references and citing papers…
+            </span>
+          </div>
+        ) : networkError ? (
+          <div className='p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700'>
+            Failed to build network: {networkError}
+          </div>
+        ) : networkFocal ? (
+          <>
+            {((networkRefsTotal !== null && networkRefsTotal > networkRefs.length) ||
+              (networkCitesTotal !== null && networkCitesTotal > networkCites.length)) && (
+              <p className='text-[11px] text-stone-500 mb-2'>
+                Capped at top 200 by Most cited per direction.
+                {networkRefsTotal !== null && networkRefsTotal > networkRefs.length &&
+                  ` Showing ${networkRefs.length} of ${networkRefsTotal.toLocaleString()} references.`}
+                {networkCitesTotal !== null && networkCitesTotal > networkCites.length &&
+                  ` Showing ${networkCites.length} of ${networkCitesTotal.toLocaleString()} citing papers.`}
+              </p>
+            )}
+            <div className='flex-1 min-h-0'>
+              <CitationsNetwork
+                focal={networkFocal}
+                refs={networkRefs}
+                cites={networkCites}
+              />
+            </div>
+            <p className='text-[11px] text-stone-400 mt-2'>
+              Hover a node to highlight its edges (incoming = sky, outgoing = emerald). Click a node to open the paper.
+            </p>
+          </>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className='flex flex-col h-full'>

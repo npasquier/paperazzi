@@ -76,6 +76,8 @@ function PaperazziAppContent() {
     journalFilterMode: 'wide',
   });
   const [page, setPage] = useState(1);
+  // Focal-paper id for the network view; null when not in network mode.
+  const [networkId, setNetworkId] = useState<string | null>(null);
 
   // Listen for paper-reported events to show celebration
   useEffect(() => {
@@ -109,6 +111,7 @@ function PaperazziAppContent() {
       const referencedBy = searchParams.get('referencedBy') || '';
       const referencesAll =
         searchParams.get('referencesAll')?.split(',').filter(Boolean) || [];
+      const network = searchParams.get('network') || '';
 
       const journals = mapIssnsToJournals(journalIssns);
 
@@ -171,6 +174,7 @@ function PaperazziAppContent() {
       }));
       setSearchQuery(q);
       setPage(p);
+      setNetworkId(network || null);
     };
 
     syncFromURL();
@@ -412,6 +416,7 @@ function PaperazziAppContent() {
             onClearAuthor={handleClearAuthor}
             econFilter={filters.econFilter}
             journalFilterMode={filters.journalFilterMode}
+            networkId={networkId}
           />
         </div>
       </main>
@@ -462,6 +467,7 @@ function PaperazziAppContent() {
           setFilters((prev) => ({ ...prev, institutions: selected }))
         }
       />
+
     </div>
   );
 }

@@ -96,4 +96,7 @@ export interface Paper {
   referenced_works_count?: number;
   abstract: string;
   issns?: string[];
+  // OpenAlex IDs of works this paper cites — needed to draw network edges
+  // client-side without extra API calls.
+  referenced_works?: string[];
 }

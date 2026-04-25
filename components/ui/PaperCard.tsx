@@ -11,6 +11,7 @@ import {
   Copy,
   Check,
   CheckCircle,
+  Network as NetworkIcon,
 } from 'lucide-react';
 import { Paper } from '@/types/interfaces';
 import PinButton from './PinButton';
@@ -320,6 +321,21 @@ export default function PaperCard({
                 </button>
               </>
             )}
+            <span className='flex-shrink-0'>•</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onClick) onClick();
+                const event = new CustomEvent('paper-network-click', {
+                  detail: { paper },
+                });
+                window.dispatchEvent(event);
+              }}
+              className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
+              title='View references + citing papers as a network'
+            >
+              <NetworkIcon size={10} /> network
+            </button>
           </div>
         </div>
       </div>
@@ -418,6 +434,20 @@ export default function PaperCard({
                   </button>
                 </>
               )}
+              <span>•</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const event = new CustomEvent('paper-network-click', {
+                    detail: { paper },
+                  });
+                  window.dispatchEvent(event);
+                }}
+                className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer'
+                title='View references + citing papers as a network'
+              >
+                <NetworkIcon size={11} /> see network
+              </button>
             </div>
           </div>
 

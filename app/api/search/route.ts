@@ -101,6 +101,9 @@ function mapToPapers(results: any[]): any[] {
     referenced_works_count: w.referenced_works_count || 0,
     abstract: buildAbstract(w.abstract_inverted_index),
     issns: w.primary_location?.source?.issn || [],
+    // Normalised OpenAlex IDs (no URL prefix) so client-side edge lookups can
+    // match against paper.id without per-call massaging.
+    referenced_works: (w.referenced_works || []).map(normalizeId),
   }));
 }
 
@@ -171,6 +174,7 @@ async function econBatchedSearch(
   page: number,
   apiKey: string,
   issnBatches: string[][],
+  perPage: number,
 ): Promise<{ results: any[]; count: number }> {
   // Step 1: Get count from each batch in parallel (cheap: per-page=1)
   const batchCounts = await Promise.all(
@@ -191,7 +195,7 @@ async function econBatchedSearch(
   if (totalCount === 0) return { results: [], count: 0 };
 
   // Step 2: Walk batches to find which one(s) contain the requested page
-  let skipRemaining = (page - 1) * 20;
+  let skipRemaining = (page - 1) * perPage;
   const resultsToReturn: any[] = [];
 
   for (let i = 0; i < issnBatches.length; i++) {
@@ -203,16 +207,16 @@ async function econBatchedSearch(
       continue;
     }
 
-    const needed = 20 - resultsToReturn.length;
-    const batchPage = Math.floor(skipRemaining / 20) + 1;
-    const offsetInPage = skipRemaining % 20;
+    const needed = perPage - resultsToReturn.length;
+    const batchPage = Math.floor(skipRemaining / perPage) + 1;
+    const offsetInPage = skipRemaining % perPage;
 
     const batchFilters = [
       ...baseFilters,
       `primary_location.source.issn:${issnBatches[i].join('|')}`,
     ];
 
-    let url = `https://api.openalex.org/works?per-page=20&page=${batchPage}&api_key=${apiKey}`;
+    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${batchPage}&api_key=${apiKey}`;
     url += `&filter=${batchFilters.join(',')}`;
     if (query) url += `&search=${encodeURIComponent(query)}`;
     url += buildSort(sort, !!query);
@@ -223,7 +227,7 @@ async function econBatchedSearch(
     resultsToReturn.push(...sliced);
 
     skipRemaining = 0;
-    if (resultsToReturn.length >= 20) break;
+    if (resultsToReturn.length >= perPage) break;
   }
 
   return { results: resultsToReturn, count: totalCount };
@@ -246,6 +250,7 @@ async function searchWithinIds(
   page: number,
   apiKey: string,
   issnBatches: string[][] | null,
+  perPage: number,
 ): Promise<{ results: any[]; count: number }> {
   if (workIds.length === 0) return { results: [], count: 0 };
 
@@ -271,15 +276,19 @@ async function searchWithinIds(
         page,
         apiKey,
         issnBatches,
+        perPage,
       );
     }
 
     const totalCount = intersectedIds.length;
-    const paginatedIds = intersectedIds.slice((page - 1) * 20, page * 20);
+    const paginatedIds = intersectedIds.slice(
+      (page - 1) * perPage,
+      page * perPage,
+    );
     if (paginatedIds.length === 0) return { results: [], count: totalCount };
 
     const idsFilter = paginatedIds.map(toFullId).join('|');
-    let url = `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=20&api_key=${apiKey}`;
+    let url = `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=${perPage}&api_key=${apiKey}`;
     url += buildSort(sort, true);
     const data = await fetchOpenAlex(url);
     return { results: data.results || [], count: totalCount };
@@ -288,11 +297,19 @@ async function searchWithinIds(
   // No query
   if (issnBatches) {
     const baseFilters = buildFilters({ ...filterParams, workIds });
-    return econBatchedSearch(baseFilters, '', sort, page, apiKey, issnBatches);
+    return econBatchedSearch(
+      baseFilters,
+      '',
+      sort,
+      page,
+      apiKey,
+      issnBatches,
+      perPage,
+    );
   }
 
   const filters = buildFilters({ ...filterParams, workIds });
-  let url = `https://api.openalex.org/works?filter=${filters.join(',')}&per-page=20&page=${page}&api_key=${apiKey}`;
+  let url = `https://api.openalex.org/works?filter=${filters.join(',')}&per-page=${perPage}&page=${page}&api_key=${apiKey}`;
   url += buildSort(sort, false);
   const data = await fetchOpenAlex(url);
   return { results: data.results || [], count: data.meta?.count || 0 };
@@ -322,6 +339,12 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get('to');
   const sort = searchParams.get('sort') || 'relevance_score';
   const page = Number(searchParams.get('page') || 1);
+  // perPage: 1..200, default 20. Used by graph mode (200) to fit more dots in
+  // a single round-trip.
+  const perPage = Math.min(
+    200,
+    Math.max(1, Number(searchParams.get('perPage') || 20)),
+  );
 
   const citing = searchParams.get('citing');
   const citingAll = (searchParams.get('citingAll') || '')
@@ -383,7 +406,7 @@ export async function GET(req: NextRequest) {
       if (referencedWorks.length === 0) {
         return NextResponse.json({
           results: [],
-          meta: { count: 0, page, per_page: 20 },
+          meta: { count: 0, page, per_page: perPage },
           referencedByTitle: cleanHtml(paperData.title),
         });
       }
@@ -397,11 +420,12 @@ export async function GET(req: NextRequest) {
         page,
         apiKey,
         issnBatches,
+        perPage,
       );
 
       return NextResponse.json({
         results: mapToPapers(results),
-        meta: { count, page, per_page: 20 },
+        meta: { count, page, per_page: perPage },
         referencedByTitle: cleanHtml(paperData.title),
       });
     }
@@ -423,7 +447,7 @@ export async function GET(req: NextRequest) {
       if (commonIds.length === 0) {
         return NextResponse.json({
           results: [],
-          meta: { count: 0, page, per_page: 20 },
+          meta: { count: 0, page, per_page: perPage },
         });
       }
 
@@ -435,10 +459,11 @@ export async function GET(req: NextRequest) {
         page,
         apiKey,
         issnBatches,
+        perPage,
       );
       return NextResponse.json({
         results: mapToPapers(results),
-        meta: { count, page, per_page: 20 },
+        meta: { count, page, per_page: perPage },
       });
     }
 
@@ -459,7 +484,7 @@ export async function GET(req: NextRequest) {
       if (commonIds.length === 0) {
         return NextResponse.json({
           results: [],
-          meta: { count: 0, page, per_page: 20 },
+          meta: { count: 0, page, per_page: perPage },
         });
       }
 
@@ -471,10 +496,11 @@ export async function GET(req: NextRequest) {
         page,
         apiKey,
         issnBatches,
+        perPage,
       );
       return NextResponse.json({
         results: mapToPapers(results),
-        meta: { count, page, per_page: 20 },
+        meta: { count, page, per_page: perPage },
       });
     }
 
@@ -489,14 +515,15 @@ export async function GET(req: NextRequest) {
         page,
         apiKey,
         issnBatches,
+        perPage,
       );
       return NextResponse.json({
         results: mapToPapers(results),
-        meta: { count, page, per_page: 20 },
+        meta: { count, page, per_page: perPage },
       });
     }
 
-    let url = `https://api.openalex.org/works?per-page=20&page=${page}&api_key=${apiKey}`;
+    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${page}&api_key=${apiKey}`;
     if (filters.length) url += `&filter=${filters.join(',')}`;
     if (query) url += `&search=${encodeURIComponent(query)}`;
     url += buildSort(sort, !!query);
@@ -506,7 +533,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         results: mapToPapers(data.results || []),
-        meta: { count: data.meta?.count || 0, page, per_page: 20 },
+        meta: { count: data.meta?.count || 0, page, per_page: perPage },
       },
       {
         headers: {
