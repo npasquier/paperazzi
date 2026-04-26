@@ -25,6 +25,9 @@ interface PaperCardProps {
   highlighted?: boolean;
   onClick?: () => void;
   onAuthorClick?: (authorName: string) => void;
+  // Color used to mark a paper as belonging to a pin group (rendered as a
+  // thin left border on the pinned variant).
+  groupColor?: string;
 }
 
 export default function PaperCard({
@@ -36,6 +39,7 @@ export default function PaperCard({
   highlighted = false,
   onClick,
   onAuthorClick,
+  groupColor,
 }: PaperCardProps) {
   const [isAbstractExpanded, setIsAbstractExpanded] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
@@ -256,6 +260,14 @@ export default function PaperCard({
               : 'border-stone-200 hover:border-stone-300'
           }
         `}
+        style={
+          groupColor
+            ? {
+                borderLeftColor: groupColor,
+                borderLeftWidth: 3,
+              }
+            : undefined
+        }
       >
         {showPinButton && (
           <div className='absolute top-2 right-2'>
@@ -336,6 +348,30 @@ export default function PaperCard({
             >
               <NetworkIcon size={10} /> network
             </button>
+            {/* Inline icon-only links: Scholar always, PDF if available.
+                Kept tiny and label-less to preserve the card's soberness. */}
+            <span className='flex-shrink-0'>•</span>
+            <button
+              onClick={openGoogleScholar}
+              className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
+              title='Open in Google Scholar'
+              aria-label='Open in Google Scholar'
+            >
+              <BookOpen size={11} />
+            </button>
+            {paper.pdf_url && (
+              <a
+                href={paper.pdf_url}
+                target='_blank'
+                rel='noopener noreferrer'
+                onClick={(e) => e.stopPropagation()}
+                className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
+                title='Open PDF'
+                aria-label='Open PDF'
+              >
+                <Download size={11} />
+              </a>
+            )}
           </div>
         </div>
       </div>

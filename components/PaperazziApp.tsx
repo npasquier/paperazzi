@@ -399,7 +399,12 @@ function PaperazziAppContent() {
         >
           <SearchResults
             query={searchQuery}
-            journals={searchFilters.journals}
+            // Use live filters.journals (not searchFilters.journals) so that
+            // adding/removing manual journals in the panel takes effect
+            // immediately — particularly important for the network view's
+            // specific-mode filter, since the JournalModal doesn't push to
+            // the URL.
+            journals={filters.journals}
             authors={searchFilters.authors}
             institutions={searchFilters.institutions}
             publicationType={searchFilters.publicationType}

@@ -22,6 +22,30 @@ import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
 
+// Palette used to color-code pin groups. Picked for distinguishability and
+// soft-but-visible at a small dot/border size. Order matters only as a
+// fallback when the palette is exhausted (deterministic hash below cycles).
+const GROUP_COLOR_PALETTE = [
+  '#f59e0b', // amber
+  '#10b981', // emerald
+  '#0ea5e9', // sky
+  '#8b5cf6', // violet
+  '#f43f5e', // rose
+  '#14b8a6', // teal
+  '#6366f1', // indigo
+  '#f97316', // orange
+];
+
+// Deterministic group → color mapping. Hashing the group id (instead of using
+// its index) keeps the color stable when groups are reordered.
+function getGroupColor(groupId: string): string {
+  let hash = 0;
+  for (let i = 0; i < groupId.length; i++) {
+    hash = (hash * 31 + groupId.charCodeAt(i)) | 0;
+  }
+  return GROUP_COLOR_PALETTE[Math.abs(hash) % GROUP_COLOR_PALETTE.length];
+}
+
 interface PinSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -397,6 +421,7 @@ export default function PinSidebar({
     groupId: string | null,
     index: number,
   ) => {
+    const groupColor = groupId ? getGroupColor(groupId) : undefined;
     const normalizedId = normalizeId(paper.id);
     const isSelected = selectedIds.has(normalizedId);
     const isDragging = draggingPaperId === normalizedId;
@@ -448,6 +473,7 @@ export default function PinSidebar({
                 showPinButton={!selectionMode}
                 preserveParams={preserveParams}
                 onAuthorClick={onAuthorSearch}
+                groupColor={groupColor}
               />
             </div>
           </div>
@@ -527,6 +553,13 @@ export default function PinSidebar({
             </div>
           ) : (
             <>
+              {/* Colored dot — same color used as the left border on this
+                  group's papers, so the visual link is immediate. */}
+              <span
+                className='inline-block w-2 h-2 rounded-full flex-shrink-0'
+                style={{ backgroundColor: getGroupColor(groupId) }}
+                aria-hidden='true'
+              />
               <span className='flex-1 text-xs text-stone-600 uppercase tracking-wide'>
                 {groupName}
               </span>
