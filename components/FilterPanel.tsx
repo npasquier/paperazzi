@@ -775,7 +775,11 @@ export default function FilterPanel({
                         </p>
                         <div className='flex gap-1'>
                           {ECON_CATEGORIES.map((cat) => {
+                            // Only highlight when the wide filter is actually
+                            // engaged — default WIDE state (nothing selected)
+                            // shows no buttons highlighted.
                             const isSelected =
+                              econ.enabled &&
                               !hasIssnWhitelist &&
                               (econ.categories.length === 0 ||
                                 econ.categories.includes(cat));
@@ -854,6 +858,7 @@ export default function FilterPanel({
                         <div className='flex flex-wrap gap-1 max-h-24 overflow-y-auto'>
                           {ECON_DOMAINS.map(({ key, label }) => {
                             const isSelected =
+                              econ.enabled &&
                               !hasIssnWhitelist &&
                               (econ.domains.length === 0 ||
                                 econ.domains.includes(key));

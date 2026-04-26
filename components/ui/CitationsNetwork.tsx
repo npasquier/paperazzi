@@ -1,6 +1,8 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Paper } from '@/types/interfaces';
+import { Maximize2, Plus, Minus, ExternalLink } from 'lucide-react';
+import PinButton from './PinButton';
 
 export type NodeRole = 'focal' | 'ref' | 'cite';
 
@@ -10,27 +12,23 @@ interface Props {
   cites: Paper[]; // papers that cite the focal
 }
 
-// Layout constants (SVG user-space units; viewBox scales to container width).
-const W = 1100;
+// SVG user-space dimensions. viewBox scales to container width via w-full.
+const W = 1400;
 const H = 640;
 const PAD = { top: 18, right: 24, bottom: 40, left: 56 };
 const INNER_W = W - PAD.left - PAD.right;
 const INNER_H = H - PAD.top - PAD.bottom;
 
-// "Smith 2020" — short ResearchRabbit-style label.
-function shortLabel(p: Paper): string {
-  const authors = p.authors || [];
-  const first = authors[0] || '';
-  // "Last, First" → "Last"; otherwise take last word.
-  const lastName = first.includes(',')
-    ? first.split(',')[0].trim()
-    : (first.split(/\s+/).pop() || '').trim();
-  const year = p.publication_year ? String(p.publication_year) : '';
-  if (!lastName && !year) return '';
-  if (!lastName) return year;
-  if (!year) return lastName;
-  return `${lastName} ${year}`;
-}
+// Pan/zoom limits.
+const MIN_K = 0.5;
+const MAX_K = 8;
+// Wheel zoom uses an exponential factor proportional to deltaY so it feels
+// smooth on trackpads (small deltaY) and snappy on mouse wheels (large
+// deltaY). Tuning constant: ~0.001 makes one mouse-wheel tick (~100px) zoom
+// by ~10%, while a trackpad scroll (deltaY≈3) only zooms by ~0.3% per event.
+const WHEEL_ZOOM_RATE = 0.0012;
+// Step size for explicit +/- buttons.
+const BUTTON_ZOOM_FACTOR = 1.3;
 
 function normalizeId(id: string): string {
   return id.replace('https://openalex.org/', '');
@@ -43,21 +41,80 @@ function paperLink(p: Paper): string {
   return `https://openalex.org/${normalizeId(p.id)}`;
 }
 
+// "Smith 2020" — short ResearchRabbit-style label.
+function shortLabel(p: Paper): string {
+  const authors = p.authors || [];
+  const first = authors[0] || '';
+  const lastName = first.includes(',')
+    ? first.split(',')[0].trim()
+    : (first.split(/\s+/).pop() || '').trim();
+  const year = p.publication_year ? String(p.publication_year) : '';
+  if (!lastName && !year) return '';
+  if (!lastName) return year;
+  if (!year) return lastName;
+  return `${lastName} ${year}`;
+}
+
 interface NodeView {
   paper: Paper;
   role: NodeRole;
-  cx: number;
+  cx: number; // base coordinate in chart space (pre-zoom)
   cy: number;
 }
 
+interface Transform {
+  tx: number;
+  ty: number;
+  k: number;
+}
+
+const IDENTITY: Transform = { tx: 0, ty: 0, k: 1 };
+
 export default function CitationsNetwork({ focal, refs, cites }: Props) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // Pinned nodes — multi-select. Click toggles membership. Persists after
+  // mouse leaves so users can chain clicks to trace a citation path.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [transform, setTransform] = useState<Transform>(IDENTITY);
 
-  // ── Build node set, scales, and edges ────────────────────────────────
-  const { nodes, edges, yTicks, xTicks } = useMemo(() => {
-    // De-duplicate (a paper might appear in both refs and cites; rare but
-    // possible if focal cites it AND it cites focal — keep only one node and
-    // mark it as ref).
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragRef = useRef<{
+    startClientX: number;
+    startClientY: number;
+    startTx: number;
+    startTy: number;
+    moved: boolean; // tracks whether the gesture was a drag vs a click
+  } | null>(null);
+  // Brief grace timer so the tooltip survives the gap between leaving a
+  // node and entering the tooltip card.
+  const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHoverClear = () => {
+    if (hoverClearTimerRef.current) {
+      clearTimeout(hoverClearTimerRef.current);
+      hoverClearTimerRef.current = null;
+    }
+  };
+  const scheduleHoverClear = (id: string) => {
+    cancelHoverClear();
+    hoverClearTimerRef.current = setTimeout(() => {
+      setHoveredId((prev) => (prev === id ? null : prev));
+      hoverClearTimerRef.current = null;
+    }, 150);
+  };
+  // Used when the cursor leaves the SVG entirely — we don't know which node
+  // (if any) was hovered, so clear unconditionally after the same grace
+  // window. Cancelled if the cursor lands on the tooltip card.
+  const scheduleHoverClearAny = () => {
+    cancelHoverClear();
+    hoverClearTimerRef.current = setTimeout(() => {
+      setHoveredId(null);
+      hoverClearTimerRef.current = null;
+    }, 150);
+  };
+
+  // ── Build scales, nodes, edges ──────────────────────────────────────
+  const built = useMemo(() => {
     const seen = new Set<string>([normalizeId(focal.id)]);
     const refNodes = refs
       .filter((p) => {
@@ -82,7 +139,6 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
       ...citeNodes.map((p) => ({ paper: p, role: 'cite' as NodeRole })),
     ];
 
-    // Year + citation domain over everything that has data.
     const withYears = allPapers.filter(
       ({ paper }) => typeof paper.publication_year === 'number',
     );
@@ -93,15 +149,13 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     const xMax = maxYear + 0.5;
     const xSpan = Math.max(1, xMax - xMin);
 
-    const cs = withYears.map((n) =>
-      Math.max(0, n.paper.cited_by_count || 0),
-    );
+    const cs = withYears.map((n) => Math.max(0, n.paper.cited_by_count || 0));
     const maxCites = cs.length ? Math.max(...cs) : 1;
     const logMaxY = Math.max(1, Math.log10(maxCites + 1));
 
-    const xScale = (year: number) =>
+    const xScale = (year: number): number =>
       PAD.left + ((year - xMin) / xSpan) * INNER_W;
-    const yScale = (c: number) =>
+    const yScale = (c: number): number =>
       PAD.top + INNER_H - (Math.log10(c + 1) / logMaxY) * INNER_H;
 
     const nodes: NodeView[] = allPapers.map(({ paper, role }) => ({
@@ -111,12 +165,6 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
       cy: yScale(Math.max(0, paper.cited_by_count || 0)),
     }));
 
-    // Edge computation — a→b means "a cites b". Sources:
-    //   • focal → each ref         (definitional)
-    //   • each cite → focal        (definitional)
-    //   • for any non-focal X with referenced_works set, an edge X→Y for each
-    //     Y in the visualised set whose normalised id is in X.referenced_works.
-    //     This catches cite→ref and cite→cite edges that aren't implicit.
     const idToNode = new Map<string, NodeView>();
     for (const n of nodes) idToNode.set(normalizeId(n.paper.id), n);
 
@@ -135,17 +183,15 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
 
     for (const n of nodes) {
       if (n.role === 'ref') pushEdge(focalId, normalizeId(n.paper.id), 'focal');
-      if (n.role === 'cite')
-        pushEdge(normalizeId(n.paper.id), focalId, 'focal');
+      if (n.role === 'cite') pushEdge(normalizeId(n.paper.id), focalId, 'focal');
     }
     for (const n of nodes) {
-      if (n.role === 'focal') continue; // focal's references are implicit above
+      if (n.role === 'focal') continue;
       const fromId = normalizeId(n.paper.id);
       const refsList = n.paper.referenced_works || [];
       for (const rawTo of refsList) {
         const toId = normalizeId(rawTo);
         if (idToNode.has(toId)) {
-          // Skip the implicit cite→focal which we already added.
           if (toId === focalId) continue;
           pushEdge(fromId, toId, 'between');
         }
@@ -165,10 +211,10 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     for (let y = minYear; y <= maxYear; y += yearStep) xTicks.push(y);
     if (xTicks[xTicks.length - 1] !== maxYear) xTicks.push(maxYear);
 
-    return { nodes, edges, yTicks, xTicks };
+    return { nodes, edges, idToNode, xScale, yScale, yTicks, xTicks, minYear, maxYear };
   }, [focal, refs, cites]);
 
-  if (nodes.length <= 1) {
+  if (built.nodes.length <= 1) {
     return (
       <div className='border border-stone-200 rounded p-6 text-center text-sm text-stone-500'>
         Not enough papers with publication years to plot a network.
@@ -176,23 +222,116 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     );
   }
 
-  // Lookup helpers used during render.
-  const idToNode = new Map<string, NodeView>();
-  for (const n of nodes) idToNode.set(normalizeId(n.paper.id), n);
+  // ── Transform helpers (chart coords → screen coords) ────────────────
+  const screenX = (cx: number) => cx * transform.k + transform.tx;
+  const screenY = (cy: number) => cy * transform.k + transform.ty;
 
-  // Hover-state edge filter: when a node is hovered, only highlight that
-  // node's own edges; everything else fades.
-  const hoveredEdges = hoveredId
-    ? new Set(
-        edges
-          .filter((e) => e.fromId === hoveredId || e.toId === hoveredId)
-          .map((e) => `${e.fromId}->${e.toId}`),
-      )
-    : null;
+  // ── Pan/zoom event handlers ─────────────────────────────────────────
+  const toViewBox = (clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * W,
+      y: ((clientY - rect.top) / rect.height) * H,
+    };
+  };
 
+  // Apply a zoom factor centered on a given viewBox-space point. Used by
+  // both the wheel handler and the +/− buttons.
+  const zoomAt = (factor: number, cx: number, cy: number) => {
+    setTransform((prev) => {
+      const targetK = Math.max(MIN_K, Math.min(MAX_K, prev.k * factor));
+      const realFactor = targetK / prev.k;
+      return {
+        k: targetK,
+        tx: cx - (cx - prev.tx) * realFactor,
+        ty: cy - (cy - prev.ty) * realFactor,
+      };
+    });
+  };
+
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.stopPropagation();
+    const { x, y } = toViewBox(e.clientX, e.clientY);
+    // deltaY-proportional exponential factor: smooth on trackpads, snappy
+    // on mouse wheels. Negative deltaY (scrolling up) → factor > 1 (zoom in).
+    const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_RATE);
+    zoomAt(factor, x, y);
+  };
+
+  // Centered-on-viewport zoom for +/− buttons.
+  const zoomCenter = (factor: number) => {
+    zoomAt(factor, W / 2, H / 2);
+  };
+
+  const startPan = (e: React.PointerEvent<SVGRectElement>) => {
+    if (e.button !== 0) return;
+    dragRef.current = {
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startTx: transform.tx,
+      startTy: transform.ty,
+      moved: false,
+    };
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
+
+  const movePan = (e: React.PointerEvent<SVGRectElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const dx = ((e.clientX - drag.startClientX) / rect.width) * W;
+    const dy = ((e.clientY - drag.startClientY) / rect.height) * H;
+    // Threshold to distinguish a click from a drag (in viewBox units).
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+      drag.moved = true;
+    }
+    // Capture into locals so the updater doesn't crash if endPan nulls the
+    // ref between this scheduling call and the deferred state apply (React
+    // 19 strict mode also double-invokes updaters).
+    const startTx = drag.startTx;
+    const startTy = drag.startTy;
+    setTransform((t) => ({
+      ...t,
+      tx: startTx + dx,
+      ty: startTy + dy,
+    }));
+  };
+
+  const endPan = (e: React.PointerEvent<SVGRectElement>) => {
+    if (!dragRef.current) return;
+    // Pinned nodes are no longer cleared by clicking empty chart area —
+    // only the legend's "Clear" chip does that. Empty-area clicks are a
+    // no-op so users can pan without losing their path.
+    dragRef.current = null;
+    try {
+      (e.target as Element).releasePointerCapture(e.pointerId);
+    } catch {
+      // pointer may already have been released
+    }
+  };
+
+  // ── Active-state edge filter ────────────────────────────────────────
+  // Active set = pinned (selectedIds) ∪ current hover. Hover ADDS to the
+  // highlight rather than overriding it, so chaining clicks builds up a
+  // visible path without losing earlier pins.
+  const activeSet = new Set<string>(selectedIds);
+  if (hoveredId) activeSet.add(hoveredId);
+  const anyActive = activeSet.size > 0;
+
+  // Tooltip is driven solely by hover. If the hovered node is also pinned,
+  // the tooltip becomes interactive (Pin/Open/Unpin); otherwise it's a
+  // transient preview.
   const hoveredNode = hoveredId
-    ? nodes.find((n) => normalizeId(n.paper.id) === hoveredId) || null
+    ? built.nodes.find((n) => normalizeId(n.paper.id) === hoveredId) || null
     : null;
+  const hoveredIsPinned = !!hoveredId && selectedIds.has(hoveredId);
+
+  const isZoomed =
+    transform.k !== 1 || transform.tx !== 0 || transform.ty !== 0;
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -211,257 +350,351 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
           Citing papers ({cites.length})
         </span>
         <span className='inline-flex items-center gap-1.5 ml-auto'>
-          {edges.length} edge{edges.length === 1 ? '' : 's'}
+          {built.edges.length} edge{built.edges.length === 1 ? '' : 's'}
         </span>
+        {selectedIds.size > 0 && (
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className='inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-stone-700 bg-amber-100 hover:bg-amber-200 rounded transition'
+            title='Clear pinned nodes'
+          >
+            {selectedIds.size} pinned · Clear
+          </button>
+        )}
+        <div className='inline-flex items-center gap-1'>
+          <button
+            onClick={() => zoomCenter(1 / BUTTON_ZOOM_FACTOR)}
+            disabled={transform.k <= MIN_K + 1e-6}
+            className='p-1 text-stone-500 bg-stone-100 hover:bg-stone-200 rounded transition disabled:opacity-40 disabled:cursor-not-allowed'
+            title='Zoom out'
+            aria-label='Zoom out'
+          >
+            <Minus size={11} />
+          </button>
+          <span className='text-[10px] text-stone-400 tabular-nums w-9 text-center'>
+            {Math.round(transform.k * 100)}%
+          </span>
+          <button
+            onClick={() => zoomCenter(BUTTON_ZOOM_FACTOR)}
+            disabled={transform.k >= MAX_K - 1e-6}
+            className='p-1 text-stone-500 bg-stone-100 hover:bg-stone-200 rounded transition disabled:opacity-40 disabled:cursor-not-allowed'
+            title='Zoom in'
+            aria-label='Zoom in'
+          >
+            <Plus size={11} />
+          </button>
+          {isZoomed && (
+            <button
+              onClick={() => setTransform(IDENTITY)}
+              className='inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-stone-500 bg-stone-100 hover:bg-stone-200 rounded transition ml-1'
+              title='Reset view'
+            >
+              <Maximize2 size={10} /> Reset
+            </button>
+          )}
+        </div>
       </div>
 
       <div className='relative w-full'>
         <svg
+          ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
-          className='w-full h-auto'
-          onMouseLeave={() => setHoveredId(null)}
+          className='w-full h-auto select-none'
+          style={{
+            cursor: dragRef.current ? 'grabbing' : 'grab',
+            touchAction: 'none',
+          }}
+          // Defer the clear so the tooltip card (a sibling of this SVG) has
+          // time to capture the cursor and cancel the timer.
+          onMouseLeave={scheduleHoverClearAny}
+          onWheel={handleWheel}
         >
-          {/* Y-axis grid + labels */}
-          {yTicks.map((t) => {
-            // Approximate the actual y for the tick: same scale as nodes.
-            // Reuse maxCites by scanning nodes' max cited_by_count.
-            // Simpler: derive yScale here using the same xMin/xMax scheme
-            // by capturing it. Instead we just reuse the formula via a node
-            // — scan nodes for matching tick approximation.
-            // Simpler still: compute against the closest node — but that's
-            // imprecise. We'll derive by inverting from existing nodes.
-            const refNode = nodes.reduce(
-              (best, n) =>
-                Math.abs((n.paper.cited_by_count || 0) - t) <
-                Math.abs((best.paper.cited_by_count || 0) - t)
-                  ? n
-                  : best,
-              nodes[0],
-            );
-            const y = refNode.cy; // close enough for visual tick guide
-            return (
-              <g key={`y-${t}`}>
-                <line
-                  x1={PAD.left}
-                  y1={y}
-                  x2={W - PAD.right}
-                  y2={y}
-                  stroke='#e7e5e4'
-                  strokeDasharray='2,3'
-                />
-                <text
-                  x={PAD.left - 6}
-                  y={y + 3}
-                  fontSize='10'
-                  fill='#a8a29e'
-                  textAnchor='end'
-                >
-                  {t >= 1000 ? `${Math.round(t / 100) / 10}k` : t}
-                </text>
-              </g>
-            );
-          })}
+          <defs>
+            {/* Clip the data layer to the chart area so panned content
+                doesn't bleed onto the axis labels. */}
+            <clipPath id='chart-clip'>
+              <rect
+                x={PAD.left}
+                y={PAD.top}
+                width={INNER_W}
+                height={INNER_H}
+              />
+            </clipPath>
+            {/* Subtle axis-end arrowheads */}
+            <marker
+              id='axis-arrow'
+              viewBox='0 0 10 10'
+              refX='9'
+              refY='5'
+              markerWidth='6'
+              markerHeight='6'
+              orient='auto-start-reverse'
+            >
+              <path d='M 0 0 L 10 5 L 0 10 z' fill='#a8a29e' />
+            </marker>
+          </defs>
 
-          {/* X-axis line */}
-          <line
-            x1={PAD.left}
-            y1={H - PAD.bottom}
-            x2={W - PAD.right}
-            y2={H - PAD.bottom}
-            stroke='#d6d3d1'
+          {/* Pan surface — invisible rect that captures drag gestures.
+              Sits BEHIND nodes so node clicks/hover still work. */}
+          <rect
+            x={PAD.left}
+            y={PAD.top}
+            width={INNER_W}
+            height={INNER_H}
+            fill='transparent'
+            onPointerDown={startPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
           />
-          {/* X-axis labels */}
-          {xTicks.map((t) => {
-            const refNode = nodes.reduce(
-              (best, n) =>
-                Math.abs(n.paper.publication_year - t) <
-                Math.abs(best.paper.publication_year - t)
-                  ? n
-                  : best,
-              nodes[0],
-            );
-            const x = refNode.cx;
+
+          {/* Sober axes — short arrows at the bottom-left with the axis
+              label sitting inline:  ── Year ──>  */}
+          {(() => {
+            const ox = PAD.left + 6;
+            const oy = H - PAD.bottom - 6;
+            const xLen = 90;
+            const yLen = 110;
+            // Text gets a white stroke halo (paintOrder='stroke') so the
+            // line beneath visually breaks around the characters.
             return (
-              <g key={`x-${t}`}>
+              <g>
+                {/* Y axis: vertical line + 'Citations' label rotated 90° */}
                 <line
-                  x1={x}
-                  y1={H - PAD.bottom}
-                  x2={x}
-                  y2={H - PAD.bottom + 4}
-                  stroke='#d6d3d1'
+                  x1={ox}
+                  y1={oy}
+                  x2={ox}
+                  y2={oy - yLen}
+                  stroke='#a8a29e'
+                  strokeWidth={1}
+                  markerEnd='url(#axis-arrow)'
                 />
                 <text
-                  x={x}
-                  y={H - PAD.bottom + 16}
+                  x={ox}
+                  y={oy - yLen / 2}
                   fontSize='10'
-                  fill='#a8a29e'
+                  fill='#78716c'
                   textAnchor='middle'
+                  stroke='white'
+                  strokeWidth={3}
+                  paintOrder='stroke'
+                  transform={`rotate(-90 ${ox} ${oy - yLen / 2})`}
                 >
-                  {t}
+                  Citations
+                </text>
+
+                {/* X axis: horizontal line + 'Year' label inline */}
+                <line
+                  x1={ox}
+                  y1={oy}
+                  x2={ox + xLen}
+                  y2={oy}
+                  stroke='#a8a29e'
+                  strokeWidth={1}
+                  markerEnd='url(#axis-arrow)'
+                />
+                <text
+                  x={ox + xLen / 2}
+                  y={oy + 3}
+                  fontSize='10'
+                  fill='#78716c'
+                  textAnchor='middle'
+                  stroke='white'
+                  strokeWidth={3}
+                  paintOrder='stroke'
+                >
+                  Year
                 </text>
               </g>
             );
-          })}
+          })()}
 
-          {/* Axis titles */}
-          <text
-            x={PAD.left + INNER_W / 2}
-            y={H - 6}
-            fontSize='11'
-            fill='#78716c'
-            textAnchor='middle'
-          >
-            Publication year
-          </text>
-          <text
-            x={14}
-            y={PAD.top + INNER_H / 2}
-            fontSize='11'
-            fill='#78716c'
-            textAnchor='middle'
-            transform={`rotate(-90 14 ${PAD.top + INNER_H / 2})`}
-          >
-            Citations (log)
-          </text>
-
-          {/* Edges layer (rendered before nodes so dots sit on top) */}
-          <g>
-            {edges.map((e) => {
-              const a = idToNode.get(e.fromId);
-              const b = idToNode.get(e.toId);
+          {/* Data layer — clipped so it doesn't render outside the chart area.
+              All elements use screen coordinates (already transformed) so
+              dot radii / stroke widths / font sizes stay constant under zoom. */}
+          <g clipPath='url(#chart-clip)'>
+            {/* Edges */}
+            {built.edges.map((e) => {
+              const a = built.idToNode.get(e.fromId);
+              const b = built.idToNode.get(e.toId);
               if (!a || !b) return null;
-              const isHighlighted = hoveredEdges?.has(
-                `${e.fromId}->${e.toId}`,
-              );
-              const dimmed = hoveredEdges && !isHighlighted;
-              const stroke =
-                isHighlighted && hoveredNode
-                  ? // Color by relationship to the hovered node:
-                    //   incoming  (someone cites hovered) → sky
-                    //   outgoing  (hovered cites someone) → emerald
-                    e.toId === normalizeId(hoveredNode.paper.id)
+              // Edge highlight semantics:
+              //   • path  — both endpoints are active → amber, stronger
+              //   • out   — only `from` is active     → emerald (active cites X)
+              //   • in    — only `to` is active       → sky    (X cites active)
+              //   • none  — no active endpoints; if any node is active, dim
+              const fromActive = activeSet.has(e.fromId);
+              const toActive = activeSet.has(e.toId);
+              const isHighlighted = fromActive || toActive;
+              const isPath = fromActive && toActive;
+              const dimmed = anyActive && !isHighlighted;
+              const stroke = isPath
+                ? '#f59e0b'
+                : fromActive
+                  ? '#10b981'
+                  : toActive
                     ? '#0ea5e9'
-                    : '#10b981'
-                  : '#d6d3d1';
+                    : '#d6d3d1';
               const opacity = dimmed ? 0.15 : isHighlighted ? 0.9 : 0.5;
-              const width = isHighlighted ? 1.4 : 0.8;
+              const width = isPath ? 1.6 : isHighlighted ? 1.4 : 0.8;
               return (
                 <line
                   key={`${e.fromId}->${e.toId}`}
-                  x1={a.cx}
-                  y1={a.cy}
-                  x2={b.cx}
-                  y2={b.cy}
+                  x1={screenX(a.cx)}
+                  y1={screenY(a.cy)}
+                  x2={screenX(b.cx)}
+                  y2={screenY(b.cy)}
                   stroke={stroke}
                   strokeWidth={width}
                   strokeOpacity={opacity}
+                  style={{
+                    transition:
+                      'stroke 180ms ease, stroke-opacity 180ms ease, stroke-width 150ms ease',
+                  }}
                 />
               );
             })}
-          </g>
 
-          {/* Nodes layer */}
-          <g>
-            {nodes.map((n) => {
+            {/* Nodes */}
+            {built.nodes.map((n) => {
               const id = normalizeId(n.paper.id);
-              const isHovered = id === hoveredId;
+              const isActive = activeSet.has(id);
+              const isPinned = selectedIds.has(id);
               const isFocal = n.role === 'focal';
               const fill = isFocal
-                ? '#f59e0b' // amber-500
+                ? '#f59e0b'
                 : n.role === 'ref'
-                  ? '#10b981' // emerald-500
-                  : '#0ea5e9'; // sky-500
-              const r = isFocal ? (isHovered ? 11 : 9) : isHovered ? 6 : 4.5;
+                  ? '#10b981'
+                  : '#0ea5e9';
+              const r = isFocal ? (isActive ? 11 : 9) : isActive ? 6 : 4.5;
               return (
-                <circle
+                <g
                   key={id || `${n.paper.publication_year}-${n.paper.title}`}
-                  cx={n.cx}
-                  cy={n.cy}
-                  r={r}
-                  fill={fill}
-                  stroke={isFocal ? '#92400e' : 'white'}
-                  strokeWidth={isFocal ? 1.5 : 0.8}
-                  fillOpacity={hoveredId && !isHovered ? 0.45 : 1}
-                  className='cursor-pointer transition'
-                  onMouseEnter={() => setHoveredId(id)}
-                  onClick={() =>
-                    window.open(paperLink(n.paper), '_blank', 'noopener')
-                  }
-                />
+                >
+                  {/* Pinned ring — drawn behind the dot for every pinned node */}
+                  {isPinned && (
+                    <circle
+                      cx={screenX(n.cx)}
+                      cy={screenY(n.cy)}
+                      r={r + 4}
+                      fill='none'
+                      stroke={fill}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.7}
+                      pointerEvents='none'
+                    />
+                  )}
+                  <circle
+                    cx={screenX(n.cx)}
+                    cy={screenY(n.cy)}
+                    r={r}
+                    fill={fill}
+                    stroke={isFocal ? '#92400e' : 'white'}
+                    strokeWidth={isFocal ? 1.5 : 0.8}
+                    fillOpacity={anyActive && !isActive && !isFocal ? 0.45 : 1}
+                    className='cursor-pointer'
+                    style={{
+                      transition:
+                        'fill-opacity 180ms ease, r 150ms ease, stroke-opacity 180ms ease',
+                    }}
+                    onMouseEnter={() => {
+                      cancelHoverClear();
+                      setHoveredId(id);
+                    }}
+                    // Schedule a clear with a small delay; if the cursor lands
+                    // on the tooltip card (or another circle) within that
+                    // window, the timer is cancelled.
+                    onMouseLeave={() => scheduleHoverClear(id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Toggle pinned membership. Clicking a pinned node
+                      // releases that one; clicking an unpinned node adds
+                      // it to the active set (cumulative — chain clicks to
+                      // trace a citation path).
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      });
+                    }}
+                  />
+                </g>
               );
             })}
-          </g>
 
-          {/* Per-node short labels (FirstAuthor YYYY) for non-focal nodes */}
-          <g pointerEvents='none'>
-            {nodes.map((n) => {
-              if (n.role === 'focal') return null;
-              const id = normalizeId(n.paper.id);
-              const isHovered = id === hoveredId;
-              const isDimmed = !!hoveredId && !isHovered;
-              const label = shortLabel(n.paper);
+            {/* Per-node short labels (FirstAuthor YYYY) for non-focal nodes */}
+            <g pointerEvents='none'>
+              {built.nodes.map((n) => {
+                if (n.role === 'focal') return null;
+                const id = normalizeId(n.paper.id);
+                const isActive = activeSet.has(id);
+                const isDimmed = anyActive && !isActive;
+                const label = shortLabel(n.paper);
+                if (!label) return null;
+                return (
+                  <text
+                    key={`lbl-${id}`}
+                    x={screenX(n.cx) + 6}
+                    y={screenY(n.cy) + 3}
+                    fontSize={isActive ? 11 : 9}
+                    fontWeight={isActive ? 600 : 400}
+                    fill={isActive ? '#1c1917' : '#57534e'}
+                    fillOpacity={isDimmed ? 0.25 : isActive ? 1 : 0.7}
+                    stroke='#ffffff'
+                    strokeWidth={3}
+                    paintOrder='stroke'
+                    strokeOpacity={isDimmed ? 0.4 : 0.9}
+                    style={{
+                      transition:
+                        'fill-opacity 180ms ease, stroke-opacity 180ms ease, font-size 150ms ease',
+                    }}
+                  >
+                    {label}
+                  </text>
+                );
+              })}
+            </g>
+
+            {/* Focal label — same FirstAuthor YYYY format as other nodes,
+                slightly larger and amber so it stands out without the title. */}
+            {(() => {
+              const focalNode = built.nodes.find((n) => n.role === 'focal');
+              if (!focalNode) return null;
+              const label = shortLabel(focalNode.paper);
               if (!label) return null;
               return (
                 <text
-                  key={`lbl-${id}`}
-                  x={n.cx + 6}
-                  y={n.cy + 3}
-                  fontSize={isHovered ? 11 : 9}
-                  fontWeight={isHovered ? 600 : 400}
-                  fill={isHovered ? '#1c1917' : '#57534e'}
-                  fillOpacity={isDimmed ? 0.25 : isHovered ? 1 : 0.7}
-                  // Subtle white halo so labels stay legible over edges.
+                  x={screenX(focalNode.cx) + 8}
+                  y={screenY(focalNode.cy) + 3}
+                  fontSize='11'
+                  fill='#78350f'
+                  fontWeight='700'
                   stroke='#ffffff'
                   strokeWidth={3}
                   paintOrder='stroke'
-                  strokeOpacity={isDimmed ? 0.4 : 0.9}
+                  pointerEvents='none'
                 >
                   {label}
                 </text>
               );
-            })}
+            })()}
           </g>
-
-          {/* Focal label — title above the focal node */}
-          {(() => {
-            const focalNode = nodes.find((n) => n.role === 'focal');
-            if (!focalNode) return null;
-            const text =
-              (focalNode.paper.title || '').slice(0, 60) +
-              ((focalNode.paper.title || '').length > 60 ? '…' : '');
-            const lx = Math.max(
-              PAD.left + 60,
-              Math.min(W - PAD.right - 60, focalNode.cx),
-            );
-            const ly = Math.max(PAD.top + 14, focalNode.cy - 16);
-            return (
-              <text
-                x={lx}
-                y={ly}
-                fontSize='11'
-                fill='#78350f'
-                textAnchor='middle'
-                fontWeight='700'
-                stroke='#ffffff'
-                strokeWidth={3}
-                paintOrder='stroke'
-                pointerEvents='none'
-              >
-                {text}
-              </text>
-            );
-          })()}
         </svg>
 
-        {/* Tooltip */}
+        {/* Tooltip — kept alive while the cursor is over the card itself, so
+            users can move from node into the card and click Pin/Open. */}
         {hoveredNode && (
           <div
-            className='absolute pointer-events-none bg-white border border-stone-200 rounded shadow-md p-2.5 max-w-xs text-xs'
+            className='absolute pointer-events-auto bg-white border border-stone-300 rounded shadow-md p-2.5 max-w-xs text-xs'
             style={{
-              left: `${(hoveredNode.cx / W) * 100}%`,
-              top: `${(hoveredNode.cy / H) * 100}%`,
+              left: `${(screenX(hoveredNode.cx) / W) * 100}%`,
+              top: `${(screenY(hoveredNode.cy) / H) * 100}%`,
               transform: 'translate(12px, -50%)',
             }}
+            onMouseEnter={cancelHoverClear}
+            onMouseLeave={() => scheduleHoverClear(normalizeId(hoveredNode.paper.id))}
+            onPointerDown={(e) => e.stopPropagation()}
           >
             <p className='font-medium text-stone-900 line-clamp-2 leading-snug'>
               {hoveredNode.paper.title}
@@ -479,12 +712,48 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               {hoveredNode.paper.cited_by_count?.toLocaleString() || 0} citation
               {hoveredNode.paper.cited_by_count === 1 ? '' : 's'}
             </p>
-            <p className='text-[10px] text-stone-400 mt-1'>
-              Click dot to open paper
-            </p>
+            <div className='flex items-center gap-2 mt-2 pt-2 border-t border-stone-100'>
+              <PinButton paper={hoveredNode.paper} size='sm' />
+              <a
+                href={paperLink(hoveredNode.paper)}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='inline-flex items-center gap-1 px-2 py-1 text-[11px] border border-stone-300 rounded text-stone-700 hover:bg-stone-50 transition'
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink size={11} /> Open
+              </a>
+              {hoveredIsPinned && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(normalizeId(hoveredNode.paper.id));
+                      return next;
+                    });
+                  }}
+                  className='ml-auto text-[10px] text-stone-400 hover:text-stone-600 transition'
+                  title='Remove this node from the highlighted path'
+                >
+                  Unpin links
+                </button>
+              )}
+            </div>
+            {!hoveredIsPinned && (
+              <p className='text-[10px] text-stone-400 mt-1'>
+                Click the node to pin its links and add to the path
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      <p className='text-[10px] text-stone-400 mt-1'>
+        Drag to pan · Scroll to zoom · Click nodes to pin their links — keep
+        clicking to trace a path. Edges between two pinned nodes turn amber.
+        Use the Clear chip to reset.
+      </p>
     </div>
   );
 }

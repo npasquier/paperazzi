@@ -360,10 +360,40 @@ export default function SearchResults({
     setNetworkLoading(true);
     setNetworkError(null);
 
+    // Mirror the regular-search journal-filter logic: only the active mode's
+    // params get sent, so toggling Wide/Specific/Off in the side panel
+    // narrows (or opens up) the network just like it narrows the list.
+    const buildFilterParams = (): URLSearchParams => {
+      const p = new URLSearchParams();
+      if (journalFilterMode === 'specific' && journals.length) {
+        p.set('journals', journals.map((j) => j.issn).join(','));
+      }
+      if (journalFilterMode === 'wide' && econFilter?.enabled) {
+        p.set('econEnabled', 'true');
+        if (econFilter.categories.length)
+          p.set('econCat', econFilter.categories.join(','));
+        if (econFilter.domains.length)
+          p.set('econDom', econFilter.domains.join(','));
+        if (econFilter.issns?.length)
+          p.set('econIssns', econFilter.issns.join(','));
+      }
+      return p;
+    };
+
+    const refsParams = buildFilterParams();
+    refsParams.set('referencedBy', networkId);
+    refsParams.set('perPage', '200');
+    refsParams.set('sort', 'cited_by_count:desc');
+
+    const citesParams = buildFilterParams();
+    citesParams.set('citing', networkId);
+    citesParams.set('perPage', '200');
+    citesParams.set('sort', 'cited_by_count:desc');
+
     Promise.all([
       fetch(`https://api.openalex.org/works/${networkId}`).then((r) => r.json()),
-      fetch(`/api/search?referencedBy=${networkId}&perPage=200&sort=cited_by_count:desc`).then((r) => r.json()),
-      fetch(`/api/search?citing=${networkId}&perPage=200&sort=cited_by_count:desc`).then((r) => r.json()),
+      fetch(`/api/search?${refsParams.toString()}`).then((r) => r.json()),
+      fetch(`/api/search?${citesParams.toString()}`).then((r) => r.json()),
     ])
       .then(([focalRaw, refsResp, citesResp]) => {
         if (aborted) return;
@@ -401,7 +431,7 @@ export default function SearchResults({
     return () => {
       aborted = true;
     };
-  }, [networkId]);
+  }, [networkId, journalFilterMode, econFilter, journals]);
 
   // Author helpers
   const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
@@ -500,6 +530,42 @@ export default function SearchResults({
                   {networkFocal.referenced_works_count !== undefined &&
                     ` · ${networkFocal.referenced_works_count} references`}
                 </p>
+                {/* Filter chip — when an active journal filter is narrowing
+                    the refs/cites shown in the graph. */}
+                {(() => {
+                  if (journalFilterMode === 'specific' && journals.length) {
+                    return (
+                      <p className='text-[11px] text-amber-700 mt-1.5'>
+                        Filtered by {journals.length} manual journal
+                        {journals.length === 1 ? '' : 's'}
+                      </p>
+                    );
+                  }
+                  if (journalFilterMode === 'wide' && econFilter?.enabled) {
+                    let label: string;
+                    if (econFilter.presetId === 'top5gen') label = 'Top 5 GEN';
+                    else if (econFilter.presetId === 'all') label = 'All economics journals';
+                    else if (econFilter.issns?.length) {
+                      label = `whitelist of ${econFilter.issns.length} journals`;
+                    } else {
+                      const cats = econFilter.categories.length
+                        ? `cats ${econFilter.categories.join(',')}`
+                        : 'all cats';
+                      const doms = econFilter.domains.length
+                        ? `${econFilter.domains.length} domain${
+                            econFilter.domains.length === 1 ? '' : 's'
+                          }`
+                        : 'all domains';
+                      label = `${cats} · ${doms}`;
+                    }
+                    return (
+                      <p className='text-[11px] text-amber-700 mt-1.5'>
+                        Filtered by {label}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </>
             ) : networkLoading ? (
               <p className='text-sm text-stone-500'>Loading focal paper…</p>

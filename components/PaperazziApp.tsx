@@ -50,7 +50,7 @@ function PaperazziAppContent() {
       domains: [],
       presetId: null,
     },
-    journalFilterMode: 'wide',
+    journalFilterMode: 'off',
   });
 
   // --- Search state ---
@@ -73,7 +73,7 @@ function PaperazziAppContent() {
       domains: [],
       presetId: null,
     },
-    journalFilterMode: 'wide',
+    journalFilterMode: 'off',
   });
   const [page, setPage] = useState(1);
   // Focal-paper id for the network view; null when not in network mode.
@@ -392,7 +392,11 @@ function PaperazziAppContent() {
       />
 
       <main className='flex-1 overflow-y-auto'>
-        <div className='max-w-5xl mx-auto p-6'>
+        <div
+          className={`mx-auto p-6 ${
+            networkId ? 'max-w-none' : 'max-w-5xl'
+          }`}
+        >
           <SearchResults
             query={searchQuery}
             journals={searchFilters.journals}
