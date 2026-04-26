@@ -47,8 +47,29 @@ function NavBarContent() {
     <nav className='surface-panel border-app border-b h-16 shrink-0'>
       <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
         {/* Brand */}
-        <Link href='/' className='flex items-center flex-shrink-0'>
-          <span className='text-xl font-semibold text-accent-strong tracking-tight'>
+        <Link
+          href='/'
+          className='flex items-center gap-2 flex-shrink-0 text-accent-strong'
+        >
+          <svg
+            viewBox='0 0 24 24'
+            width='22'
+            height='22'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='1.6'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            aria-hidden='true'
+          >
+            <rect x='3' y='5' width='6' height='14' rx='3' />
+            <rect x='15' y='5' width='6' height='14' rx='3' />
+            <line x1='9' y1='11' x2='15' y2='11' />
+            <line x1='9' y1='13' x2='15' y2='13' />
+            <circle cx='6' cy='15' r='1.3' />
+            <circle cx='18' cy='15' r='1.3' />
+          </svg>
+          <span className='text-xl font-semibold tracking-tight'>
             Paperazzi
           </span>
         </Link>
@@ -116,7 +137,27 @@ export default function NavBar() {
     <Suspense fallback={
       <nav className='surface-panel border-app border-b h-16 shrink-0'>
         <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
-          <span className='text-xl font-semibold text-accent-strong tracking-tight'>Paperazzi</span>
+          <div className='flex items-center gap-2 flex-shrink-0 text-accent-strong'>
+            <svg
+              viewBox='0 0 24 24'
+              width='22'
+              height='22'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='1.6'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              aria-hidden='true'
+            >
+              <rect x='3' y='5' width='6' height='14' rx='3' />
+              <rect x='15' y='5' width='6' height='14' rx='3' />
+              <line x1='9' y1='11' x2='15' y2='11' />
+              <line x1='9' y1='13' x2='15' y2='13' />
+              <circle cx='6' cy='15' r='1.3' />
+              <circle cx='18' cy='15' r='1.3' />
+            </svg>
+            <span className='text-xl font-semibold tracking-tight'>Paperazzi</span>
+          </div>
         </div>
       </nav>
     }>
