@@ -216,7 +216,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
 
   if (built.nodes.length <= 1) {
     return (
-      <div className='border border-stone-200 rounded p-6 text-center text-sm text-stone-500'>
+      <div className='surface-card border border-app rounded p-6 text-center text-sm text-stone-500'>
         Not enough papers with publication years to plot a network.
       </div>
     );
@@ -335,18 +335,18 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
-    <div className='border border-stone-200 rounded bg-white p-3'>
-      <div className='flex items-center gap-3 text-[10px] text-stone-500 mb-2'>
+    <div className='surface-card border border-app rounded p-3'>
+      <div className='flex items-center gap-3 text-[10px] text-app-muted mb-2'>
         <span className='inline-flex items-center gap-1.5'>
-          <span className='inline-block w-2.5 h-2.5 rounded-full bg-amber-500' />
+          <span className='inline-block w-2.5 h-2.5 rounded-full bg-[var(--warning-foreground)]' />
           Focal paper
         </span>
         <span className='inline-flex items-center gap-1.5'>
-          <span className='inline-block w-2 h-2 rounded-full bg-emerald-500' />
+          <span className='inline-block w-2 h-2 rounded-full bg-[var(--graph-reference)]' />
           References ({refs.length})
         </span>
         <span className='inline-flex items-center gap-1.5'>
-          <span className='inline-block w-2 h-2 rounded-full bg-sky-500' />
+          <span className='inline-block w-2 h-2 rounded-full bg-[var(--graph-citing)]' />
           Citing papers ({cites.length})
         </span>
         <span className='inline-flex items-center gap-1.5 ml-auto'>
@@ -355,7 +355,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
         {selectedIds.size > 0 && (
           <button
             onClick={() => setSelectedIds(new Set())}
-            className='inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-stone-700 bg-amber-100 hover:bg-amber-200 rounded transition'
+            className='inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-[var(--warning-bg)] text-warning hover:bg-[#f5e2bb] rounded transition'
             title='Clear pinned nodes'
           >
             {selectedIds.size} pinned · Clear
@@ -365,19 +365,19 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
           <button
             onClick={() => zoomCenter(1 / BUTTON_ZOOM_FACTOR)}
             disabled={transform.k <= MIN_K + 1e-6}
-            className='p-1 text-stone-500 bg-stone-100 hover:bg-stone-200 rounded transition disabled:opacity-40 disabled:cursor-not-allowed'
+            className='p-1 text-app-muted surface-muted hover:bg-[var(--surface-subtle)] rounded transition disabled:opacity-40 disabled:cursor-not-allowed'
             title='Zoom out'
             aria-label='Zoom out'
           >
             <Minus size={11} />
           </button>
-          <span className='text-[10px] text-stone-400 tabular-nums w-9 text-center'>
+          <span className='text-[10px] text-app-soft tabular-nums w-9 text-center'>
             {Math.round(transform.k * 100)}%
           </span>
           <button
             onClick={() => zoomCenter(BUTTON_ZOOM_FACTOR)}
             disabled={transform.k >= MAX_K - 1e-6}
-            className='p-1 text-stone-500 bg-stone-100 hover:bg-stone-200 rounded transition disabled:opacity-40 disabled:cursor-not-allowed'
+            className='p-1 text-app-muted surface-muted hover:bg-[var(--surface-subtle)] rounded transition disabled:opacity-40 disabled:cursor-not-allowed'
             title='Zoom in'
             aria-label='Zoom in'
           >
@@ -386,7 +386,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
           {isZoomed && (
             <button
               onClick={() => setTransform(IDENTITY)}
-              className='inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-stone-500 bg-stone-100 hover:bg-stone-200 rounded transition ml-1'
+              className='inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-app-muted surface-muted hover:bg-[var(--surface-subtle)] rounded transition ml-1'
               title='Reset view'
             >
               <Maximize2 size={10} /> Reset
@@ -430,7 +430,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               markerHeight='6'
               orient='auto-start-reverse'
             >
-              <path d='M 0 0 L 10 5 L 0 10 z' fill='#a8a29e' />
+              <path d='M 0 0 L 10 5 L 0 10 z' fill='var(--border-strong)' />
             </marker>
           </defs>
 
@@ -465,7 +465,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                   y1={oy}
                   x2={ox}
                   y2={oy - yLen}
-                  stroke='#a8a29e'
+                  stroke='var(--border-strong)'
                   strokeWidth={1}
                   markerEnd='url(#axis-arrow)'
                 />
@@ -473,9 +473,9 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                   x={ox}
                   y={oy - yLen / 2}
                   fontSize='10'
-                  fill='#78716c'
+                  fill='var(--foreground-muted)'
                   textAnchor='middle'
-                  stroke='white'
+                  stroke='var(--background-card)'
                   strokeWidth={3}
                   paintOrder='stroke'
                   transform={`rotate(-90 ${ox} ${oy - yLen / 2})`}
@@ -489,7 +489,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                   y1={oy}
                   x2={ox + xLen}
                   y2={oy}
-                  stroke='#a8a29e'
+                  stroke='var(--border-strong)'
                   strokeWidth={1}
                   markerEnd='url(#axis-arrow)'
                 />
@@ -497,9 +497,9 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                   x={ox + xLen / 2}
                   y={oy + 3}
                   fontSize='10'
-                  fill='#78716c'
+                  fill='var(--foreground-muted)'
                   textAnchor='middle'
-                  stroke='white'
+                  stroke='var(--background-card)'
                   strokeWidth={3}
                   paintOrder='stroke'
                 >
@@ -519,24 +519,34 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               const b = built.idToNode.get(e.toId);
               if (!a || !b) return null;
               // Edge highlight semantics:
-              //   • path  — both endpoints are active → amber, stronger
-              //   • out   — only `from` is active     → emerald (active cites X)
-              //   • in    — only `to` is active       → sky    (X cites active)
-              //   • none  — no active endpoints; if any node is active, dim
+              //   • backward/reference link — active node cites the other node
+              //   • forward/citing link     — the other node cites the active node
+              //   • none                    — no active endpoints; if any node
+              //                               is active, dim the rest
               const fromActive = activeSet.has(e.fromId);
               const toActive = activeSet.has(e.toId);
               const isHighlighted = fromActive || toActive;
-              const isPath = fromActive && toActive;
               const dimmed = anyActive && !isHighlighted;
-              const stroke = isPath
-                ? '#f59e0b'
-                : fromActive
-                  ? '#10b981'
-                  : toActive
-                    ? '#0ea5e9'
-                    : '#d6d3d1';
-              const opacity = dimmed ? 0.15 : isHighlighted ? 0.9 : 0.5;
-              const width = isPath ? 1.6 : isHighlighted ? 1.4 : 0.8;
+              const hoveredBackward = hoveredId === e.fromId;
+              const hoveredForward = hoveredId === e.toId;
+              const stroke =
+                hoveredBackward
+                  ? 'var(--graph-reference)'
+                  : hoveredForward
+                    ? 'var(--graph-citing)'
+                    : fromActive
+                      ? 'var(--graph-reference)'
+                      : toActive
+                        ? 'var(--graph-citing)'
+                        : 'var(--border-muted)';
+              const opacity = dimmed
+                ? 0.15
+                : fromActive && toActive
+                  ? 0.95
+                  : isHighlighted
+                    ? 0.9
+                    : 0.5;
+              const width = fromActive && toActive ? 1.6 : isHighlighted ? 1.4 : 0.8;
               return (
                 <line
                   key={`${e.fromId}->${e.toId}`}
@@ -562,10 +572,10 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               const isPinned = selectedIds.has(id);
               const isFocal = n.role === 'focal';
               const fill = isFocal
-                ? '#f59e0b'
+                ? 'var(--warning-foreground)'
                 : n.role === 'ref'
-                  ? '#10b981'
-                  : '#0ea5e9';
+                  ? 'var(--graph-reference)'
+                  : 'var(--graph-citing)';
               const r = isFocal ? (isActive ? 11 : 9) : isActive ? 6 : 4.5;
               return (
                 <g
@@ -589,7 +599,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                     cy={screenY(n.cy)}
                     r={r}
                     fill={fill}
-                    stroke={isFocal ? '#92400e' : 'white'}
+                    stroke={isFocal ? 'var(--warning-foreground)' : 'var(--background-card)'}
                     strokeWidth={isFocal ? 1.5 : 0.8}
                     fillOpacity={anyActive && !isActive && !isFocal ? 0.45 : 1}
                     className='cursor-pointer'
@@ -639,9 +649,9 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                     y={screenY(n.cy) + 3}
                     fontSize={isActive ? 11 : 9}
                     fontWeight={isActive ? 600 : 400}
-                    fill={isActive ? '#1c1917' : '#57534e'}
+                    fill={isActive ? 'var(--foreground)' : 'var(--foreground-muted)'}
                     fillOpacity={isDimmed ? 0.25 : isActive ? 1 : 0.7}
-                    stroke='#ffffff'
+                    stroke='var(--background-card)'
                     strokeWidth={3}
                     paintOrder='stroke'
                     strokeOpacity={isDimmed ? 0.4 : 0.9}
@@ -668,9 +678,9 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                   x={screenX(focalNode.cx) + 8}
                   y={screenY(focalNode.cy) + 3}
                   fontSize='11'
-                  fill='#78350f'
+                  fill='var(--warning-foreground)'
                   fontWeight='700'
-                  stroke='#ffffff'
+                  stroke='var(--background-card)'
                   strokeWidth={3}
                   paintOrder='stroke'
                   pointerEvents='none'
@@ -686,7 +696,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
             users can move from node into the card and click Pin/Open. */}
         {hoveredNode && (
           <div
-            className='absolute pointer-events-auto bg-white border border-stone-300 rounded shadow-md p-2.5 max-w-xs text-xs'
+            className='absolute pointer-events-auto surface-card border border-app rounded shadow-md p-2.5 max-w-xs text-xs'
             style={{
               left: `${(screenX(hoveredNode.cx) / W) * 100}%`,
               top: `${(screenY(hoveredNode.cy) / H) * 100}%`,
@@ -712,13 +722,13 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               {hoveredNode.paper.cited_by_count?.toLocaleString() || 0} citation
               {hoveredNode.paper.cited_by_count === 1 ? '' : 's'}
             </p>
-            <div className='flex items-center gap-2 mt-2 pt-2 border-t border-stone-100'>
+            <div className='flex items-center gap-2 mt-2 pt-2 border-t border-app-muted'>
               <PinButton paper={hoveredNode.paper} size='sm' />
               <a
                 href={paperLink(hoveredNode.paper)}
                 target='_blank'
                 rel='noopener noreferrer'
-                className='inline-flex items-center gap-1 px-2 py-1 text-[11px] border border-stone-300 rounded text-stone-700 hover:bg-stone-50 transition'
+                className='inline-flex items-center gap-1 px-2 py-1 text-[11px] button-secondary rounded transition'
                 onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink size={11} /> Open
@@ -733,7 +743,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                       return next;
                     });
                   }}
-                  className='ml-auto text-[10px] text-stone-400 hover:text-stone-600 transition'
+                  className='ml-auto text-[10px] text-app-soft hover:text-app-muted transition'
                   title='Remove this node from the highlighted path'
                 >
                   Unpin links
@@ -741,7 +751,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               )}
             </div>
             {!hoveredIsPinned && (
-              <p className='text-[10px] text-stone-400 mt-1'>
+              <p className='text-[10px] text-app-soft mt-1'>
                 Click the node to pin its links and add to the path
               </p>
             )}
@@ -749,10 +759,10 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
         )}
       </div>
 
-      <p className='text-[10px] text-stone-400 mt-1'>
+      <p className='text-[10px] text-app-soft mt-1'>
         Drag to pan · Scroll to zoom · Click nodes to pin their links — keep
-        clicking to trace a path. Edges between two pinned nodes turn amber.
-        Use the Clear chip to reset.
+        clicking to trace a path. Reference links stay green and citing links
+        stay blue when highlighted. Use the Clear chip to reset.
       </p>
     </div>
   );

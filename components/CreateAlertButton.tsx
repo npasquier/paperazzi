@@ -42,7 +42,7 @@ export default function CreateAlertButton({ filters, query }: CreateAlertButtonP
           visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        <div className="flex items-center gap-2 bg-white border border-stone-300 rounded-xl px-3 py-2 shadow-sm text-xs text-stone-600">
+        <div className="flex items-center gap-2 surface-card border border-app rounded-xl px-3 py-2 shadow-sm text-xs text-stone-600">
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-1.5 hover:text-stone-800 transition"

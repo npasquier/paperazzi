@@ -22,18 +22,17 @@ import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
 
-// Palette used to color-code pin groups. Picked for distinguishability and
-// soft-but-visible at a small dot/border size. Order matters only as a
-// fallback when the palette is exhausted (deterministic hash below cycles).
+// Warm, library-friendly palette for pin groups. The hues stay distinct, but
+// they sit closer to the parchment/teal app theme than the old bright rainbow.
 const GROUP_COLOR_PALETTE = [
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#0ea5e9', // sky
-  '#8b5cf6', // violet
-  '#f43f5e', // rose
-  '#14b8a6', // teal
-  '#6366f1', // indigo
-  '#f97316', // orange
+  '#b66443', // terracotta
+  '#6f8a3a', // moss
+  '#3e79a6', // denim
+  '#8b5a93', // plum
+  '#b7842f', // ochre
+  '#3d8077', // deep teal
+  '#a05368', // dusty rose
+  '#5e6f96', // slate indigo
 ];
 
 // Deterministic group → color mapping. Hashing the group id (instead of using
@@ -435,7 +434,7 @@ export default function PinSidebar({
     return (
       <div key={paper.id} className='relative'>
         {showDropIndicatorAbove && (
-          <div className='h-0.5 bg-stone-400 -mt-1 mb-1 rounded-full' />
+          <div className='h-0.5 bg-[var(--border-strong)] -mt-1 mb-1 rounded-full' />
         )}
 
         <div
@@ -464,7 +463,7 @@ export default function PinSidebar({
 
             <div
               className={`flex-1 rounded transition ${
-                selectionMode && isSelected ? 'ring-1 ring-stone-300' : ''
+                selectionMode && isSelected ? 'ring-1 ring-[var(--accent-border)]' : ''
               }`}
             >
               <PaperCard
@@ -480,7 +479,7 @@ export default function PinSidebar({
         </div>
 
         {showDropIndicatorBelow && (
-          <div className='h-0.5 bg-stone-400 mt-1 -mb-1 rounded-full' />
+          <div className='h-0.5 bg-[var(--border-strong)] mt-1 -mb-1 rounded-full' />
         )}
       </div>
     );
@@ -502,7 +501,7 @@ export default function PinSidebar({
         {/* Group Header */}
         <div
           className={`group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md transition ${
-            isDragOver ? 'bg-stone-100' : 'hover:bg-stone-50'
+            isDragOver ? 'surface-muted' : 'hover:bg-[var(--surface-muted)]'
           }`}
           onDragOver={(e) => handleDragOverGroup(e, groupId)}
           onDragLeave={handleDragLeave}
@@ -510,7 +509,7 @@ export default function PinSidebar({
         >
           <button
             onClick={() => toggleGroupExpanded(groupId)}
-            className='p-1 hover:bg-stone-200 rounded transition flex-shrink-0'
+            className='p-1 hover:bg-[var(--surface-subtle)] rounded transition flex-shrink-0'
           >
             {isExpanded ? (
               <ChevronDown size={14} className='text-stone-500' />
@@ -533,7 +532,7 @@ export default function PinSidebar({
                     setEditingName('');
                   }
                 }}
-                className='flex-1 px-2 py-1 text-xs border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-stone-400'
+                className='flex-1 px-2 py-1 text-xs border border-app rounded focus-accent'
               />
               <button
                 onClick={() => handleRenameGroup(groupId)}
@@ -563,7 +562,7 @@ export default function PinSidebar({
               <span className='flex-1 text-xs text-stone-600 uppercase tracking-wide'>
                 {groupName}
               </span>
-              <span className='text-xs text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded'>
+              <span className='text-xs text-stone-400 surface-muted px-1.5 py-0.5 rounded'>
                 {papers.length}
               </span>
               <div className='flex items-center opacity-0 group-hover:opacity-100 transition'>
@@ -572,14 +571,14 @@ export default function PinSidebar({
                     setEditingGroupId(groupId);
                     setEditingName(groupName);
                   }}
-                  className='p-1 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition'
+                  className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
                   title='Rename'
                 >
                   <Edit2 size={12} />
                 </button>
                 <button
                   onClick={() => deleteGroup(groupId)}
-                  className='p-1 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded transition'
+                  className='p-1 text-stone-400 hover:text-danger hover:bg-[var(--danger-bg)] rounded transition'
                   title='Delete'
                 >
                   <Trash2 size={12} />
@@ -605,7 +604,7 @@ export default function PinSidebar({
         )}
 
         {/* Bottom separator - not for the last group if there are no ungrouped papers */}
-        {!isLastGroup && <div className='mt-3 border-b border-stone-300' />}
+        {!isLastGroup && <div className='mt-3 border-b border-app' />}
       </div>
     );
   };
@@ -615,7 +614,7 @@ export default function PinSidebar({
     return (
       <button
         onClick={onToggle}
-        className='fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-white border border-r-0 border-stone-200 rounded-l-lg p-2 shadow-sm hover:bg-stone-50 transition'
+        className='fixed right-0 top-1/2 -translate-y-1/2 z-40 surface-panel border border-app border-r-0 rounded-l-lg p-2 shadow-sm hover:bg-[var(--surface-muted)] transition'
         title={`Pinned (${pinnedPapers.length})`}
       >
         <div className='flex flex-col items-center gap-1'>
@@ -642,21 +641,21 @@ export default function PinSidebar({
     <>
       {/* Resizable Sidebar */}
       <aside
-        className='bg-white border-l border-stone-200 flex flex-col h-full overflow-hidden relative'
+        className='surface-panel border-l border-app flex flex-col h-full overflow-hidden relative'
         style={{ width: `${sidebarWidth}px` }}
       >
         {/* Resize Handle */}
         <div
           onMouseDown={handleResizeStart}
-          className={`absolute left-0 top-0 bottom-0 w-1 cursor-col-resize group hover:bg-stone-300 transition-colors ${
-            isResizing ? 'bg-stone-400' : ''
+          className={`absolute left-0 top-0 bottom-0 w-1 cursor-col-resize group hover:bg-[var(--border-strong)] transition-colors ${
+            isResizing ? 'bg-[var(--foreground-soft)]' : ''
           }`}
         >
           <div className='absolute left-0 top-0 bottom-0 w-3 -translate-x-1' />
         </div>
 
         {/* Header */}
-        <div className='px-4 py-3 border-b border-stone-200 flex-shrink-0'>
+        <div className='px-4 py-3 border-b border-app flex-shrink-0'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <Pin size={14} className='text-stone-400' />
@@ -669,7 +668,7 @@ export default function PinSidebar({
             </div>
             <button
               onClick={onToggle}
-              className='p-1 hover:bg-stone-100 rounded transition'
+              className='p-1 hover:bg-[var(--surface-muted)] rounded transition'
               title='Close'
             >
               <ChevronRight size={14} className='text-stone-400' />
@@ -690,8 +689,8 @@ export default function PinSidebar({
                     onClick={() => setSelectionMode((v) => !v)}
                     className={`text-xs px-2 py-0.5 rounded transition ${
                       selectionMode
-                        ? 'bg-stone-700 text-white'
-                        : 'text-stone-500 hover:bg-stone-100'
+                        ? 'button-primary'
+                        : 'text-stone-500 hover:bg-[var(--surface-muted)]'
                     }`}
                   >
                     {selectionMode ? 'Done' : 'Select'}
@@ -699,7 +698,7 @@ export default function PinSidebar({
                 )}
                 <button
                   onClick={() => setShowNewGroupInput(true)}
-                  className='p-1 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition'
+                  className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
                   title='New group'
                 >
                   <FolderPlus size={14} />
@@ -710,7 +709,7 @@ export default function PinSidebar({
 
           {/* Selection controls */}
           {selectionMode && pinnedPapers.length >= 2 && (
-            <div className='mt-2 pt-2 border-t border-stone-100 flex items-center justify-between'>
+            <div className='mt-2 pt-2 border-t border-app-muted flex items-center justify-between'>
               <span className='text-xs text-stone-500'>
                 {selectedCount} selected
               </span>
@@ -734,7 +733,7 @@ export default function PinSidebar({
 
           {/* New group input */}
           {showNewGroupInput && (
-            <div className='mt-2 pt-2 border-t border-stone-100 flex items-center gap-1'>
+            <div className='mt-2 pt-2 border-t border-app-muted flex items-center gap-1'>
               <input
                 ref={newGroupInputRef}
                 type='text'
@@ -748,7 +747,7 @@ export default function PinSidebar({
                   }
                 }}
                 placeholder='Group name'
-                className='flex-1 px-2 py-1 text-xs border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300'
+                className='flex-1 px-2 py-1 text-xs border border-app rounded focus-accent'
               />
               <button
                 onClick={handleCreateGroup}
@@ -770,7 +769,7 @@ export default function PinSidebar({
         </div>
 
         {/* Content */}
-        <div className='flex-1 overflow-y-auto px-4 py-3'>
+        <div className='app-scrollbar flex-1 overflow-y-auto px-4 py-3'>
           {isLoading ? (
             <div className='flex items-center justify-center py-8'>
               <Loader2 className='animate-spin text-stone-300' size={20} />
@@ -793,7 +792,7 @@ export default function PinSidebar({
 
               {/* Separator before ungrouped */}
               {hasGroups && ungroupedPapers.length > 0 && (
-                <div className='border-t border-stone-300 my-3' />
+                <div className='border-t border-app my-3' />
               )}
 
               {/* Ungrouped */}
@@ -801,7 +800,7 @@ export default function PinSidebar({
                 <div
                   className={`space-y-2 transition rounded ${
                     dragOverGroupId === 'ungrouped' && !dropIndicatorPosition
-                      ? 'bg-stone-50 p-2 -m-2'
+                      ? 'surface-muted p-2 -m-2'
                       : ''
                   }`}
                   onDragOver={(e) => handleDragOverGroup(e, 'ungrouped')}
@@ -819,11 +818,11 @@ export default function PinSidebar({
 
         {/* Actions */}
         {pinnedPapers.length >= 2 && (
-          <div className='px-4 py-3 border-t border-stone-100 space-y-2'>
+          <div className='px-4 py-3 border-t border-app-muted space-y-2'>
             <button
               onClick={handleSearchCitingAll}
               disabled={selectedCount < 2}
-              className='w-full flex items-center justify-center gap-2 px-3 py-2 border border-stone-200 text-stone-600 rounded hover:bg-stone-50 transition text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed'
+              className='w-full flex items-center justify-center gap-2 px-3 py-2 button-secondary rounded transition text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed'
             >
               <Search size={12} />
               Citing all
@@ -835,7 +834,7 @@ export default function PinSidebar({
             <button
               onClick={handleSearchReferencesAll}
               disabled={selectedCount < 2}
-              className='w-full flex items-center justify-center gap-2 px-3 py-2 border border-stone-200 text-stone-600 rounded hover:bg-stone-50 transition text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed'
+              className='w-full flex items-center justify-center gap-2 px-3 py-2 button-secondary rounded transition text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed'
             >
               <Library size={12} />
               Common refs

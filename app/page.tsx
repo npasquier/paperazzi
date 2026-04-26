@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <main className='min-h-[calc(100vh-57px)] bg-white flex flex-col items-center justify-center px-6'>
+    <main className='min-h-full surface-app flex flex-col items-center justify-center px-6'>
       {/* Tagline */}
       <p className='text-stone-400 text-sm mb-4'>For economics researchers</p>
 
@@ -25,28 +25,28 @@ export default function Page() {
 
       {/* Visual preview of the app layout */}
       <div className='w-full max-w-2xl mb-12'>
-        <div className='border border-stone-200 rounded-xl overflow-hidden bg-stone-50'>
+        <div className='surface-panel border border-app rounded-xl overflow-hidden'>
           {/* Mock navbar */}
-          <div className='h-10 bg-white border-b border-stone-200 flex items-center px-4'>
-            <div className='w-20 h-2 bg-stone-200 rounded' />
+          <div className='h-10 surface-card border-b border-app flex items-center px-4'>
+            <div className='w-20 h-2 surface-subtle rounded' />
             <div className='flex-1 mx-8'>
-              <div className='max-w-xs mx-auto h-6 bg-stone-100 rounded border border-stone-200' />
+              <div className='max-w-xs mx-auto h-6 surface-muted rounded border border-app' />
             </div>
-            <div className='w-16 h-2 bg-stone-200 rounded' />
+            <div className='w-16 h-2 surface-subtle rounded' />
           </div>
 
           {/* Mock content */}
           <div className='flex h-48'>
             {/* Left panel - Filters */}
-            <div className='w-1/4 bg-white border-r border-stone-200 p-3'>
+            <div className='w-1/4 surface-card border-r border-app p-3'>
               <div className='flex items-center gap-1.5 mb-3'>
                 <Filter size={12} className='text-stone-400' />
                 <span className='text-xs text-stone-500'>Filters</span>
               </div>
               <div className='space-y-2'>
-                <div className='h-2 bg-stone-100 rounded w-full' />
-                <div className='h-2 bg-stone-100 rounded w-3/4' />
-                <div className='h-2 bg-stone-100 rounded w-5/6' />
+                <div className='h-2 surface-muted rounded w-full' />
+                <div className='h-2 surface-muted rounded w-3/4' />
+                <div className='h-2 surface-muted rounded w-5/6' />
               </div>
             </div>
 
@@ -56,21 +56,21 @@ export default function Page() {
                 {[1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className='h-10 bg-white border border-stone-200 rounded-lg'
+                    className='h-10 surface-card border border-app rounded-lg'
                   />
                 ))}
               </div>
             </div>
 
             {/* Right panel - Pinned */}
-            <div className='w-1/4 bg-white border-l border-stone-200 p-3'>
+            <div className='w-1/4 surface-card border-l border-app p-3'>
               <div className='flex items-center gap-1.5 mb-3'>
-                <Pin size={12} className='text-amber-500' />
+                <Pin size={12} className='text-warning' />
                 <span className='text-xs text-stone-500'>Pinned</span>
               </div>
               <div className='space-y-2'>
-                <div className='h-8 bg-amber-50 border border-amber-200 rounded' />
-                <div className='h-8 bg-stone-50 border border-dashed border-stone-200 rounded' />
+                <div className='h-8 banner-warning rounded' />
+                <div className='h-8 surface-muted border border-dashed border-app rounded' />
               </div>
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function Page() {
         href='/search'
         className='inline-flex items-center gap-2 text-stone-900 hover:text-stone-600 transition group mb-16'
       >
-        <span className='border-b border-stone-900 group-hover:border-stone-600 pb-0.5'>
+        <span className='border-b border-[var(--foreground)] group-hover:border-[var(--foreground-muted)] pb-0.5'>
           Start searching
         </span>
         <ArrowRight

@@ -2,7 +2,7 @@ import { BookOpen, Search, Database, Scale, Heart } from 'lucide-react';
 
 export default function AboutPage() {
   return (
-    <main className='min-h-[calc(100vh-57px)] bg-stone-50'>
+    <main className='app-scrollbar h-full overflow-y-auto bg-[var(--background)]'>
       <div className='max-w-3xl mx-auto px-6 py-16'>
         {/* Header */}
         <div className='mb-12'>
@@ -24,7 +24,7 @@ export default function AboutPage() {
                 What it does
               </h2>
             </div>
-            <div className='pl-6 border-l-2 border-stone-200'>
+            <div className='pl-6 border-l-2 border-app'>
               <p className='text-stone-700 mb-4'>
                 Paperazzi searches economics papers with two core features:
               </p>
@@ -49,16 +49,16 @@ export default function AboutPage() {
                 How to use
               </h2>
             </div>
-            <div className='pl-6 border-l-2 border-stone-200'>
+            <div className='pl-6 border-l-2 border-app'>
               <ul className='space-y-3 text-stone-600'>
                 <li className='flex items-start gap-3'>
-                  <span className='flex-shrink-0 w-5 h-5 rounded-full bg-stone-200 text-stone-600 text-xs flex items-center justify-center mt-0.5'>
+                  <span className='flex-shrink-0 w-5 h-5 rounded-full surface-subtle text-app-muted text-xs flex items-center justify-center mt-0.5'>
                     1
                   </span>
                   <span>Search by keyword</span>
                 </li>
                 <li className='flex items-start gap-3'>
-                  <span className='flex-shrink-0 w-5 h-5 rounded-full bg-stone-200 text-stone-600 text-xs flex items-center justify-center mt-0.5'>
+                  <span className='flex-shrink-0 w-5 h-5 rounded-full surface-subtle text-app-muted text-xs flex items-center justify-center mt-0.5'>
                     2
                   </span>
                   <span>
@@ -67,13 +67,13 @@ export default function AboutPage() {
                   </span>
                 </li>
                 <li className='flex items-start gap-3'>
-                  <span className='flex-shrink-0 w-5 h-5 rounded-full bg-stone-200 text-stone-600 text-xs flex items-center justify-center mt-0.5'>
+                  <span className='flex-shrink-0 w-5 h-5 rounded-full surface-subtle text-app-muted text-xs flex items-center justify-center mt-0.5'>
                     3
                   </span>
                   <span>Sort by relevance, date, or citation count</span>
                 </li>
                 <li className='flex items-start gap-3'>
-                  <span className='flex-shrink-0 w-5 h-5 rounded-full bg-stone-200 text-stone-600 text-xs flex items-center justify-center mt-0.5'>
+                  <span className='flex-shrink-0 w-5 h-5 rounded-full surface-subtle text-app-muted text-xs flex items-center justify-center mt-0.5'>
                     4
                   </span>
                   <span>
@@ -81,7 +81,7 @@ export default function AboutPage() {
                   </span>
                 </li>
                 <li className='flex items-start gap-3'>
-                  <span className='flex-shrink-0 w-5 h-5 rounded-full bg-stone-200 text-stone-600 text-xs flex items-center justify-center mt-0.5'>
+                  <span className='flex-shrink-0 w-5 h-5 rounded-full surface-subtle text-app-muted text-xs flex items-center justify-center mt-0.5'>
                     5
                   </span>
                   <span>
@@ -101,7 +101,7 @@ export default function AboutPage() {
                 Comparison with Google Scholar
               </h2>
             </div>
-            <div className='pl-6 border-l-2 border-stone-200'>
+            <div className='pl-6 border-l-2 border-app'>
               <p className='text-stone-700 mb-6'>
                 <span className='font-medium text-stone-900'>
                   Paperazzi emphasizes precision over recall.
@@ -111,10 +111,10 @@ export default function AboutPage() {
                 relevant papers published in leading economics journals.
               </p>
 
-              <div className='bg-white rounded-lg border border-stone-200 overflow-hidden'>
+              <div className='surface-card rounded-lg border border-app overflow-hidden'>
                 <table className='w-full text-sm'>
                   <thead>
-                    <tr className='border-b border-stone-200'>
+                    <tr className='border-b border-app'>
                       <th className='text-left py-3 px-4 font-medium text-stone-500'>
                         Feature
                       </th>
@@ -127,7 +127,7 @@ export default function AboutPage() {
                     </tr>
                   </thead>
                   <tbody className='text-stone-600'>
-                    <tr className='border-b border-stone-100'>
+                    <tr className='border-b border-app-muted'>
                       <td className='py-3 px-4 text-stone-700'>
                         Journal filtering
                       </td>
@@ -138,7 +138,7 @@ export default function AboutPage() {
                         Text-based matching
                       </td>
                     </tr>
-                    <tr className='border-b border-stone-100'>
+                    <tr className='border-b border-app-muted'>
                       <td className='py-3 px-4 text-stone-700'>Citations</td>
                       <td className='py-3 px-4'>Forward & backward</td>
                       <td className='py-3 px-4 text-stone-400'>Forward only</td>
@@ -174,7 +174,7 @@ export default function AboutPage() {
                 Data sources
               </h2>
             </div>
-            <div className='pl-6 border-l-2 border-stone-200'>
+            <div className='pl-6 border-l-2 border-app'>
               <div className='space-y-4'>
                 <div>
                   <p className='text-stone-700'>
@@ -220,7 +220,7 @@ export default function AboutPage() {
                 Help improve the data
               </h2>
             </div>
-            <div className='pl-6 border-l-2 border-stone-200'>
+            <div className='pl-6 border-l-2 border-app'>
               <p className='text-stone-700 mb-4'>
                 OpenAlex is a non-profit, open-source project. Like any large
                 database, it contains some errors — missing papers, incorrect
@@ -230,7 +230,7 @@ export default function AboutPage() {
                 You can help by reporting errors. OpenAlex is also working on
                 enabling direct community edits in the future.
               </p>
-              <div className='bg-white rounded-lg border border-stone-200 p-4'>
+              <div className='surface-card rounded-lg border border-app p-4'>
                 <p className='text-sm text-stone-700 mb-3'>
                   <span className='font-medium'>Found an error?</span>
                 </p>
@@ -253,7 +253,7 @@ export default function AboutPage() {
         </div>
 
         {/* Footer */}
-        <div className='mt-16 pt-8 border-t border-stone-200 text-center'>
+        <div className='mt-16 pt-8 border-t border-app text-center'>
           <p className='text-sm text-stone-500 mb-2'>
             Built for economics researchers, by an economics researcher.
           </p>

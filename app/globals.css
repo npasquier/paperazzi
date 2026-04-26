@@ -1,13 +1,57 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm scholarly palette — three parchment tiers + soft teal accent.
+     Hierarchy mimics paper on a wooden desk:
+       desk     = body / canvas   (deeper parchment)
+       paper    = panels & navbar (lighter parchment)
+       page     = cards & modals  (pure white)
+  */
+  --background: #f5efe1;          /* desk: warm parchment */
+  --background-panel: #fbf7eb;    /* paper: lighter parchment for panels */
+  --background-card: #fdfaf3;     /* page: warm off-white for cards & modals */
+  --surface-muted: #f1e7d7;
+  --surface-subtle: #e7dbc8;
+  --surface-hover: #efe4d1;
+  --foreground: #1f1a14;
+  --foreground-muted: #5f5345;
+  --foreground-soft: #8f7f68;
+  --foreground-inverse: #fffdf8;
+  --border-subtle: #d8ccb8;
+  --border-muted: #e7ddce;
+  --border-strong: #bfaf97;
+  --accent: #0f766e;              /* teal-700 — primary action color */
+  --accent-hover: #115e59;        /* teal-800 */
+  --accent-soft: #dcefeb;
+  --accent-border: #9ecfc7;
+  --accent-foreground: #0c5d57;
+  --warning-bg: #faeed4;
+  --warning-border: #e7c27f;
+  --warning-foreground: #8a5a0a;
+  --analysis-bg: #ece6f8;
+  --analysis-border: #d0c2eb;
+  --analysis-foreground: #6b4ea0;
+  --success-bg: #e3f1e7;
+  --success-border: #a8ceba;
+  --success-foreground: #2f6b4a;
+  --graph-reference: #2f6b4a;
+  --graph-citing: #2563eb;
+  --danger-bg: #f8e3de;
+  --danger-border: #e5b4ab;
+  --danger-foreground: #a04333;
+  --danger-hover: #8d3a2d;
+  --overlay: rgb(31 26 20 / 0.22);
+  --scrollbar-track: #efe4d1;
+  --scrollbar-thumb: #d2c1a8;
+  --scrollbar-thumb-hover: #bca78a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-parchment: var(--background);
+  --color-paper: var(--background-panel);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -15,11 +59,242 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   color-scheme: light;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.app-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.app-scrollbar::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
 }
 
 /* Explicitly force dark text on all form inputs */
 input, textarea, select {
-  color: #171717 !important;
+  color: var(--foreground) !important;
+  background: var(--background-card);
+  border-color: var(--border-subtle);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--foreground-soft);
+}
+
+.surface-app {
+  background: var(--background);
+}
+
+.surface-panel {
+  background: var(--background-panel);
+}
+
+.surface-card {
+  background: var(--background-card);
+}
+
+.surface-muted {
+  background: var(--surface-muted);
+}
+
+.surface-subtle {
+  background: var(--surface-subtle);
+}
+
+.surface-hover:hover {
+  background: var(--surface-hover);
+}
+
+.border-app {
+  border-color: var(--border-subtle);
+}
+
+.border-app-muted {
+  border-color: var(--border-muted);
+}
+
+.border-app-strong {
+  border-color: var(--border-strong);
+}
+
+.text-app {
+  color: var(--foreground);
+}
+
+.text-app-muted {
+  color: var(--foreground-muted);
+}
+
+.text-app-soft {
+  color: var(--foreground-soft);
+}
+
+.text-app-inverse {
+  color: var(--foreground-inverse);
+}
+
+.text-accent {
+  color: var(--accent);
+}
+
+.text-accent-strong {
+  color: var(--accent-foreground);
+}
+
+.text-warning {
+  color: var(--warning-foreground);
+}
+
+.text-analysis {
+  color: var(--analysis-foreground);
+}
+
+.text-success {
+  color: var(--success-foreground);
+}
+
+.text-danger {
+  color: var(--danger-foreground);
+}
+
+.badge-neutral {
+  background: var(--surface-subtle);
+  color: var(--foreground-muted);
+}
+
+.badge-accent {
+  background: var(--accent);
+  color: var(--foreground-inverse);
+}
+
+.chip-muted {
+  background: var(--surface-muted);
+  color: var(--foreground-muted);
+}
+
+.button-primary {
+  background: var(--accent);
+  color: var(--foreground-inverse);
+}
+
+.button-primary:hover {
+  background: var(--accent-hover);
+}
+
+.button-secondary {
+  background: var(--background-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--foreground-muted);
+}
+
+.button-secondary:hover {
+  background: var(--surface-muted);
+}
+
+.button-ghost {
+  color: var(--foreground-muted);
+}
+
+.button-ghost:hover {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.button-danger {
+  background: var(--danger-foreground);
+  color: var(--foreground-inverse);
+}
+
+.button-danger:hover {
+  background: var(--danger-hover);
+}
+
+.button-danger-soft {
+  background: var(--danger-bg);
+  color: var(--danger-foreground);
+}
+
+.button-danger-soft:hover {
+  background: #f1d6d0;
+}
+
+.banner-info {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+
+.banner-warning {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+
+.banner-analysis {
+  background: var(--analysis-bg);
+  border: 1px solid var(--analysis-border);
+}
+
+.banner-success {
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+}
+
+.banner-danger {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+}
+
+.overlay-soft {
+  background: var(--overlay);
+}
+
+.focus-accent:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-border);
 }

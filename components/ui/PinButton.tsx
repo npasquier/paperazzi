@@ -28,13 +28,13 @@ export default function PinButton({ paper, size = 'md' }: PinButtonProps) {
         ${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'}
         ${
           pinned
-            ? 'bg-amber-100 border-amber-400 text-amber-600'
-            : 'bg-white border-stone-300 text-stone-500 hover:bg-stone-50'
+            ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-warning'
+            : 'surface-card border-app text-app-soft hover:bg-[var(--surface-muted)] hover:text-[var(--foreground-muted)]'
         }
       `}
       title={pinned ? 'Unpin paper' : 'Pin paper'}
     >
-      <PinIcon size={size === 'sm' ? 14 : 16} className={pinned ? 'fill-amber-500' : ''} />
+      <PinIcon size={size === 'sm' ? 14 : 16} className={pinned ? 'fill-[var(--warning-foreground)]' : ''} />
     </button>
   );
 }

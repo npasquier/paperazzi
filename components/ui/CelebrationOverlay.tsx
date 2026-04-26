@@ -87,12 +87,12 @@ export default function CelebrationOverlay({ show, onComplete }: CelebrationOver
             isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
           }`}
         >
-          <div className="bg-white/95 backdrop-blur-sm px-8 py-4 rounded-2xl shadow-2xl border border-green-200">
+          <div className="bg-[color:rgb(253_250_243_/0.95)] backdrop-blur-sm px-8 py-4 rounded-2xl shadow-2xl border border-[var(--success-border)]">
             <div className="flex items-center gap-3">
               {/* Animated checkmark */}
               <div className="relative w-10 h-10">
                 <svg 
-                  className="w-10 h-10 text-green-500" 
+                  className="w-10 h-10 text-[var(--success-foreground)]" 
                   viewBox="0 0 40 40"
                 >
                   <circle
@@ -130,7 +130,7 @@ export default function CelebrationOverlay({ show, onComplete }: CelebrationOver
         {Array.from({ length: 12 }, (_, i) => (
           <div
             key={`particle-${i}`}
-            className="absolute w-2 h-2 rounded-full bg-green-400 animate-particle-burst"
+            className="absolute w-2 h-2 rounded-full bg-[var(--success-border)] animate-particle-burst"
             style={{
               '--particle-angle': `${(i * 30)}deg`,
               animationDelay: `${i * 0.02}s`,

@@ -60,8 +60,8 @@ export default function AuthorModal({
       onRequestClose={onClose}
       contentLabel='Select authors'
       ariaHideApp={false}
-      className='bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto outline-none'
-      overlayClassName='fixed inset-0 bg-black/50 flex items-center justify-center p-4'
+      className='surface-card border border-app rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto outline-none'
+      overlayClassName='fixed inset-0 overlay-soft flex items-center justify-center p-4'
     >
       <h2 className='text-xl font-semibold mb-4 text-stone-900'>Add Authors</h2>
       
@@ -69,7 +69,7 @@ export default function AuthorModal({
         <div className='relative flex-1'>
           <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400' />
           <input
-            className='w-full pl-9 pr-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-400 focus:border-stone-400'
+            className='w-full pl-9 pr-3 py-2 border border-app rounded-lg focus-accent'
             placeholder='Search author name...'
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -79,7 +79,7 @@ export default function AuthorModal({
         <button 
           onClick={searchAuthors}
           disabled={loading}
-          className='px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition font-medium disabled:opacity-50'
+          className='px-4 py-2 button-primary rounded-lg transition font-medium disabled:opacity-50'
         >
           {loading ? 'Searching...' : 'Search'}
         </button>
@@ -90,16 +90,16 @@ export default function AuthorModal({
       )}
 
       {!loading && results.length > 0 && (
-        <ul className='max-h-96 overflow-y-auto border border-stone-200 rounded-lg'>
+        <ul className='max-h-96 overflow-y-auto border border-app rounded-lg'>
           {results.map((a) => {
             const alreadySelected = selectedAuthors.some((s) => s.id === a.id);
             return (
               <li
                 key={a.id}
-                className={`flex justify-between items-center border-b border-stone-200 last:border-b-0 py-3 px-4 cursor-pointer transition ${
+                className={`flex justify-between items-center border-b border-app last:border-b-0 py-3 px-4 cursor-pointer transition ${
                   alreadySelected 
-                    ? 'bg-stone-100 cursor-default' 
-                    : 'hover:bg-stone-50'
+                    ? 'surface-muted cursor-default' 
+                    : 'hover:bg-[var(--surface-muted)]'
                 }`}
                 onClick={() => {
                   if (!alreadySelected) {
@@ -132,7 +132,7 @@ export default function AuthorModal({
       <div className='flex justify-end gap-2 mt-6'>
         <button 
           onClick={onClose}
-          className='px-4 py-2 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition font-medium'
+          className='px-4 py-2 button-secondary rounded-lg transition font-medium'
         >
           Close
         </button>

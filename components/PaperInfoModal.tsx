@@ -104,10 +104,10 @@ export default function PaperInfoModal({
   if (!isOpen) return null;
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40'>
-      <div className='bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col mx-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center overlay-soft'>
+      <div className='surface-card border border-app rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col mx-4'>
         {/* Header */}
-        <div className='flex items-start justify-between p-4 border-b border-stone-200'>
+        <div className='flex items-start justify-between p-4 border-b border-app'>
           <div className='flex-1 min-w-0 pr-4'>
             <h2 className='text-lg font-semibold text-stone-900 leading-snug'>
               {paper.title}
@@ -123,7 +123,7 @@ export default function PaperInfoModal({
           </div>
           <button
             onClick={onClose}
-            className='p-1 hover:bg-stone-100 rounded transition flex-shrink-0'
+            className='p-1 hover:bg-[var(--surface-muted)] rounded transition flex-shrink-0'
           >
             <X size={20} className='text-stone-500' />
           </button>
@@ -137,7 +137,7 @@ export default function PaperInfoModal({
 
             <button
               onClick={() => openGoogleScholar(paper.title)}
-              className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition text-xs font-medium'
+              className='inline-flex items-center gap-1.5 px-3 py-1.5 banner-info text-accent-strong rounded-lg transition text-xs font-medium'
             >
               <BookOpen size={14} />
               Google Scholar
@@ -148,7 +148,7 @@ export default function PaperInfoModal({
                 href={`https://doi.org/${paper.doi}`}
                 target='_blank'
                 rel='noopener noreferrer'
-                className='inline-flex items-center gap-1.5 px-3 py-1.5 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium'
+                className='inline-flex items-center gap-1.5 px-3 py-1.5 button-secondary rounded-lg transition text-xs font-medium'
               >
                 <ExternalLink size={14} />
                 DOI
@@ -214,7 +214,7 @@ function RelatedPaperCard({
   const paperId = paper.id.replace('https://openalex.org/', '');
 
   return (
-    <div className='bg-stone-50 border border-stone-200 rounded-lg p-3 hover:border-stone-300 transition'>
+    <div className='surface-muted border border-app rounded-lg p-3 hover:border-[var(--border-strong)] transition'>
       <div className='flex items-start justify-between gap-3'>
         <a href={`/paper/${paperId}`} className='flex-1 min-w-0 block'>
           <h4 className='text-sm font-medium text-stone-900 leading-snug line-clamp-2 hover:text-stone-700'>
@@ -237,7 +237,7 @@ function RelatedPaperCard({
               e.stopPropagation();
               onGoogleScholar();
             }}
-            className='p-1.5 text-blue-600 hover:bg-blue-50 rounded transition'
+            className='p-1.5 text-accent hover:bg-[var(--accent-soft)] rounded transition'
             title='Search on Google Scholar'
           >
             <BookOpen size={14} />
@@ -249,7 +249,7 @@ function RelatedPaperCard({
               target='_blank'
               rel='noopener noreferrer'
               onClick={(e) => e.stopPropagation()}
-              className='p-1.5 text-stone-500 hover:bg-stone-100 rounded transition'
+              className='p-1.5 text-stone-500 hover:bg-[var(--surface-card)] rounded transition'
               title='Open DOI'
             >
               <ExternalLink size={14} />

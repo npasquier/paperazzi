@@ -253,11 +253,11 @@ export default function PaperCard({
     return (
       <div
         className={`
-          bg-stone-50 border rounded-lg p-3 relative group
+          surface-card border border-app rounded-lg p-3 relative group
           ${
             highlighted
-              ? 'border-amber-400 bg-amber-50'
-              : 'border-stone-200 hover:border-stone-300'
+              ? 'border-[var(--warning-border)] bg-[var(--warning-bg)]'
+              : 'hover:border-[var(--border-strong)]'
           }
         `}
         style={
@@ -382,17 +382,17 @@ export default function PaperCard({
     return (
       <div
         className={`
-          border rounded-lg p-3 transition bg-white cursor-pointer
+          border border-app rounded-lg p-3 transition surface-card cursor-pointer
           ${
             highlighted
-              ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200'
-              : 'border-stone-200 hover:border-stone-300'
+              ? 'border-[var(--warning-border)] bg-[var(--warning-bg)] ring-2 ring-[var(--warning-border)]/40'
+              : 'hover:border-[var(--border-strong)]'
           }
         `}
       >
         {highlighted && (
-          <div className='flex items-center gap-1 text-xs text-amber-700 font-medium mb-2'>
-            <Pin size={12} className='fill-amber-700' />
+          <div className='flex items-center gap-1 text-xs text-warning font-medium mb-2'>
+            <Pin size={12} className='fill-[var(--warning-foreground)]' />
             Pinned paper
           </div>
         )}
@@ -416,11 +416,11 @@ export default function PaperCard({
   return (
     <div
       className={`
-      bg-white border rounded-lg transition relative group
+      surface-card border border-app rounded-lg transition relative group
       ${
         highlighted
-          ? 'border-amber-400 bg-amber-50'
-          : 'border-stone-200 hover:border-stone-300 hover:shadow-sm'
+          ? 'border-[var(--warning-border)] bg-[var(--warning-bg)]'
+          : 'hover:border-[var(--border-strong)] hover:shadow-sm'
       }
     `}
     >
@@ -493,7 +493,7 @@ export default function PaperCard({
 
               <button
                 onClick={openGoogleScholar}
-                className='inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition text-xs font-medium whitespace-nowrap'
+                className='inline-flex items-center gap-1 px-2.5 py-1 banner-info rounded-lg text-accent-strong transition text-xs font-medium whitespace-nowrap'
               >
                 <BookOpen size={12} /> Scholar
               </button>
@@ -506,7 +506,7 @@ export default function PaperCard({
                   )}`}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='inline-flex items-center gap-1 px-2.5 py-1 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium whitespace-nowrap'
+                  className='inline-flex items-center gap-1 px-2.5 py-1 button-secondary rounded-lg transition text-xs font-medium whitespace-nowrap'
                 >
                   <ExternalLink size={12} /> DOI
                 </a>
@@ -517,7 +517,7 @@ export default function PaperCard({
                   href={paper.pdf_url}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='inline-flex items-center gap-1 px-2.5 py-1 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50 transition text-xs font-medium whitespace-nowrap'
+                  className='inline-flex items-center gap-1 px-2.5 py-1 button-secondary rounded-lg transition text-xs font-medium whitespace-nowrap'
                 >
                   <Download size={12} /> PDF
                 </a>
@@ -535,7 +535,7 @@ export default function PaperCard({
             ${isAbstractExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
           `}
         >
-          <div className='px-3 pb-3 pt-0 border-t border-stone-200'>
+          <div className='px-3 pb-3 pt-0 border-t border-app'>
             <div className='mt-3 text-sm text-stone-700 leading-relaxed'>
               <b>Abstract</b>: {paper.abstract}
             </div>
@@ -550,7 +550,7 @@ export default function PaperCard({
           ${isInfoExpanded ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'}
         `}
       >
-        <div className='px-3 pb-3 pt-0 border-t border-stone-200'>
+        <div className='px-3 pb-3 pt-0 border-t border-app'>
           <div className='mt-3 space-y-2'>
             <p className='text-xs text-stone-500'>
               Report errors or missing data to OpenAlex
@@ -558,7 +558,7 @@ export default function PaperCard({
             {/* Compact inline Work ID with copy */}
             <div className='flex items-center gap-2 text-xs'>
               <span className='text-stone-500'>ID:</span>
-              <code className='px-1.5 py-0.5 bg-stone-100 rounded text-stone-600 font-mono text-[11px]'>
+              <code className='px-1.5 py-0.5 surface-muted rounded text-stone-600 font-mono text-[11px]'>
                 {workId}
               </code>
               <button
@@ -567,7 +567,7 @@ export default function PaperCard({
                 title='Copy Work ID'
               >
                 {isCopied ? (
-                  <Check size={12} className='text-green-600' />
+                  <Check size={12} className='text-success' />
                 ) : (
                   <Copy size={12} />
                 )}
@@ -586,14 +586,14 @@ export default function PaperCard({
                 onClick={handleReportedToggle}
                 className={`inline-flex items-center gap-1 text-xs transition ${
                   isReported
-                    ? 'text-green-600'
+                    ? 'text-success'
                     : 'text-stone-400 hover:text-stone-600'
                 }`}
                 title={isReported ? 'Unmark as reported' : 'Mark as reported'}
               >
                 <CheckCircle
                   size={12}
-                  className={isReported ? 'fill-green-600 text-white' : ''}
+                  className={isReported ? 'fill-[var(--success-foreground)] text-[var(--foreground-inverse)]' : ''}
                 />
                 <span>{isReported ? 'Reported' : 'Mark as reported'}</span>
               </button>
@@ -607,7 +607,7 @@ export default function PaperCard({
         {/* Info toggle - on the LEFT */}
         <button
           onClick={toggleInfo}
-          className='p-1 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition'
+          className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
           aria-expanded={isInfoExpanded}
           aria-label='Report error or missing data'
           title='Report error or missing data'
@@ -622,7 +622,7 @@ export default function PaperCard({
         {hasAbstract && (
           <button
             onClick={toggleAbstract}
-            className='p-1 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded transition'
+            className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
             aria-expanded={isAbstractExpanded}
             aria-label={isAbstractExpanded ? 'Hide abstract' : 'Show abstract'}
             title={isAbstractExpanded ? 'Hide abstract' : 'Show abstract'}

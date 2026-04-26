@@ -131,23 +131,23 @@ export default function InstitutionModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overlay-soft">
+      <div className="surface-card border border-app rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-stone-200">
+        <div className="flex items-center justify-between p-4 border-b border-app">
           <h2 className="text-lg font-semibold text-stone-900">
             Select Institutions
           </h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-stone-100 rounded transition"
+            className="p-1 hover:bg-[var(--surface-muted)] rounded transition"
           >
             <X size={20} className="text-stone-500" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-stone-200">
+        <div className="p-4 border-b border-app">
           <div className="relative">
             <Search
               size={18}
@@ -158,7 +158,7 @@ export default function InstitutionModal({
               placeholder="Search institutions (e.g., Harvard, MIT, World Bank...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400 text-sm"
+              className="w-full pl-10 pr-4 py-2 border border-app rounded-lg focus-accent text-sm"
               autoFocus
             />
           </div>
@@ -196,15 +196,15 @@ export default function InstitutionModal({
                   onClick={() => toggleInstitution(inst)}
                   className={`w-full text-left p-3 rounded-lg transition flex items-start gap-3 ${
                     isSelected(inst.id)
-                      ? 'bg-stone-100 ring-1 ring-stone-300'
-                      : 'hover:bg-stone-50'
+                      ? 'surface-muted ring-1 ring-[var(--accent-border)]'
+                      : 'hover:bg-[var(--surface-muted)]'
                   }`}
                 >
                   <div
                     className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center mt-0.5 ${
                       isSelected(inst.id)
-                        ? 'bg-stone-800 border-stone-800'
-                        : 'border-stone-300'
+                        ? 'bg-[var(--accent)] border-[var(--accent)]'
+                        : 'border-app'
                     }`}
                   >
                     {isSelected(inst.id) && (
@@ -240,13 +240,13 @@ export default function InstitutionModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-stone-200 bg-stone-50">
+        <div className="p-4 border-t border-app surface-muted">
           {selected.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-1">
               {selected.map((inst) => (
                 <span
                   key={inst.id}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-stone-200 text-stone-700 rounded text-xs"
+                  className="inline-flex items-center gap-1 px-2 py-1 surface-subtle text-stone-700 rounded text-xs"
                 >
                   {inst.display_name}
                   <button
@@ -270,13 +270,13 @@ export default function InstitutionModal({
             <div className="flex gap-2">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm text-stone-600 hover:bg-stone-200 rounded-lg transition"
+                className="px-4 py-2 text-sm text-stone-600 hover:bg-[var(--surface-subtle)] rounded-lg transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApply}
-                className="px-4 py-2 text-sm bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition"
+                className="px-4 py-2 text-sm button-primary rounded-lg transition"
               >
                 Apply
               </button>

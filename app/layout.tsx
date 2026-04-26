@@ -30,8 +30,15 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <PinProvider>
-          <NavBar />
-          <div>{children}</div>
+          {/* Fixed-height shell — locks total height to the viewport so the
+              navbar and main split it cleanly and only the inner scroller
+              (e.g. SearchResults' results list) can scroll. min-h would let
+              children overflow, which pushed body off-screen and produced a
+              page-level scrollbar. */}
+          <div className='flex h-[100dvh] flex-col overflow-hidden'>
+            <NavBar />
+            <div className='flex-1 min-h-0 overflow-hidden'>{children}</div>
+          </div>
         </PinProvider>
       </body>
     </html>

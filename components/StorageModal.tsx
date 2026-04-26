@@ -126,11 +126,11 @@ export default function StorageModal({ isOpen, onClose }: Props) {
 
   return (
     <div
-      className='fixed inset-0 bg-black/30 flex items-center justify-center z-50'
+      className='fixed inset-0 overlay-soft flex items-center justify-center z-50'
       onClick={onClose}
     >
       <div
-        className='bg-white rounded-lg p-5 max-w-lg w-full mx-4 shadow-lg max-h-[80vh] overflow-y-auto'
+        className='surface-card rounded-lg border border-app p-5 max-w-lg w-full mx-4 shadow-lg max-h-[80vh] overflow-y-auto'
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -228,7 +228,7 @@ export default function StorageModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Tip */}
-        <div className='mt-4 p-2.5 bg-stone-50 rounded text-[11px] text-stone-500'>
+        <div className='mt-4 p-2.5 surface-muted rounded text-[11px] text-stone-500'>
           To erase individual items or a single category, use the matching
           panel in Paperazzi (Filters, Pinned papers). The button below erases{' '}
           <strong>everything</strong>.
@@ -239,18 +239,18 @@ export default function StorageModal({ isOpen, onClose }: Props) {
           {!showConfirm ? (
             <button
               onClick={() => setShowConfirm(true)}
-              className='w-full px-3 py-2 text-xs bg-red-50 text-red-700 hover:bg-red-100 rounded transition'
+              className='w-full px-3 py-2 text-xs button-danger-soft rounded transition'
             >
               Erase all stored data
             </button>
           ) : (
             <div className='space-y-2'>
-              <div className='flex items-start gap-2 p-2.5 bg-red-50 rounded'>
+              <div className='flex items-start gap-2 p-2.5 banner-danger rounded'>
                 <AlertTriangle
                   size={14}
-                  className='text-red-600 flex-shrink-0 mt-0.5'
+                  className='text-danger flex-shrink-0 mt-0.5'
                 />
-                <p className='text-[11px] text-red-700'>
+                <p className='text-[11px] text-danger'>
                   This permanently erases all saved searches, journal filters,
                   pinned papers, groups, reported flags, and UI preferences.
                   The page will reload afterwards.
@@ -259,13 +259,13 @@ export default function StorageModal({ isOpen, onClose }: Props) {
               <div className='flex gap-2'>
                 <button
                   onClick={() => setShowConfirm(false)}
-                  className='flex-1 px-3 py-2 text-xs text-stone-600 hover:bg-stone-50 rounded transition'
+                  className='flex-1 px-3 py-2 text-xs button-ghost rounded transition'
                 >
                   Cancel
                 </button>
                 <button
                   onClick={eraseAll}
-                  className='flex-1 px-3 py-2 text-xs bg-red-600 text-white hover:bg-red-700 rounded transition'
+                  className='flex-1 px-3 py-2 text-xs button-danger rounded transition'
                 >
                   Confirm erase
                 </button>

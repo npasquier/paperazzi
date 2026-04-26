@@ -484,21 +484,21 @@ export default function SearchResults({
       <div className='space-y-3'>
         <div className='text-center py-4'>
           <div className='inline-flex items-center gap-2 text-sm text-stone-600'>
-            <div className='animate-spin h-4 w-4 border-2 border-stone-300 border-t-stone-600 rounded-full' />
+            <div className='animate-spin h-4 w-4 border-2 border-[var(--border-strong)] border-t-[var(--accent)] rounded-full' />
             <span>{loadingMessage}</span>
           </div>
         </div>
         {showSlowLoadingHelp && (
-          <div className='mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg'>
-            <p className='text-sm font-medium text-amber-800 mb-2'>Taking longer than expected</p>
-            <p className='text-xs text-amber-700 mb-3'>This usually means your search is very broad or OpenAlex is experiencing high traffic.</p>
+          <div className='mb-4 p-4 banner-warning rounded-lg'>
+            <p className='text-sm font-medium text-warning mb-2'>Taking longer than expected</p>
+            <p className='text-xs text-warning mb-3'>This usually means your search is very broad or OpenAlex is experiencing high traffic.</p>
             <div className='flex gap-2 text-xs'>
-              <button onClick={() => window.location.reload()} className='px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded transition'>Retry Search</button>
-              <span className='text-amber-600'>or try adding more filters to narrow results</span>
+              <button onClick={() => window.location.reload()} className='px-3 py-1.5 rounded transition surface-card border border-[var(--warning-border)] text-warning'>Retry Search</button>
+              <span className='text-warning'>or try adding more filters to narrow results</span>
             </div>
           </div>
         )}
-        {[1, 2, 3].map((i) => <div key={i} className='bg-stone-200 h-24 rounded-lg animate-pulse' />)}
+        {[1, 2, 3].map((i) => <div key={i} className='surface-subtle h-24 rounded-lg animate-pulse' />)}
       </div>
     );
   }
@@ -508,9 +508,9 @@ export default function SearchResults({
   // ── Network view short-circuits the rest of the page ────────────
   if (networkId) {
     return (
-      <div className='flex flex-col h-full'>
+      <div className='flex h-full min-h-0 w-full flex-col overflow-hidden'>
         {/* Header banner with focal info + clear button */}
-        <div className='mb-3 p-3 bg-stone-50 border border-stone-200 rounded-lg flex items-start gap-3'>
+        <div className='mb-3 p-3 surface-card border border-app rounded-lg flex items-start gap-3'>
           <div className='flex-1 min-w-0'>
             <p className='text-xs font-medium text-stone-600 mb-1'>
               Network for:
@@ -535,7 +535,7 @@ export default function SearchResults({
                 {(() => {
                   if (journalFilterMode === 'specific' && journals.length) {
                     return (
-                      <p className='text-[11px] text-amber-700 mt-1.5'>
+                      <p className='text-[11px] text-warning mt-1.5'>
                         Filtered by {journals.length} manual journal
                         {journals.length === 1 ? '' : 's'}
                       </p>
@@ -559,7 +559,7 @@ export default function SearchResults({
                       label = `${cats} · ${doms}`;
                     }
                     return (
-                      <p className='text-[11px] text-amber-700 mt-1.5'>
+                      <p className='text-[11px] text-warning mt-1.5'>
                         Filtered by {label}
                       </p>
                     );
@@ -575,7 +575,7 @@ export default function SearchResults({
           </div>
           <button
             onClick={() => router.push('/search')}
-            className='p-1 hover:bg-stone-200 rounded transition flex-shrink-0'
+            className='p-1 hover:bg-[var(--surface-muted)] rounded transition flex-shrink-0'
             title='Exit network view'
           >
             <X size={16} className='text-stone-600' />
@@ -585,13 +585,13 @@ export default function SearchResults({
         {/* Body */}
         {networkLoading ? (
           <div className='flex items-center justify-center py-16 gap-3'>
-            <div className='animate-spin h-5 w-5 border-2 border-stone-300 border-t-stone-700 rounded-full' />
+            <div className='animate-spin h-5 w-5 border-2 border-[var(--border-strong)] border-t-[var(--accent)] rounded-full' />
             <span className='text-sm text-stone-600'>
               Building network — fetching references and citing papers…
             </span>
           </div>
         ) : networkError ? (
-          <div className='p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700'>
+          <div className='p-4 banner-danger rounded text-sm text-danger'>
             Failed to build network: {networkError}
           </div>
         ) : networkFocal ? (
@@ -613,8 +613,8 @@ export default function SearchResults({
                 cites={networkCites}
               />
             </div>
-            <p className='text-[11px] text-stone-400 mt-2'>
-              Hover a node to highlight its edges (incoming = sky, outgoing = emerald). Click a node to open the paper.
+            <p className='text-[11px] text-app-soft mt-2'>
+              Hover a node to highlight its edges (references/backward = green, citing/forward = blue). Click a node to open the paper.
             </p>
           </>
         ) : null}
@@ -623,18 +623,18 @@ export default function SearchResults({
   }
 
   return (
-    <div className='flex flex-col h-full'>
+    <div className='flex h-full min-h-0 w-full flex-col overflow-hidden'>
       {/* Author Info Banner */}
       {authorInfo && (
-        <div className='mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg relative group'>
+        <div className='mb-4 p-4 banner-info rounded-lg relative group'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-3 flex-1 min-w-0'>
-              <User size={20} className='text-blue-600 mt-1 flex-shrink-0' />
+              <User size={20} className='text-accent mt-1 flex-shrink-0' />
               <div className='flex-1 min-w-0'>
-                <p className='text-xs font-medium text-blue-800 mb-2'>Filtering by author:</p>
+                <p className='text-xs font-medium text-accent-strong mb-2'>Filtering by author:</p>
                 <div className='flex items-center gap-2 mb-2'>
                   <h3 className='text-lg font-semibold text-stone-900'>{authorInfo.display_name}</h3>
-                  {authorInfo.orcid && <a href={authorInfo.orcid} target='_blank' rel='noopener noreferrer' className='text-xs text-blue-600 hover:underline'>ORCID</a>}
+                  {authorInfo.orcid && <a href={authorInfo.orcid} target='_blank' rel='noopener noreferrer' className='text-xs text-accent hover:underline'>ORCID</a>}
                 </div>
                 {authorInfo.last_known_institution && (
                   <p className='text-sm text-stone-700 mb-1'>
@@ -653,119 +653,119 @@ export default function SearchResults({
                 </div>
               </div>
             </div>
-            <button onClick={onClearAuthor} className='p-1 hover:bg-blue-100 rounded transition flex-shrink-0' title='Clear author filter'>
-              <X size={16} className='text-blue-600' />
+            <button onClick={onClearAuthor} className='p-1 hover:bg-[var(--surface-card)] rounded transition flex-shrink-0' title='Clear author filter'>
+              <X size={16} className='text-accent' />
             </button>
           </div>
           <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isAuthorInfoExpanded ? 'max-h-32 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-            <div className='pt-3 border-t border-blue-200 space-y-2'>
+            <div className='pt-3 border-t border-[var(--accent-border)] space-y-2'>
               <p className='text-xs text-stone-500'>Report errors or missing data to OpenAlex</p>
               <div className='flex items-center gap-2 text-xs'>
                 <span className='text-stone-500'>ID:</span>
-                <code className='px-1.5 py-0.5 bg-white/60 rounded text-stone-600 font-mono text-[11px]'>{authorId}</code>
+                <code className='px-1.5 py-0.5 surface-card rounded text-stone-600 font-mono text-[11px]'>{authorId}</code>
                 <button onClick={copyAuthorId} className='p-0.5 text-stone-400 hover:text-stone-600 transition' title='Copy Author ID'>
-                  {isAuthorIdCopied ? <Check size={12} className='text-green-600' /> : <Copy size={12} />}
+                  {isAuthorIdCopied ? <Check size={12} className='text-success' /> : <Copy size={12} />}
                 </button>
               </div>
               <div className='flex items-center gap-3 pt-1'>
                 <button onClick={openAuthorCorrectionForm} className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'>
                   <ExternalLink size={11} /> Submit correction
                 </button>
-                <button onClick={handleAuthorReportedToggle} className={`inline-flex items-center gap-1 text-xs transition ${isAuthorReported ? 'text-green-600' : 'text-stone-400 hover:text-stone-600'}`}>
-                  <CheckCircle size={12} className={isAuthorReported ? 'fill-green-600 text-white' : ''} />
+                <button onClick={handleAuthorReportedToggle} className={`inline-flex items-center gap-1 text-xs transition ${isAuthorReported ? 'text-success' : 'text-stone-400 hover:text-stone-600'}`}>
+                  <CheckCircle size={12} className={isAuthorReported ? 'fill-[var(--success-foreground)] text-[var(--foreground-inverse)]' : ''} />
                   <span>{isAuthorReported ? 'Reported' : 'Mark as reported'}</span>
                 </button>
               </div>
             </div>
           </div>
-          <button onClick={toggleAuthorInfo} className='absolute bottom-2 right-2 p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded transition opacity-0 group-hover:opacity-100'>
-            <Info size={16} className={`transition-colors ${isAuthorInfoExpanded ? 'text-blue-600' : ''}`} />
+          <button onClick={toggleAuthorInfo} className='absolute bottom-2 right-2 p-1 text-[var(--accent-border)] hover:text-accent hover:bg-[var(--surface-card)] rounded transition opacity-0 group-hover:opacity-100'>
+            <Info size={16} className={`transition-colors ${isAuthorInfoExpanded ? 'text-accent' : ''}`} />
           </button>
         </div>
       )}
 
       {/* Citing banner */}
       {citing && (
-        <div className='mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg'>
+        <div className='mb-4 p-3 banner-warning rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <Quote size={16} className='text-amber-600 mt-0.5 flex-shrink-0' />
+              <Quote size={16} className='text-warning mt-0.5 flex-shrink-0' />
               <div className='min-w-0'>
-                <p className='text-xs font-medium text-amber-800 mb-1'>Showing papers that cite:</p>
-                {loadingCitingPaper ? <p className='text-sm text-amber-700 animate-pulse'>Loading...</p>
+                <p className='text-xs font-medium text-warning mb-1'>Showing papers that cite:</p>
+                {loadingCitingPaper ? <p className='text-sm text-warning animate-pulse'>Loading...</p>
                   : citingPaper ? (
                     <div>
                       <p className='text-sm font-medium text-stone-900 line-clamp-2'>{citingPaper.title}</p>
                       <p className='text-xs text-stone-600 truncate'>{citingPaper.authors?.slice(0, 3).join(', ')}{citingPaper.authors?.length > 3 && ' et al.'}{citingPaper.publication_year && ` (${citingPaper.publication_year})`}</p>
                     </div>
-                  ) : <p className='text-sm text-amber-700'>Paper ID: {citing}</p>}
+                  ) : <p className='text-sm text-warning'>Paper ID: {citing}</p>}
               </div>
             </div>
-            <button onClick={onClearCiting} className='p-1 hover:bg-amber-100 rounded transition flex-shrink-0'><X size={16} className='text-amber-600' /></button>
+            <button onClick={onClearCiting} className='p-1 hover:bg-[var(--surface-card)] rounded transition flex-shrink-0'><X size={16} className='text-warning' /></button>
           </div>
         </div>
       )}
 
       {/* CitingAll banner */}
       {citingAll && citingAll.length > 0 && (
-        <div className='mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg'>
+        <div className='mb-4 p-3 banner-analysis rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <Library size={16} className='text-purple-600 mt-0.5 flex-shrink-0' />
+              <Library size={16} className='text-analysis mt-0.5 flex-shrink-0' />
               <div className='min-w-0 flex-1'>
-                <p className='text-xs font-medium text-purple-800 mb-2'>Showing papers that cite ALL {citingAll.length} papers:</p>
-                {loadingCitingAllPapers ? <p className='text-sm text-purple-700 animate-pulse'>Loading...</p>
+                <p className='text-xs font-medium text-analysis mb-2'>Showing papers that cite ALL {citingAll.length} papers:</p>
+                {loadingCitingAllPapers ? <p className='text-sm text-analysis animate-pulse'>Loading...</p>
                   : citingAllPapers.length > 0 ? (
                     <div className='space-y-2'>
                       {citingAllPapers.map((paper, i) => (
-                        <div key={paper.id} className='text-sm bg-white/60 rounded p-2 border border-purple-100'>
+                        <div key={paper.id} className='text-sm surface-card rounded p-2 border border-[var(--analysis-border)]'>
                           <p className='font-medium text-stone-900 line-clamp-1'>{i + 1}. {paper.title}</p>
                           <p className='text-xs text-stone-600 truncate'>{paper.authors?.slice(0, 2).join(', ')}{paper.authors?.length > 2 && ' et al.'}{paper.publication_year && ` (${paper.publication_year})`}</p>
                         </div>
                       ))}
                     </div>
-                  ) : <p className='text-sm text-purple-700'>{citingAll.length} papers selected</p>}
+                  ) : <p className='text-sm text-analysis'>{citingAll.length} papers selected</p>}
               </div>
             </div>
-            <button onClick={onClearCitingAll} className='p-1 hover:bg-purple-100 rounded transition flex-shrink-0'><X size={16} className='text-purple-600' /></button>
+            <button onClick={onClearCitingAll} className='p-1 hover:bg-[var(--surface-card)] rounded transition flex-shrink-0'><X size={16} className='text-analysis' /></button>
           </div>
         </div>
       )}
 
       {/* ReferencedBy banner */}
       {referencedBy && (
-        <div className='mb-4 p-3 bg-green-50 border border-green-200 rounded-lg'>
+        <div className='mb-4 p-3 banner-success rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <BookOpen size={16} className='text-green-600 mt-0.5 flex-shrink-0' />
+              <BookOpen size={16} className='text-success mt-0.5 flex-shrink-0' />
               <div className='min-w-0'>
-                <p className='text-xs font-medium text-green-800 mb-1'>Showing references from:</p>
-                {loadingReferencedByPaper ? <p className='text-sm text-green-700 animate-pulse'>Loading...</p>
+                <p className='text-xs font-medium text-success mb-1'>Showing references from:</p>
+                {loadingReferencedByPaper ? <p className='text-sm text-success animate-pulse'>Loading...</p>
                   : referencedByPaper ? (
                     <div>
                       <p className='text-sm font-medium text-stone-900 line-clamp-2'>{referencedByPaper.title}</p>
                       <p className='text-xs text-stone-600 truncate'>{referencedByPaper.authors?.slice(0, 3).join(', ')}{referencedByPaper.authors?.length > 3 && ' et al.'}{referencedByPaper.publication_year && ` (${referencedByPaper.publication_year})`}</p>
                     </div>
-                  ) : <p className='text-sm text-green-700'>Paper ID: {referencedBy}</p>}
+                  ) : <p className='text-sm text-success'>Paper ID: {referencedBy}</p>}
               </div>
             </div>
-            <button onClick={onClearReferencedBy} className='p-1 hover:bg-green-100 rounded transition flex-shrink-0'><X size={16} className='text-green-600' /></button>
+            <button onClick={onClearReferencedBy} className='p-1 hover:bg-[var(--surface-card)] rounded transition flex-shrink-0'><X size={16} className='text-success' /></button>
           </div>
         </div>
       )}
 
       {/* ReferencesAll banner */}
       {referencesAll && referencesAll.length > 0 && (
-        <div className='mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg'>
+        <div className='mb-4 p-3 banner-success rounded-lg'>
           <div className='flex items-start justify-between gap-3'>
             <div className='flex items-start gap-2 flex-1 min-w-0'>
-              <Library size={16} className='text-emerald-600 mt-0.5 flex-shrink-0' />
+              <Library size={16} className='text-success mt-0.5 flex-shrink-0' />
               <div className='min-w-0 flex-1'>
-                <p className='text-xs font-medium text-emerald-800 mb-2'>Showing common references from {referencesAll.length} papers:</p>
-                {loadingReferencesAllPapers ? <p className='text-sm text-emerald-700 animate-pulse'>Loading...</p>
+                <p className='text-xs font-medium text-success mb-2'>Showing common references from {referencesAll.length} papers:</p>
+                {loadingReferencesAllPapers ? <p className='text-sm text-success animate-pulse'>Loading...</p>
                   : <div className='space-y-2'>
                       {referencesAllPapers.map((paper, i) => (
-                        <div key={paper.id} className='text-sm bg-white/60 rounded p-2 border border-emerald-100'>
+                        <div key={paper.id} className='text-sm surface-card rounded p-2 border border-[var(--success-border)]'>
                           <p className='font-medium text-stone-900 line-clamp-1'>{i + 1}. {paper.title}</p>
                           <p className='text-xs text-stone-600 truncate'>{paper.authors?.slice(0, 2).join(', ')}{paper.authors?.length > 2 && ' et al.'}{paper.publication_year && ` (${paper.publication_year})`}</p>
                         </div>
@@ -773,7 +773,7 @@ export default function SearchResults({
                     </div>}
               </div>
             </div>
-            <button onClick={onClearReferencesAll} className='p-1 hover:bg-emerald-100 rounded transition flex-shrink-0'><X size={16} className='text-emerald-600' /></button>
+            <button onClick={onClearReferencesAll} className='p-1 hover:bg-[var(--surface-card)] rounded transition flex-shrink-0'><X size={16} className='text-success' /></button>
           </div>
         </div>
       )}
@@ -791,13 +791,13 @@ export default function SearchResults({
       </div>
 
       {error && (
-        <div className='mb-4 p-4 bg-red-50 border border-red-200 rounded-lg'>
+        <div className='mb-4 p-4 banner-danger rounded-lg'>
           <div className='flex items-start gap-2'>
             <div className='flex-1'>
-              <p className='text-sm font-medium text-red-800 mb-1'>Search Error</p>
-              <p className='text-sm text-red-700'>{error}</p>
+              <p className='text-sm font-medium text-danger mb-1'>Search Error</p>
+              <p className='text-sm text-danger'>{error}</p>
             </div>
-            <button onClick={() => window.location.reload()} className='text-xs text-red-600 hover:text-red-800 underline'>Retry</button>
+            <button onClick={() => window.location.reload()} className='text-xs text-danger hover:opacity-80 underline'>Retry</button>
           </div>
         </div>
       )}
@@ -810,7 +810,7 @@ export default function SearchResults({
       )}
 
       {results.length > 0 && (
-        <div className='flex-1 overflow-y-auto space-y-3 mb-4'>
+        <div className='app-scrollbar flex-1 min-h-0 overflow-y-auto space-y-3 mb-4 pr-1'>
           {results.map((paper) => (
             <PaperCard key={paper.id} paper={paper} variant='default' showPinButton={true} showActions={true} preserveParams={preserveParams} onAuthorClick={onAuthorSearch} />
           ))}
@@ -818,15 +818,15 @@ export default function SearchResults({
       )}
 
       {totalPages > 1 && (
-        <div className='flex items-center justify-center gap-1 py-4 border-t bg-white'>
-          <button onClick={() => handlePageChange(page - 1)} disabled={page === 1} className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 transition'>Previous</button>
+        <div className='flex items-center justify-center gap-1 pt-4 pb-3 border-t border-app surface-card'>
+          <button onClick={() => handlePageChange(page - 1)} disabled={page === 1} className='px-3 py-2 text-sm text-stone-700 hover:bg-[var(--surface-muted)] rounded disabled:text-stone-400 transition'>Previous</button>
           {getPageNumbers().map((pageNum, idx) => {
             if (pageNum === '...') return <span key={`ellipsis-${idx}`} className='px-2 text-stone-400'>...</span>;
             return (
-              <button key={pageNum} onClick={() => handlePageChange(pageNum as number)} className={`min-w-[40px] px-3 py-2 text-sm rounded transition ${pageNum === page ? 'bg-stone-800 text-white font-semibold' : 'text-stone-700 hover:bg-stone-50'}`}>{pageNum}</button>
+              <button key={pageNum} onClick={() => handlePageChange(pageNum as number)} className={`min-w-[40px] px-3 py-2 text-sm rounded transition ${pageNum === page ? 'button-primary font-semibold' : 'text-stone-700 hover:bg-[var(--surface-muted)]'}`}>{pageNum}</button>
             );
           })}
-          <button onClick={() => handlePageChange(page + 1)} disabled={page === totalPages} className='px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded disabled:text-stone-400 transition'>Next</button>
+          <button onClick={() => handlePageChange(page + 1)} disabled={page === totalPages} className='px-3 py-2 text-sm text-stone-700 hover:bg-[var(--surface-muted)] rounded disabled:text-stone-400 transition'>Next</button>
         </div>
       )}
     </div>

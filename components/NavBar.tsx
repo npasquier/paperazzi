@@ -1,6 +1,5 @@
 'use client';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search, Database } from 'lucide-react';
 import { useState, useEffect, Suspense } from 'react';
@@ -45,19 +44,11 @@ function NavBarContent() {
   };
 
   return (
-    <nav className='bg-white border-b border-stone-200'>
-      <div className='flex items-center px-6 py-3 max-w-7xl mx-auto gap-6'>
+    <nav className='surface-panel border-app border-b h-16 shrink-0'>
+      <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
         {/* Brand */}
-        <Link href='/' className='flex items-center gap-3 flex-shrink-0'>
-          <div className='bg-stone-100 p-1.5 rounded-lg'>
-            <Image
-              src='/binocular.svg'
-              alt='Paperazzi logo'
-              width={28}
-              height={28}
-            />
-          </div>
-          <span className='text-xl font-semibold text-stone-900'>
+        <Link href='/' className='flex items-center flex-shrink-0'>
+          <span className='text-xl font-semibold text-accent-strong tracking-tight'>
             Paperazzi
           </span>
         </Link>
@@ -75,13 +66,13 @@ function NavBarContent() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder='Search papers...'
-                  className='w-full pl-10 pr-4 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-400 focus:border-stone-400'
+                  className='w-full pl-10 pr-4 py-2 border border-app rounded-lg focus-accent'
                 />
               </div>
             </div>
             <button
               onClick={handleSearch}
-              className='px-6 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition font-medium flex-shrink-0'
+              className='px-6 py-2 button-primary rounded-lg transition font-medium flex-shrink-0'
             >
               Search
             </button>
@@ -96,7 +87,7 @@ function NavBarContent() {
         {/* Stored-data viewer */}
         <button
           onClick={() => setShowStorage(true)}
-          className='text-stone-500 hover:text-stone-800 transition flex-shrink-0 ml-auto p-1'
+          className='text-app-soft hover:text-app transition flex-shrink-0 ml-auto p-1'
           title='View stored data'
           aria-label='View stored data'
         >
@@ -106,7 +97,7 @@ function NavBarContent() {
         {/* About link - always visible */}
         <Link
           href='/about'
-          className='text-sm text-stone-700 hover:text-stone-900 transition flex-shrink-0'
+          className='text-sm text-app-muted hover:text-app transition flex-shrink-0'
         >
           About
         </Link>
@@ -123,14 +114,9 @@ function NavBarContent() {
 export default function NavBar() {
   return (
     <Suspense fallback={
-      <nav className='bg-white border-b border-stone-200'>
-        <div className='flex items-center px-6 py-3 max-w-7xl mx-auto gap-6'>
-          <div className='flex items-center gap-3'>
-            <div className='bg-stone-100 p-1.5 rounded-lg'>
-              <div className='w-7 h-7' />
-            </div>
-            <span className='text-xl font-semibold text-stone-900'>Paperazzi</span>
-          </div>
+      <nav className='surface-panel border-app border-b h-16 shrink-0'>
+        <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
+          <span className='text-xl font-semibold text-accent-strong tracking-tight'>Paperazzi</span>
         </div>
       </nav>
     }>

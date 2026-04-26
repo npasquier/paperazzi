@@ -272,7 +272,7 @@ export default function FilterPanel({
     return (
       <button
         onClick={onToggle}
-        className='fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white border border-l-0 border-stone-200 rounded-r-lg p-2 shadow-sm hover:bg-stone-50 transition'
+        className='fixed left-0 top-1/2 -translate-y-1/2 z-40 surface-panel border border-app border-l-0 rounded-r-lg p-2 shadow-sm hover:bg-[var(--surface-muted)] transition'
         title='Open filters'
       >
         <div className='flex flex-col items-center gap-1'>
@@ -295,7 +295,7 @@ export default function FilterPanel({
   const renderPill = (key: string, label: string, onRemove: () => void) => (
     <span
       key={key}
-      className='inline-flex items-center gap-1 px-2 py-1 bg-stone-100 text-stone-700 rounded text-xs group'
+      className='inline-flex items-center gap-1 px-2 py-1 chip-muted rounded text-xs group'
     >
       <span className='truncate max-w-[140px]'>{label}</span>
       <button
@@ -351,10 +351,10 @@ export default function FilterPanel({
   ) => {
     const isExpanded = expandedSections.has(id);
     return (
-      <div className='border-b border-stone-100 last:border-b-0'>
+      <div className='border-b border-app-muted last:border-b-0'>
         <button
           onClick={() => toggleSection(id)}
-          className='w-full flex items-center justify-between py-3 hover:bg-stone-50 transition'
+          className='w-full flex items-center justify-between py-3 hover:bg-[var(--surface-muted)] transition'
         >
           <div className='flex items-center gap-2'>
             {isExpanded ? (
@@ -365,7 +365,7 @@ export default function FilterPanel({
             <span className='text-sm text-stone-600'>{label}</span>
           </div>
           {count > 0 && (
-            <span className='text-xs bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded'>
+            <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
               {count}
             </span>
           )}
@@ -392,22 +392,22 @@ export default function FilterPanel({
     );
   };
   return (
-    <aside className='w-64 bg-white border-r border-stone-200 flex flex-col h-full overflow-hidden'>
+    <aside className='w-64 surface-panel border-r border-app flex flex-col h-full overflow-hidden'>
       {/* Header */}
-      <div className='px-4 py-3 border-b border-stone-200 flex-shrink-0'>
+      <div className='px-4 py-3 border-b border-app flex-shrink-0'>
         <div className='flex items-center justify-between'>
           <div className='flex items-center gap-2'>
             <Filter size={14} className='text-stone-400' />
             <span className='text-sm font-medium text-stone-700'>Filters</span>
             {activeFilterCount > 0 && (
-              <span className='text-xs bg-stone-800 text-white px-1.5 py-0.5 rounded'>
+              <span className='text-xs badge-accent px-1.5 py-0.5 rounded'>
                 {activeFilterCount}
               </span>
             )}
           </div>
           <button
             onClick={onToggle}
-            className='p-1 hover:bg-stone-100 rounded transition'
+            className='p-1 hover:bg-[var(--surface-muted)] rounded transition'
             title='Close filters'
           >
             <ChevronLeft size={16} className='text-stone-400' />
@@ -416,12 +416,12 @@ export default function FilterPanel({
       </div>
       {/* Save Journal-Filter Modal */}
       {showSaveJournalModal && (
-        <div className='fixed inset-0 bg-black/30 flex items-center justify-center z-50'>
-          <div className='bg-white rounded-lg p-4 max-w-sm w-full mx-4 shadow-lg'>
+        <div className='fixed inset-0 overlay-soft flex items-center justify-center z-50'>
+          <div className='surface-card border border-app rounded-lg p-4 max-w-sm w-full mx-4 shadow-lg'>
             <h3 className='text-sm font-medium text-stone-900 mb-3'>
               Save Journal Filter
             </h3>
-            <div className='mb-3 p-2 bg-stone-50 rounded text-xs text-stone-600 space-y-0.5'>
+            <div className='mb-3 p-2 surface-muted rounded text-xs text-stone-600 space-y-0.5'>
               <div>
                 <span className='text-stone-500'>Wide: </span>
                 {filters.econFilter?.enabled
@@ -452,7 +452,7 @@ export default function FilterPanel({
               value={journalPresetName}
               onChange={(e) => setJournalPresetName(e.target.value)}
               placeholder='Enter preset name'
-              className='w-full px-3 py-2 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm mb-3'
+              className='w-full px-3 py-2 border border-app rounded focus-accent text-sm mb-3'
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') saveCurrentJournalFilters();
@@ -468,14 +468,14 @@ export default function FilterPanel({
                   setShowSaveJournalModal(false);
                   setJournalPresetName('');
                 }}
-                className='px-3 py-1.5 text-xs text-stone-600 hover:text-stone-700'
+                className='px-3 py-1.5 text-xs text-app-muted hover:text-app'
               >
                 Cancel
               </button>
               <button
                 onClick={saveCurrentJournalFilters}
                 disabled={!journalPresetName.trim()}
-                className='px-3 py-1.5 text-xs bg-stone-700 text-white rounded hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed'
+                className='px-3 py-1.5 text-xs button-primary rounded disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 Save
               </button>
@@ -485,13 +485,13 @@ export default function FilterPanel({
       )}
       {/* Save Modal */}
       {showSaveModal && (
-        <div className='fixed inset-0 bg-black/30 flex items-center justify-center z-50'>
-          <div className='bg-white rounded-lg p-4 max-w-sm w-full mx-4 shadow-lg'>
+        <div className='fixed inset-0 overlay-soft flex items-center justify-center z-50'>
+          <div className='surface-card border border-app rounded-lg p-4 max-w-sm w-full mx-4 shadow-lg'>
             <h3 className='text-sm font-medium text-stone-900 mb-3'>
               Save Search
             </h3>
             {query && (
-              <div className='mb-3 p-2 bg-stone-50 rounded text-xs text-stone-600'>
+              <div className='mb-3 p-2 surface-muted rounded text-xs text-stone-600'>
                 <span className='text-stone-500'>Query: </span>
                 {query}
               </div>
@@ -501,7 +501,7 @@ export default function FilterPanel({
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
               placeholder='Enter preset name'
-              className='w-full px-3 py-2 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm mb-3'
+              className='w-full px-3 py-2 border border-app rounded focus-accent text-sm mb-3'
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') saveCurrentFilters();
@@ -517,14 +517,14 @@ export default function FilterPanel({
                   setShowSaveModal(false);
                   setPresetName('');
                 }}
-                className='px-3 py-1.5 text-xs text-stone-600 hover:text-stone-700'
+                className='px-3 py-1.5 text-xs text-app-muted hover:text-app'
               >
                 Cancel
               </button>
               <button
                 onClick={saveCurrentFilters}
                 disabled={!presetName.trim()}
-                className='px-3 py-1.5 text-xs bg-stone-700 text-white rounded hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed'
+                className='px-3 py-1.5 text-xs button-primary rounded disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 Save
               </button>
@@ -533,14 +533,14 @@ export default function FilterPanel({
         </div>
       )}
       {/* Scrollable content */}
-      <div className='flex-1 overflow-y-auto'>
+      <div className='app-scrollbar flex-1 overflow-y-auto'>
         {/* Sort By */}
-        <div className='px-4 py-3 border-b border-stone-100'>
-          <label className='text-xs text-stone-400 block mb-1.5'>Sort by</label>
+        <div className='px-4 py-3 border-b border-app-muted'>
+          <label className='text-xs text-app-soft block mb-1.5'>Sort by</label>
           <select
             value={filters.sortBy}
             onChange={handleSortChange}
-            className='w-full px-2 py-1.5 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm bg-white text-stone-700'
+            className='w-full px-2 py-1.5 border border-app rounded focus-accent text-sm surface-card text-stone-700'
           >
             <option value='relevance_score'>Relevance</option>
             <option value='publication_date:desc'>Most Recent</option>
@@ -552,10 +552,10 @@ export default function FilterPanel({
         {/* Collapsible filter sections */}
         <div className='px-4'>
           {/* Saved Presets - Collapsible and Discrete */}
-          <div className='border-b border-stone-100'>
+          <div className='border-b border-app-muted'>
             <button
               onClick={() => toggleSection('presets')}
-              className='w-full flex items-center justify-between py-2.5 hover:bg-stone-50 transition'
+              className='w-full flex items-center justify-between py-2.5 hover:bg-[var(--surface-muted)] transition'
             >
               <div className='flex items-center gap-2'>
                 {expandedSections.has('presets') ? (
@@ -582,8 +582,8 @@ export default function FilterPanel({
                           onClick={() => loadPreset(preset)}
                           className={`flex-1 text-left px-2 py-1 rounded text-xs transition ${
                             activePresetId === preset.id
-                              ? 'bg-stone-100 text-stone-700'
-                              : 'text-stone-500 hover:bg-stone-50 hover:text-stone-700'
+                              ? 'surface-muted text-stone-700'
+                              : 'text-stone-500 hover:bg-[var(--surface-muted)] hover:text-stone-700'
                           }`}
                           title={
                             preset.query ? `Query: ${preset.query}` : 'No query'
@@ -591,7 +591,7 @@ export default function FilterPanel({
                         >
                           {preset.name}
                           {preset.query && (
-                            <span className='text-stone-400 ml-1 text-[11px]'>
+                            <span className='text-app-soft ml-1 text-[11px]'>
                               · {preset.query.slice(0, 15)}
                               {preset.query.length > 15 ? '...' : ''}
                             </span>
@@ -611,19 +611,19 @@ export default function FilterPanel({
                 {presets.length < MAX_PRESETS && activeFilterCount > 0 && (
                   <button
                     onClick={() => setShowSaveModal(true)}
-                    className='inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 transition'
+                    className='inline-flex items-center gap-1 text-[11px] text-app-soft hover:text-app-muted transition'
                   >
                     <Save size={11} />
                     Save Current
                   </button>
                 )}
                 {presets.length >= MAX_PRESETS && (
-                  <div className='text-[11px] text-stone-300'>
+                  <div className='text-[11px] text-app-soft'>
                     Max {MAX_PRESETS} presets
                   </div>
                 )}
                 {presets.length === 0 && (
-                  <div className='text-[11px] text-stone-300 mb-2'>
+                  <div className='text-[11px] text-app-soft mb-2'>
                     No saved filters yet
                   </div>
                 )}
@@ -631,10 +631,10 @@ export default function FilterPanel({
             )}
           </div>
           {/* Journals */}
-          <div className='border-b border-stone-100'>
+          <div className='border-b border-app-muted'>
             <button
               onClick={() => toggleSection('journals')}
-              className='w-full flex items-center justify-between py-3 hover:bg-stone-50 transition'
+              className='w-full flex items-center justify-between py-3 hover:bg-[var(--surface-muted)] transition'
             >
               <div className='flex items-center gap-2'>
                 {expandedSections.has('journals') ? (
@@ -648,14 +648,14 @@ export default function FilterPanel({
                 const mode = filters.journalFilterMode || 'wide';
                 if (mode === 'wide' && filters.econFilter?.enabled) {
                   return (
-                    <span className='text-xs bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded'>
+                    <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
                       Wide
                     </span>
                   );
                 }
                 if (mode === 'specific' && filters.journals.length > 0) {
                   return (
-                    <span className='text-xs bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded'>
+                    <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
                       {filters.journals.length}
                     </span>
                   );
@@ -679,11 +679,11 @@ export default function FilterPanel({
                   const tabClass = (active: boolean) =>
                     `flex-1 px-2 py-1 rounded transition ${
                       active
-                        ? 'bg-white text-stone-800 shadow-sm'
+                        ? 'surface-card text-stone-800 shadow-sm'
                         : 'text-stone-500 hover:text-stone-700'
                     }`;
                   return (
-                    <div className='flex items-center gap-1 p-0.5 mb-3 bg-stone-100 rounded text-[11px]'>
+                    <div className='flex items-center gap-1 p-0.5 mb-3 surface-subtle rounded text-[11px]'>
                       <button
                         onClick={() => setMode('wide')}
                         className={tabClass(mode === 'wide')}
@@ -713,7 +713,7 @@ export default function FilterPanel({
                   const hasIssnWhitelist = !!econ.issns?.length;
                   return (
                     <div className='mb-3'>
-                      <p className='text-[10px] uppercase tracking-wider text-stone-400 mb-1.5'>
+                      <p className='text-[10px] uppercase tracking-wider text-app-soft mb-1.5'>
                         Wide filter
                       </p>
 
@@ -746,8 +746,8 @@ export default function FilterPanel({
                               }}
                               className={`px-2 py-0.5 text-[11px] rounded transition ${
                                 isActive
-                                  ? 'bg-stone-800 text-white'
-                                  : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                                  ? 'button-primary'
+                                  : 'surface-muted text-stone-500 hover:bg-[var(--surface-subtle)]'
                               }`}
                             >
                               {preset.name}
@@ -758,7 +758,7 @@ export default function FilterPanel({
 
                       {/* Note when an ISSN-whitelist preset is active */}
                       {hasIssnWhitelist && (
-                        <p className='text-[10px] text-stone-400 mb-2'>
+                        <p className='text-[10px] text-app-soft mb-2'>
                           Using whitelist of {econ.issns!.length} journals —
                           category & domain rows have no effect.
                         </p>
@@ -770,7 +770,7 @@ export default function FilterPanel({
                           hasIssnWhitelist ? 'opacity-50' : ''
                         }`}
                       >
-                        <p className='text-[11px] text-stone-400 mb-1'>
+                        <p className='text-[11px] text-app-soft mb-1'>
                           Category
                         </p>
                         <div className='flex gap-1'>
@@ -815,8 +815,8 @@ export default function FilterPanel({
                                 }}
                                 className={`px-2 py-0.5 text-[11px] rounded transition ${
                                   isSelected
-                                    ? 'bg-stone-700 text-white'
-                                    : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                                    ? 'button-primary'
+                                    : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
                                 }`}
                               >
                                 {cat}
@@ -841,8 +841,8 @@ export default function FilterPanel({
                               !hasIssnWhitelist &&
                               econ.categories.length === 0 &&
                               econ.enabled
-                                ? 'bg-stone-700 text-white'
-                                : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                                ? 'button-primary'
+                                : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
                             }`}
                           >
                             All
@@ -852,7 +852,7 @@ export default function FilterPanel({
 
                       {/* Domain row — dimmed + unhighlighted under whitelist */}
                       <div className={hasIssnWhitelist ? 'opacity-50' : ''}>
-                        <p className='text-[11px] text-stone-400 mb-1'>
+                        <p className='text-[11px] text-app-soft mb-1'>
                           Domain
                         </p>
                         <div className='flex flex-wrap gap-1 max-h-24 overflow-y-auto'>
@@ -895,8 +895,8 @@ export default function FilterPanel({
                                 }}
                                 className={`px-1.5 py-0.5 text-[10px] rounded transition ${
                                   isSelected
-                                    ? 'bg-stone-600 text-white'
-                                    : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                                    ? 'button-primary'
+                                    : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
                                 }`}
                               >
                                 {label}
@@ -920,7 +920,7 @@ export default function FilterPanel({
                               }));
                               setActivePresetId(null);
                             }}
-                            className='text-[10px] text-stone-400 hover:text-stone-600 mt-1'
+                            className='text-[10px] text-app-soft hover:text-app-muted mt-1'
                           >
                             Reset to all
                           </button>
@@ -929,7 +929,7 @@ export default function FilterPanel({
 
                       {/* Journal count (only when wide is active) */}
                       {econ.enabled && (
-                        <p className='text-[10px] text-stone-400 mt-1.5'>
+                        <p className='text-[10px] text-app-soft mt-1.5'>
                           {hasIssnWhitelist
                             ? `${econ.issns!.length} journals (whitelist)`
                             : `${getEconJournalCount()} journals selected`}
@@ -942,7 +942,7 @@ export default function FilterPanel({
                 {/* ─── Subsection: Manual selection (only in specific mode) ── */}
                 {(filters.journalFilterMode || 'wide') === 'specific' && (
                   <div className='mb-3'>
-                    <p className='text-[10px] uppercase tracking-wider text-stone-400 mb-1.5'>
+                    <p className='text-[10px] uppercase tracking-wider text-app-soft mb-1.5'>
                       Manual selection
                     </p>
                     {filters.journals.length > 0 && (
@@ -958,7 +958,7 @@ export default function FilterPanel({
                     )}
                     <button
                       onClick={openJournalModal}
-                      className='inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition'
+                      className='inline-flex items-center gap-1 text-xs text-app-soft hover:text-app-muted transition'
                     >
                       <Plus size={14} />
                       Select journals
@@ -968,7 +968,7 @@ export default function FilterPanel({
 
                 {/* ─── Subsection: Saved journal filters ───────────────── */}
                 <div>
-                  <p className='text-[10px] uppercase tracking-wider text-stone-400 mb-1.5'>
+                  <p className='text-[10px] uppercase tracking-wider text-app-soft mb-1.5'>
                     Saved journal filters
                   </p>
                   {journalPresets.length > 0 ? (
@@ -984,8 +984,8 @@ export default function FilterPanel({
                               onClick={() => loadJournalPreset(preset)}
                               className={`flex-1 text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5 ${
                                 isActive
-                                  ? 'bg-stone-100 text-stone-700'
-                                  : 'text-stone-500 hover:bg-stone-50 hover:text-stone-700'
+                                  ? 'surface-muted text-stone-700'
+                                  : 'text-stone-500 hover:bg-[var(--surface-muted)] hover:text-stone-700'
                               }`}
                               title={`Wide: ${
                                 preset.econFilter.enabled ? 'on' : 'off'
@@ -993,7 +993,7 @@ export default function FilterPanel({
                             >
                               <Bookmark
                                 size={10}
-                                className='text-stone-400 flex-shrink-0'
+                                className='text-app-soft flex-shrink-0'
                               />
                               <span className='truncate'>{preset.name}</span>
                             </button>
@@ -1009,7 +1009,7 @@ export default function FilterPanel({
                       })}
                     </div>
                   ) : (
-                    <div className='text-[11px] text-stone-300 mb-2'>
+                      <div className='text-[11px] text-app-soft mb-2'>
                       No saved journal filters yet
                     </div>
                   )}
@@ -1018,13 +1018,13 @@ export default function FilterPanel({
                     filters.econFilter?.enabled) ? (
                     <button
                       onClick={() => setShowSaveJournalModal(true)}
-                      className='inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 transition'
+                      className='inline-flex items-center gap-1 text-[11px] text-app-soft hover:text-app-muted transition'
                     >
                       <Save size={11} />
                       Save current
                     </button>
                   ) : journalPresets.length >= MAX_PRESETS ? (
-                    <div className='text-[11px] text-stone-300'>
+                    <div className='text-[11px] text-app-soft'>
                       Max {MAX_PRESETS} presets
                     </div>
                   ) : null}
@@ -1059,13 +1059,13 @@ export default function FilterPanel({
           )}
         </div>
         {/* Type & Year */}
-        <div className='px-4 py-3 border-t border-stone-100 space-y-3'>
+        <div className='px-4 py-3 border-t border-app-muted space-y-3'>
           <div>
-            <label className='text-xs text-stone-400 block mb-1.5'>Type</label>
+            <label className='text-xs text-app-soft block mb-1.5'>Type</label>
             <select
               value={filters.publicationType}
               onChange={handlePublicationTypeChange}
-              className='w-full px-2 py-1.5 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm bg-white text-stone-700'
+              className='w-full px-2 py-1.5 border border-app rounded focus-accent text-sm surface-card text-stone-700'
             >
               {PUBLICATION_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -1075,7 +1075,7 @@ export default function FilterPanel({
             </select>
           </div>
           <div>
-            <label className='text-xs text-stone-400 block mb-1.5'>Year</label>
+            <label className='text-xs text-app-soft block mb-1.5'>Year</label>
             <div className='flex items-center gap-2'>
               <input
                 type='number'
@@ -1085,9 +1085,9 @@ export default function FilterPanel({
                   setActivePresetId(null);
                 }}
                 placeholder='From'
-                className='w-full px-2 py-1.5 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm'
+                className='w-full px-2 py-1.5 border border-app rounded focus-accent text-sm'
               />
-              <span className='text-stone-300'>–</span>
+              <span className='text-app-soft'>–</span>
               <input
                 type='number'
                 value={filters.dateTo}
@@ -1096,7 +1096,7 @@ export default function FilterPanel({
                   setActivePresetId(null);
                 }}
                 placeholder='To'
-                className='w-full px-2 py-1.5 border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300 text-sm'
+                className='w-full px-2 py-1.5 border border-app rounded focus-accent text-sm'
               />
             </div>
           </div>

@@ -345,7 +345,7 @@ function PaperazziAppContent() {
   };
 
   return (
-    <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
+    <div className='flex h-full min-h-0 bg-[var(--background)] overflow-hidden'>
       {/* Celebration overlay - renders at top level for full-page effect */}
       <CelebrationOverlay
         show={showCelebration}
@@ -354,9 +354,9 @@ function PaperazziAppContent() {
 
       {/* Loading overlay for author search */}
       {isSearchingAuthor && (
-        <div className='fixed inset-0 bg-black/20 flex items-center justify-center z-50'>
-          <div className='bg-white rounded-lg shadow-lg p-6 flex items-center gap-3'>
-            <div className='animate-spin h-5 w-5 border-2 border-stone-300 border-t-stone-700 rounded-full' />
+        <div className='fixed inset-0 overlay-soft flex items-center justify-center z-50'>
+          <div className='surface-card border border-app rounded-lg shadow-lg p-6 flex items-center gap-3'>
+            <div className='animate-spin h-5 w-5 border-2 border-[var(--border-strong)] border-t-[var(--accent)] rounded-full' />
             <span className='text-sm text-stone-700'>
               Searching for author...
             </span>
@@ -391,9 +391,9 @@ function PaperazziAppContent() {
         }}
       />
 
-      <main className='flex-1 overflow-y-auto'>
+      <main className='flex-1 min-h-0 min-w-0 overflow-hidden'>
         <div
-          className={`mx-auto p-6 ${
+          className={`mx-auto flex h-full min-h-0 w-full flex-col px-6 pt-6 pb-0 ${
             networkId ? 'max-w-none' : 'max-w-5xl'
           }`}
         >
@@ -436,7 +436,7 @@ function PaperazziAppContent() {
         onAuthorSearch={handleAuthorSearch}
       />
 
-      <CreateAlertButton filters={searchFilters} query={searchQuery} />
+      {/* <CreateAlertButton filters={searchFilters} query={searchQuery} /> */}
 
       {/* Modals */}
       <AuthorModal
@@ -485,11 +485,11 @@ export default function PaperazziApp() {
   return (
     <Suspense
       fallback={
-        <div className='flex h-[calc(100vh-57px)] bg-stone-50'>
-          <aside className='w-80 bg-white border-r border-stone-200 p-4'>
+        <div className='flex h-full min-h-0 bg-[var(--background)] overflow-hidden'>
+          <aside className='w-80 surface-card border-r border-app p-4'>
             <div className='text-sm text-stone-600'>Loading filters...</div>
           </aside>
-          <div className='flex-1 p-6'>
+          <div className='flex-1 min-h-0 px-6 pt-6 pb-0'>
             <div className='text-stone-600'>Loading search...</div>
           </div>
         </div>
