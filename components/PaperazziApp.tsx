@@ -8,6 +8,7 @@ import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
 import InstitutionModal from './InstitutionModal';
 import { Filters, Institution } from '../types/interfaces';
+import { ECON_PRESETS } from '@/data/econDomains';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import PinSidebar from './PinSidebar';
 import CreateAlertButton from './CreateAlertButton';
@@ -297,6 +298,73 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  // Handle empty-state tile clicks. Each tile applies a starter filter set so
+  // first-time visitors have something concrete to click. econFilter and
+  // journalFilterMode aren't URL-synced, so we set them via setFilters first;
+  // the URL push that follows preserves them via the `prev` spread in the
+  // URL-sync effect.
+  const handlePresetTile = (
+    preset: 'top5-cited-recent' | 'demo-network' | 'recent-qje',
+  ) => {
+    const currentYear = new Date().getFullYear();
+
+    if (preset === 'demo-network') {
+      // Famous econ paper — Acemoglu, Johnson & Robinson (2001),
+      // "The Colonial Origins of Comparative Development" in AER.
+      // Replace with your preferred OpenAlex Work ID if needed.
+      router.push('/search?network=W3124166904');
+      return;
+    }
+
+    if (preset === 'top5-cited-recent') {
+      const top5 = ECON_PRESETS.find((p) => p.id === 'top5gen');
+      setFilters((prev) => ({
+        ...prev,
+        journals: [],
+        journalFilterMode: 'wide',
+        econFilter: {
+          enabled: true,
+          categories: top5 ? [...top5.categories] : [],
+          domains: top5 ? [...top5.domains] : [],
+          presetId: 'top5gen',
+          issns: top5?.issns ? [...top5.issns] : undefined,
+        },
+      }));
+      const params = new URLSearchParams();
+      params.set('sort', 'cited_by_count:desc');
+      params.set('from', String(currentYear - 5));
+      params.set('page', '1');
+      router.push(`/search?${params.toString()}`);
+      return;
+    }
+
+    if (preset === 'recent-qje') {
+      const QJE = { issn: '0033-5533', name: 'Quarterly Journal of Economics' };
+      setFilters((prev) => ({
+        ...prev,
+        journals: [QJE],
+        journalFilterMode: 'specific',
+        econFilter: {
+          ...(prev.econFilter || {
+            enabled: false,
+            categories: [],
+            domains: [],
+            presetId: null,
+          }),
+          enabled: false,
+          presetId: null,
+          issns: undefined,
+        },
+      }));
+      const params = new URLSearchParams();
+      params.set('journals', QJE.issn);
+      params.set('sort', 'publication_date:desc');
+      params.set('page', '1');
+      router.push(`/search?${params.toString()}`);
+      return;
+    }
+  };
+
   // Handle author click from PaperCard - optimized with caching
   const handleAuthorSearch = async (authorName: string) => {
     // Check cache first
@@ -426,6 +494,7 @@ function PaperazziAppContent() {
             econFilter={filters.econFilter}
             journalFilterMode={filters.journalFilterMode}
             networkId={networkId}
+            onPresetTile={handlePresetTile}
           />
         </div>
       </main>

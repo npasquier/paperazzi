@@ -408,19 +408,32 @@ export default function AboutPage() {
         </div>
 
         {/* Footer */}
-        <div className='mt-16 pt-8 border-t border-app text-center'>
-          <p className='text-sm text-stone-500 mb-2'>
-            Built for economics researchers, by an economics researcher.
+        <div className='mt-16 pt-8 border-t border-app text-center space-y-2'>
+          <p className='text-sm text-stone-700'>
+            Built by{' '}
+            <a
+              href='https://npasquier.github.io/'
+              className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              Nicolas Pasquier
+            </a>
+            , researcher in economics at{' '}
+            {/* Replace [your institution] with your real affiliation */}
+            <span className='text-stone-500'>GAEL</span>.
           </p>
-
-          <a
-            href='https://npasquier.github.io/'
-            className='text-sm text-stone-400 hover:text-stone-600 transition'
-            target='_blank'
-            rel='noopener noreferrrr'
-          >
-            npasquier
-          </a>
+          <p className='text-xs text-stone-500'>
+            Open-source —{' '}
+            <a
+              href='https://github.com/npasquier/paperazzi'
+              className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              View on GitHub
+            </a>
+          </p>
         </div>
       </div>
     </main>

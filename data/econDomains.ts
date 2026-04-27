@@ -23,7 +23,7 @@ export const ECON_DOMAINS = [
   { key: 'SI', label: 'Info Systems' },
   { key: 'StratOrg', label: 'Strategy/Org' },
 ] as const;
- 
+
 export const ECON_CATEGORIES = [1, 2, 3, 4] as const;
 
 import journals from './journals';
@@ -41,12 +41,13 @@ export interface EconPreset {
 
 // Top 5 GEN = first 5 entries in journals.ts with domain='GEN' and category=1.
 // Computed at import time so it stays in sync if journals.ts is reordered.
-const TOP5_GEN_ISSNS: readonly string[] = (
-  journals as { issn: string; domain: string; category: number }[]
-)
-  .filter((j) => j.domain === 'GEN' && j.category === 1)
-  .slice(0, 5)
-  .map((j) => j.issn);
+export const TOP5_GEN_ISSNS = new Set<string>([
+  '0002-8282', // AER
+  '0012-9682', // Econometrica
+  '0022-3808', // JPE
+  '0033-5533', // QJE
+  '0034-6527', // ReStud
+]);
 
 export const ECON_PRESETS: readonly EconPreset[] = [
   {
