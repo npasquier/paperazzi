@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import NavBar from '../components/NavBar';
 import { PinProvider } from '@/contexts/PinContext';
+import { Analytics } from '@vercel/analytics/next';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,6 +30,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <Analytics />
         <PinProvider>
           {/* Fixed-height shell — locks total height to the viewport so the
               navbar and main split it cleanly and only the inner scroller
