@@ -41,13 +41,15 @@ export interface EconPreset {
 
 // Top 5 GEN = first 5 entries in journals.ts with domain='GEN' and category=1.
 // Computed at import time so it stays in sync if journals.ts is reordered.
-export const TOP5_GEN_ISSNS = new Set<string>([
+const TOP5_GEN_SET = new Set<string>([
   '0002-8282', // AER
   '0012-9682', // Econometrica
   '0022-3808', // JPE
   '0033-5533', // QJE
   '0034-6527', // ReStud
 ]);
+
+export const TOP5_GEN_ISSNS: readonly string[] = [...TOP5_GEN_SET];
 
 export const ECON_PRESETS: readonly EconPreset[] = [
   {
