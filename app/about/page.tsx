@@ -80,15 +80,6 @@ export default function AboutPage() {
                     Pin papers to your collection and explore citation networks
                   </span>
                 </li>
-                <li className='flex items-start gap-3'>
-                  <span className='flex-shrink-0 w-5 h-5 rounded-full surface-subtle text-app-muted text-xs flex items-center justify-center mt-0.5'>
-                    5
-                  </span>
-                  <span>
-                    Optionally, click "Alert" to download code for monthly email
-                    notifications via GitHub Actions
-                  </span>
-                </li>
               </ul>
             </div>
           </section>
@@ -98,71 +89,235 @@ export default function AboutPage() {
             <div className='flex items-center gap-2 mb-4'>
               <Scale size={18} className='text-stone-400' />
               <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
-                Comparison with Google Scholar
+                How Paperazzi compares
               </h2>
             </div>
             <div className='pl-6 border-l-2 border-app'>
               <p className='text-stone-700 mb-6'>
-                <span className='font-medium text-stone-900'>
-                  Paperazzi emphasizes precision over recall.
-                </span>{' '}
-                Whereas Google Scholar retrieves broad, exhaustive results often
-                with substantial noise, Paperazzi focuses on identifying
-                relevant papers published in leading economics journals.
+                Paperazzi is an exploration tool dedicated to the economics
+                literature. It leverages
+                <span className='font-medium text-stone-900'> OpenAlex </span>
+                open data and adds a layer of economics-journal filtering on
+                top. It offers several research-oriented features (e.g.,
+                citation network visualization, paper pinning, and
+                economics-specific filters) that are not jointly available in
+                general-purpose academic search engines.
               </p>
 
-              <div className='surface-card rounded-lg border border-app overflow-hidden'>
-                <table className='w-full text-sm'>
-                  <thead>
-                    <tr className='border-b border-app'>
-                      <th className='text-left py-3 px-4 font-medium text-stone-500'>
-                        Feature
-                      </th>
-                      <th className='text-left py-3 px-4 font-medium text-stone-500'>
-                        Paperazzi
-                      </th>
-                      <th className='text-left py-3 px-4 font-medium text-stone-500'>
-                        Scholar
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className='text-stone-600'>
-                    <tr className='border-b border-app-muted'>
-                      <td className='py-3 px-4 text-stone-700'>
-                        Journal filtering
-                      </td>
-                      <td className='py-3 px-4'>
-                        ISSN-based with CNRS ranking
-                      </td>
-                      <td className='py-3 px-4 text-stone-400'>
-                        Text-based matching
-                      </td>
-                    </tr>
-                    <tr className='border-b border-app-muted'>
-                      <td className='py-3 px-4 text-stone-700'>Citations</td>
-                      <td className='py-3 px-4'>Forward & backward</td>
-                      <td className='py-3 px-4 text-stone-400'>Forward only</td>
-                    </tr>
-                    <tr>
-                      <td className='py-3 px-4 text-stone-700'>Scope</td>
-                      <td className='py-3 px-4'>Economics-focused</td>
-                      <td className='py-3 px-4 text-stone-400'>All fields</td>
-                    </tr>
-                  </tbody>
-                </table>
+              {/* TL;DR table — quick scan; details follow below */}
+              <div className='surface-card rounded-lg border border-app overflow-hidden mb-6'>
+                <div className='overflow-x-auto'>
+                  <table className='w-full text-xs'>
+                    <thead>
+                      <tr className='border-b border-app surface-muted'>
+                        <th className='text-left py-2 px-3 font-medium text-stone-500 whitespace-nowrap'></th>
+                        <th className='text-left py-2 px-3 font-medium text-stone-700 whitespace-nowrap'>
+                          Paperazzi
+                        </th>
+                        <th className='text-left py-2 px-3 font-medium text-stone-500 whitespace-nowrap'>
+                          OpenAlex
+                        </th>
+                        <th className='text-left py-2 px-3 font-medium text-stone-500 whitespace-nowrap'>
+                          ResearchRabbit
+                        </th>
+                        <th className='text-left py-2 px-3 font-medium text-stone-500 whitespace-nowrap'>
+                          Semantic Scholar
+                        </th>
+                        <th className='text-left py-2 px-3 font-medium text-stone-500 whitespace-nowrap'>
+                          Google Scholar
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className='text-stone-600'>
+                      <tr className='border-b border-app-muted'>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          Field scope
+                        </td>
+                        <td className='py-2 px-3'>Economics</td>
+                        <td className='py-2 px-3 text-stone-400'>All</td>
+                        <td className='py-2 px-3 text-stone-400'>All</td>
+                        <td className='py-2 px-3 text-stone-400'>All</td>
+                        <td className='py-2 px-3 text-stone-400'>All</td>
+                      </tr>
+                      <tr className='border-b border-app-muted'>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          Journal filtering
+                        </td>
+                        <td className='py-2 px-3'>CNRS based, ISSN-precise</td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          ISSN-precise
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Subject area
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Subject area
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>Text-based</td>
+                      </tr>
+                      <tr className='border-b border-app-muted'>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          Citation network
+                        </td>
+                        <td className='py-2 px-3'>Year × cites, filterable</td>
+                        <td className='py-2 px-3 text-stone-400'>API only</td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Year × cites
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Linear list
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>—</td>
+                      </tr>
+                      <tr className='border-b border-app-muted'>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          Citation direction
+                        </td>
+                        <td className='py-2 px-3'>Forward + backward</td>
+                        <td className='py-2 px-3 text-stone-400'>Both</td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          One at a time
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>Both</td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Forward only
+                        </td>
+                      </tr>
+                      <tr className='border-b border-app-muted'>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          AI summaries
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>—</td>
+                        <td className='py-2 px-3 text-stone-400'>—</td>
+                        <td className='py-2 px-3 text-stone-400'>—</td>
+                        <td className='py-2 px-3'>TLDRs</td>
+                        <td className='py-2 px-3 text-stone-400'>—</td>
+                      </tr>
+                      <tr className='border-b border-app-muted'>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          Pinning / library
+                        </td>
+                        <td className='py-2 px-3'>Groups + colors</td>
+                        <td className='py-2 px-3 text-stone-400'>—</td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Collections
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>Library</td>
+                        <td className='py-2 px-3 text-stone-400'>Library</td>
+                      </tr>
+                      <tr>
+                        <td className='py-2 px-3 text-stone-700 whitespace-nowrap'>
+                          Alerting
+                        </td>
+                        <td className='py-2 px-3'>
+                          Use 'saved searches', No email alert
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>API access</td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Email digests
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>
+                          Email + RSS
+                        </td>
+                        <td className='py-2 px-3 text-stone-400'>Email</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <p className='text-sm text-stone-500 mt-4'>
-                For (inconsistent) text-based journal filtering in Scholar, see previous project {' '}
-                <a
-                  href='https://scholar-filter.vercel.app/'
-                  className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  scholar-filter.vercel.app
-                </a>
-              </p>
+              <div className='space-y-5'>
+                {/* vs OpenAlex */}
+                <div className='surface-card rounded-lg border border-app p-4'>
+                  <h3 className='text-sm font-semibold text-stone-900 mb-2'>
+                    vs OpenAlex
+                  </h3>
+                  <p className='text-sm text-stone-700 mb-2'>
+                    OpenAlex provides the underlying data with a strong emphasis
+                    on Open Access research. Paperazzi is an economics-focused
+                    interface built on top of it. We do not crawl or index
+                    content ourselves — we query the OpenAlex API and add
+                    journal filtering, citation network views, and paper
+                    pinning. The OpenAlex interface is more general-purpose and
+                    covers all academic fields.
+                  </p>
+                  <p className='text-xs text-stone-500'>
+                    Use OpenAlex directly when you need raw API access, want to
+                    explore fields outside economics, or analyze Open Access
+                    rates and publication trends over time.
+                  </p>
+                </div>
+
+                {/* vs ResearchRabbit */}
+                <div className='surface-card rounded-lg border border-app p-4'>
+                  <h3 className='text-sm font-semibold text-stone-900 mb-2'>
+                    vs ResearchRabbit
+                  </h3>
+                  <p className='text-sm text-stone-700 mb-2'>
+                    ResearchRabbit offers free-form network exploration across
+                    every field. Paperazzi gives you a comparable network view
+                    but you can constrain it to economics journals or the
+                    journals you are interested in. It also delivers a forward
+                    and backward citation view, whereas Rabbit only shows
+                    backward or forward citations. Paperazzi uses the same year
+                    × log-citations axes ResearchRabbit popularized.
+                  </p>
+                  <p className='text-xs text-stone-500'>
+                    Reach for ResearchRabbit when your research crosses fields
+                    or when you want freeform clustering. Use Paperazzi when you
+                    want journal-quality filtering baked in.
+                  </p>
+                </div>
+
+                {/* vs Semantic Scholar */}
+                <div className='surface-card rounded-lg border border-app p-4'>
+                  <h3 className='text-sm font-semibold text-stone-900 mb-2'>
+                    vs Semantic Scholar
+                  </h3>
+                  <p className='text-sm text-stone-700 mb-2'>
+                    Semantic Scholar emphasizes AI-generated TLDRs,
+                    recommendation feeds, and broad-field coverage. Paperazzi
+                    emphasizes deliberate journal selection and a citation
+                    network view you can navigate with year × log-citation axes.
+                    We don&apos;t use AI.
+                  </p>
+                  <p className='text-xs text-stone-500'>
+                    Reach for Semantic Scholar when you want abstractive
+                    summaries or cross-field discovery; Paperazzi when journal
+                    quality is the primary filter.
+                  </p>
+                </div>
+
+                {/* vs Google Scholar */}
+                <div className='surface-card rounded-lg border border-app p-4'>
+                  <h3 className='text-sm font-semibold text-stone-900 mb-2'>
+                    vs Google Scholar
+                  </h3>
+                  <p className='text-sm text-stone-700 mb-2'>
+                    <span className='font-medium text-stone-900'>
+                      Paperazzi emphasizes precision over recall.
+                    </span>{' '}
+                    Where Google Scholar returns broad, exhaustive results with
+                    substantial noise, Paperazzi narrows to papers published in
+                    CNRS-categorized economics journals. Citations are visible
+                    in both directions (forward and backward) rather than
+                    forward-only.
+                  </p>
+                  <p className='text-xs text-stone-500'>
+                    For (inconsistent) text-based journal filtering on top of
+                    Scholar, see a previous project of mine:{' '}
+                    <a
+                      href='https://scholar-filter.vercel.app/'
+                      className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                    >
+                      scholar-filter.vercel.app
+                    </a>
+                    .
+                  </p>
+                </div>
+              </div>
             </div>
           </section>
 

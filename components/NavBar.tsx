@@ -115,6 +115,14 @@ function NavBarContent() {
           <Database size={18} />
         </button>
 
+        {/* Help link - always visible */}
+        <Link
+          href='/help'
+          className='text-sm text-app-muted hover:text-app transition flex-shrink-0'
+        >
+          Help
+        </Link>
+
         {/* About link - always visible */}
         <Link
           href='/about'
