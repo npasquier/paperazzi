@@ -1,14 +1,14 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Github, Info } from 'lucide-react';
+import { Search, Database, Github, Info, Sparkles } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 
 // Subtle info popover anchored to the search input. Click-outside / Esc closes.
 // Uses position: fixed because the layout shell has overflow-hidden, which
 // would otherwise clip an absolutely-positioned popover hanging below the nav.
-function SearchSyntaxHelp() {
+function SearchSyntaxHelp({ semantic = false }: { semantic?: boolean }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; right: number } | null>(
     null,
@@ -79,7 +79,9 @@ function SearchSyntaxHelp() {
           style={{ top: coords.top, right: coords.right }}
         >
           <div className='flex items-center justify-between mb-3'>
-            <span className='font-medium text-app'>Search syntax</span>
+            <span className='font-medium text-app'>
+              {semantic ? 'Semantic search' : 'Search syntax'}
+            </span>
             <a
               href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
               target='_blank'
@@ -90,6 +92,38 @@ function SearchSyntaxHelp() {
             </a>
           </div>
 
+          {semantic ? (
+            <div className='space-y-3 text-app-muted'>
+              <p>
+                Describe a concept in natural language — even a sentence or
+                paragraph. Results are returned by similarity, so conceptually
+                related work surfaces even when it uses different vocabulary.
+              </p>
+              <pre className='surface-subtle rounded px-2 py-1 text-xs overflow-x-auto whitespace-pre-wrap'>
+{`how do firms respond to minimum wage increases in low-income labor markets`}
+              </pre>
+              <ul className='list-disc pl-5 space-y-1 text-xs'>
+                <li>
+                  Boolean operators, wildcards, and quotes don't apply here.
+                </li>
+                <li>
+                  Capped at <strong>50 results</strong> per query — pagination
+                  is disabled.
+                </li>
+                <li>
+                  Filters (year, journal, type) still apply best-effort on top
+                  of the semantic candidates.
+                </li>
+                <li>
+                  Rate-limited to <strong>1 request/second</strong> upstream.
+                </li>
+              </ul>
+              <p className='text-xs text-app-soft pt-1 border-t border-app'>
+                Switch back to Keyword for exact-term search, full filtering,
+                and unlimited pagination.
+              </p>
+            </div>
+          ) : (
           <div className='space-y-3 text-app-muted'>
             <section>
               <div className='text-app text-xs font-semibold mb-1'>
@@ -195,6 +229,7 @@ function SearchSyntaxHelp() {
               by default — a blend of text similarity and citation count.
             </p>
           </div>
+          )}
         </div>
       )}
     </>
@@ -209,6 +244,8 @@ function NavBarContent() {
 
   // Local search query state (only for search page)
   const [query, setQuery] = useState('');
+  // Semantic search mode (OpenAlex `search.semantic=`).
+  const [semantic, setSemantic] = useState(false);
   // Storage viewer modal
   const [showStorage, setShowStorage] = useState(false);
 
@@ -216,19 +253,39 @@ function NavBarContent() {
   useEffect(() => {
     if (isSearchPage) {
       setQuery(searchParams.get('q') || '');
+      setSemantic(searchParams.get('semantic') === 'true');
     }
   }, [searchParams, isSearchPage]);
 
+  // Toggle semantic mode. On the search page, push the URL change immediately
+  // so the results refetch in the new mode. Off the search page, just keep
+  // local state — it'll be applied when the user submits.
+  const handleToggleSemantic = (next: boolean) => {
+    setSemantic(next);
+    if (!isSearchPage) return;
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (next) params.set('semantic', 'true');
+    else params.delete('semantic');
+    params.set('page', '1');
+    router.replace(`/search?${params.toString()}`);
+  };
+
   const handleSearch = () => {
     if (isSearchPage) {
-      // On search page, trigger event with the current query
-      window.dispatchEvent(new CustomEvent('navbar-search', { 
-        detail: { query: query.trim() } 
-      }));
+      // On search page, trigger event with the current query + mode.
+      window.dispatchEvent(
+        new CustomEvent('navbar-search', {
+          detail: { query: query.trim(), semantic },
+        }),
+      );
     } else {
-      // Not on search page, navigate there with query
+      // Not on search page, navigate there with query + mode.
       if (query.trim()) {
-        router.push(`/search?q=${encodeURIComponent(query.trim())}&page=1`);
+        const params = new URLSearchParams();
+        params.set('q', query.trim());
+        if (semantic) params.set('semantic', 'true');
+        params.set('page', '1');
+        router.push(`/search?${params.toString()}`);
       }
     }
   };
@@ -282,12 +339,52 @@ function NavBarContent() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder='Search papers...'
+                  placeholder={
+                    semantic
+                      ? 'Describe a concept...'
+                      : 'Search papers...'
+                  }
                   className='w-full pl-10 pr-10 py-2 border border-app rounded-lg focus-accent'
                 />
-                <SearchSyntaxHelp />
+                <SearchSyntaxHelp semantic={semantic} />
               </div>
             </div>
+
+            {/* Mode toggle: keyword (Boolean syntax) vs. semantic (concept). */}
+            <div
+              role='radiogroup'
+              aria-label='Search mode'
+              className='flex items-center surface-subtle border border-app rounded-lg p-0.5 flex-shrink-0'
+            >
+              <button
+                role='radio'
+                aria-checked={!semantic}
+                onClick={() => handleToggleSemantic(false)}
+                className={`px-3 py-1 text-sm rounded-md transition ${
+                  !semantic
+                    ? 'surface-card text-app shadow-sm font-medium'
+                    : 'text-app-muted hover:text-app'
+                }`}
+                title='Keyword search — Boolean syntax, full filtering, unlimited pagination'
+              >
+                Keyword
+              </button>
+              <button
+                role='radio'
+                aria-checked={semantic}
+                onClick={() => handleToggleSemantic(true)}
+                className={`px-3 py-1 text-sm rounded-md transition flex items-center gap-1 ${
+                  semantic
+                    ? 'surface-card text-accent-strong shadow-sm font-medium'
+                    : 'text-app-muted hover:text-app'
+                }`}
+                title='Semantic search — natural-language concept matching (max 50 results)'
+              >
+                <Sparkles size={13} />
+                Semantic
+              </button>
+            </div>
+
             <button
               onClick={handleSearch}
               className='px-6 py-2 button-primary rounded-lg transition font-medium flex-shrink-0'

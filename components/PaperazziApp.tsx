@@ -79,6 +79,9 @@ function PaperazziAppContent() {
   const [page, setPage] = useState(1);
   // Focal-paper id for the network view; null when not in network mode.
   const [networkId, setNetworkId] = useState<string | null>(null);
+  // Semantic search mode (OpenAlex `search.semantic=`); URL-synced via
+  // `?semantic=true`. Forwarded to /api/search and propagated to the navbar.
+  const [semantic, setSemantic] = useState(false);
 
   // Listen for paper-reported events to show celebration
   useEffect(() => {
@@ -113,6 +116,7 @@ function PaperazziAppContent() {
       const referencesAll =
         searchParams.get('referencesAll')?.split(',').filter(Boolean) || [];
       const network = searchParams.get('network') || '';
+      const isSemantic = searchParams.get('semantic') === 'true';
 
       const journals = mapIssnsToJournals(journalIssns);
 
@@ -176,6 +180,7 @@ function PaperazziAppContent() {
       setSearchQuery(q);
       setPage(p);
       setNetworkId(network || null);
+      setSemantic(isSemantic);
     };
 
     syncFromURL();
@@ -183,12 +188,20 @@ function PaperazziAppContent() {
 
   // Build URL params helper
   const buildURLParams = (
-    overrides: Partial<Filters & { query?: string; page?: number }> = {},
+    overrides: Partial<
+      Filters & { query?: string; page?: number; semantic?: boolean }
+    > = {},
   ) => {
     const params = new URLSearchParams();
 
     const q = overrides.query ?? (searchParams.get('q') || '');
     if (q) params.set('q', q);
+
+    // Preserve semantic mode across re-searches unless explicitly overridden.
+    const sem =
+      overrides.semantic ??
+      (searchParams.get('semantic') === 'true');
+    if (sem) params.set('semantic', 'true');
 
     const journals = overrides.journals ?? filters.journals;
     if (journals.length) {
@@ -243,7 +256,13 @@ function PaperazziAppContent() {
   // Listen for navbar search events
   useEffect(() => {
     const handleNavbarSearch = (e: CustomEvent) => {
-      const params = buildURLParams({ query: e.detail.query, page: 1 });
+      const params = buildURLParams({
+        query: e.detail.query,
+        page: 1,
+        // Honor an explicit semantic flag from the navbar (toggle pill).
+        // If undefined, buildURLParams falls back to the URL's current value.
+        semantic: e.detail.semantic,
+      });
       router.push(`/search?${params.toString()}`);
     };
 
@@ -495,6 +514,7 @@ function PaperazziAppContent() {
             journalFilterMode={filters.journalFilterMode}
             networkId={networkId}
             onPresetTile={handlePresetTile}
+            semantic={semantic}
           />
         </div>
       </main>

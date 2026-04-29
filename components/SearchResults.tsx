@@ -66,6 +66,9 @@ interface Props {
   onClearReferencesAll?: () => void;
   onAuthorSearch?: (authorName: string) => void;
   onClearAuthor?: () => void;
+  // Semantic search mode (OpenAlex `search.semantic=`). When true the API
+  // returns ≤50 results sorted by similarity and pagination is suppressed.
+  semantic?: boolean;
 }
 
 export default function SearchResults({
@@ -93,6 +96,7 @@ export default function SearchResults({
   onClearReferencesAll,
   onAuthorSearch,
   onClearAuthor,
+  semantic = false,
 }: Props) {
   const router = useRouter();
   const [results, setResults] = useState<Paper[]>([]);
@@ -416,6 +420,9 @@ export default function SearchResults({
             params.set('econIssns', econFilter.issns.join(','));
         }
 
+        // Semantic mode — server uses search.semantic= and caps at 50 results.
+        if (semantic) params.set('semantic', 'true');
+
         const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
 
@@ -454,6 +461,7 @@ export default function SearchResults({
     econFilter,
     journalFilterMode,
     networkId,
+    semantic,
   ]);
 
   // ── Network view fetch ───────────────────────────────────────────
@@ -1197,6 +1205,15 @@ export default function SearchResults({
           <span>
             No results found{isEconActive ? ' in economics journals' : ''}
           </span>
+        ) : semantic ? (
+          <span>
+            Top {totalCount} by semantic similarity
+            {isEconActive ? ' (economics journals)' : ''}
+            <span className='text-app-soft'>
+              {' '}
+              · OpenAlex caps semantic search at 50 results
+            </span>
+          </span>
         ) : (
           <span>
             Showing {(page - 1) * RESULTS_PER_PAGE + 1}–
@@ -1249,7 +1266,7 @@ export default function SearchResults({
         </div>
       )}
 
-      {totalPages > 1 && (
+      {totalPages > 1 && !semantic && (
         <div className='flex items-center justify-center gap-1 pt-4 pb-3 border-t border-app surface-card'>
           <button
             onClick={() => handlePageChange(page - 1)}

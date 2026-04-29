@@ -418,6 +418,12 @@ export async function GET(req: NextRequest) {
     .split(',')
     .filter(Boolean);
 
+  // Semantic mode (OpenAlex `search.semantic=` beta endpoint).
+  // Constraints: max 50 results per query, 1 req/s rate limit, single call.
+  // Only applies to the plain "find papers about X" path; graph traversals
+  // (referencedBy / citingAll / referencesAll / citing) keep the keyword path.
+  const semantic = searchParams.get('semantic') === 'true';
+
   // Econ filter
   const econEnabled = searchParams.get('econEnabled') === 'true';
   const econCat = (searchParams.get('econCat') || '')
@@ -567,6 +573,51 @@ export async function GET(req: NextRequest) {
 
     // CASE 4: Regular search
     const filters = buildFilters({ ...filterParams, citing });
+
+    // CASE 4a: Semantic search (single call, ≤50 results, no batched paths).
+    // Requires a query — fall through to keyword if absent.
+    if (semantic && query) {
+      const semPerPage = Math.min(50, perPage);
+
+      let url = `https://api.openalex.org/works?per-page=${semPerPage}&search.semantic=${encodeURIComponent(query)}`;
+      if (filters.length) url += `&filter=${filters.join(',')}`;
+      // Don't override sort: semantic returns by similarity.
+
+      const data = await fetchOpenAlex(url);
+      let results = data.results || [];
+
+      // Apply ECON ISSN whitelist locally — the wide list can exceed
+      // OpenAlex's 100-OR-per-filter cap, but with ≤50 results to filter
+      // it's trivial in memory and avoids the rate-limited batched path.
+      if (issnBatches) {
+        const allowedIssns = new Set(issnBatches.flat());
+        results = results.filter((w: any) => {
+          const issns = w.primary_location?.source?.issn || [];
+          return issns.some((i: string) => allowedIssns.has(i));
+        });
+      }
+
+      return NextResponse.json(
+        {
+          results: mapToPapers(results),
+          meta: {
+            count: results.length,
+            page: 1,
+            per_page: results.length,
+            semantic: true,
+            // Signal to the UI that pagination should be suppressed and the
+            // result set is intrinsically capped by the upstream endpoint.
+            capped: true,
+          },
+        },
+        {
+          headers: {
+            'Cache-Control':
+              'public, s-maxage=3600, stale-while-revalidate=86400',
+          },
+        },
+      );
+    }
 
     if (issnBatches) {
       const { results, count } = await econBatchedSearch(
