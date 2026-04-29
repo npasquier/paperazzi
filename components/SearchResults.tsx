@@ -628,7 +628,7 @@ export default function SearchResults({
             className='surface-card border border-app rounded-lg p-4 text-left hover:bg-stone-50 transition'
           >
             <h3 className='text-sm font-medium text-stone-900 mb-1'>
-              Filter by Top 5 GEN, last 5 years
+              Filter by Top 5, last 5 years
             </h3>
             <p className='text-xs text-stone-500 leading-relaxed'>
               Filter by the most-cited recent papers from American Economic
@@ -779,7 +779,7 @@ export default function SearchResults({
                   }
                   if (journalFilterMode === 'wide' && econFilter?.enabled) {
                     let label: string;
-                    if (econFilter.presetId === 'top5gen') label = 'Top 5 GEN';
+                    if (econFilter.presetId === 'top5gen') label = 'Top 5';
                     else if (econFilter.presetId === 'all')
                       label = 'All economics journals';
                     else if (econFilter.issns?.length) {

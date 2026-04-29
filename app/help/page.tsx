@@ -51,7 +51,7 @@ export default function HelpPage() {
                   </span>
                   <span>
                     In the left filter panel, switch the Journals tab to{' '}
-                    <strong>Wide</strong> and click <strong>Top 5 GEN</strong>.
+                    <strong>Wide</strong> and click <strong>Top 5</strong>.
                   </span>
                 </li>
                 <li className='flex items-start gap-3'>
@@ -93,7 +93,7 @@ export default function HelpPage() {
                       Wide
                     </span>
                     <span>
-                      — preset pills (<em>All</em>, <em>Top 5 GEN</em>) and
+                      — preset pills (<em>All</em>, <em>Top 5</em>) and
                       pickable category & domain rows. Cycle through CNRS
                       categories (1–4) and economics subdomains (GEN, Macro,
                       Theory, etc.) to scope a search broadly.
@@ -173,7 +173,7 @@ export default function HelpPage() {
                 <li>
                   <strong>Saved journal filters</strong> snapshot only the
                   Journals subsection (mode + selections). Useful for switching
-                  quickly between &quot;Top 5 GEN&quot; and a custom whitelist
+                  quickly between &quot;Top 5&quot; and a custom whitelist
                   of niche journals.
                 </li>
               </ul>
@@ -201,7 +201,7 @@ export default function HelpPage() {
                 another.
               </p>
               <p className='text-sm text-stone-700 leading-relaxed'>
-                <strong>Filters apply.</strong> If you have <em>Top 5 GEN</em>{' '}
+                <strong>Filters apply.</strong> If you have <em>Top 5</em>{' '}
                 active in the Journals panel, only refs and cites in those
                 journals appear. Switching to <em>Off</em> reveals everything. A
                 small chip in the network header tells you which filter is

@@ -14,11 +14,27 @@ function getEconISSNs(categories: number[], domains: string[]): string[] {
   return filtered.map((j) => j.issn);
 }
 
-// Split ISSNs into batches of 100
+const OPENALEX_KEYS = (process.env.OPENALEX_KEYS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+let keyIndex = 0;
+
+function getNextKey(): string | null {
+  if (OPENALEX_KEYS.length === 0) return null;
+  const key = OPENALEX_KEYS[keyIndex];
+  keyIndex = (keyIndex + 1) % OPENALEX_KEYS.length;
+  return key;
+}
+
+// Split ISSNs into batches. OpenAlex has a URL length limit by filter of 100 (OR values per filter	is 100)
+
+const ISSN_BATCH_SIZE = 100;
 function batchISSNs(issns: string[]): string[][] {
   const batches: string[][] = [];
-  for (let i = 0; i < issns.length; i += 100) {
-    batches.push(issns.slice(i, i + 100));
+  for (let i = 0; i < issns.length; i += ISSN_BATCH_SIZE) {
+    batches.push(issns.slice(i, i + ISSN_BATCH_SIZE));
   }
   return batches;
 }
@@ -56,7 +72,7 @@ function buildFilters(params: {
   const filters: string[] = [];
 
   if (params.workIds?.length) {
-    filters.push(`openalex_id:${params.workIds.map(toFullId).join('|')}`);
+    filters.push(`openalex_id:${params.workIds.join('|')}`);
   }
   if (params.citing) {
     filters.push(`cites:${toFullId(params.citing)}`);
@@ -119,8 +135,14 @@ function buildSort(sort: string, hasQuery: boolean): string {
 
 // Helper to fetch with error handling and retry logic
 async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
+  const apiKey = getNextKey();
+  if (apiKey) {
+    url += (url.includes('?') ? '&' : '?') + `api_key=${apiKey}`;
+  }
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      await new Promise((r) => setTimeout(r, Math.random() * 40));
       const res = await fetch(url);
 
       if (res.status === 503 && attempt < retries) {
@@ -133,13 +155,34 @@ async function fetchOpenAlex(url: string, retries = 3): Promise<any> {
       }
 
       if (!res.ok) {
-        console.error(`OpenAlex API error: ${res.status} ${res.statusText}`);
+        // Capture the response body — OpenAlex usually returns JSON with an
+        // explanatory `error` / `message` field on 400/422. Without this the
+        // generic "OpenAlex API returned 400" tells you nothing about cause.
+        let bodyPreview = '';
+        try {
+          bodyPreview = (await res.text()).slice(0, 500);
+        } catch {
+          // ignore
+        }
+        console.error(
+          `OpenAlex API error: ${res.status} ${res.statusText} — ${bodyPreview}`,
+        );
         if (res.status === 503) {
           throw new Error(
             'OpenAlex API is temporarily unavailable. Please try again in a moment.',
           );
         }
-        throw new Error(`OpenAlex API returned ${res.status}`);
+        if (res.status === 400 && url.length > 6000) {
+          // Most common cause when filtering a network view by a wide
+          // category — the openalex_id list + ISSN whitelist exceeds the
+          // upstream URL limit. Report it explicitly.
+          throw new Error(
+            `OpenAlex returned 400 (request URL too long: ${url.length} chars). Try narrowing the journal filter or use Specific mode with a smaller list.`,
+          );
+        }
+        throw new Error(
+          `OpenAlex API returned ${res.status}, ${res.statusText}, URL length: ${url.length}, body: ${bodyPreview}, URL: ${url}`,
+        );
       }
 
       const text = await res.text();
@@ -172,7 +215,6 @@ async function econBatchedSearch(
   query: string,
   sort: string,
   page: number,
-  apiKey: string,
   issnBatches: string[][],
   perPage: number,
 ): Promise<{ results: any[]; count: number }> {
@@ -183,7 +225,7 @@ async function econBatchedSearch(
         ...baseFilters,
         `primary_location.source.issn:${batch.join('|')}`,
       ];
-      let url = `https://api.openalex.org/works?per-page=1&page=1&api_key=${apiKey}`;
+      let url = `https://api.openalex.org/works?per-page=1&page=1`;
       url += `&filter=${batchFilters.join(',')}`;
       if (query) url += `&search=${encodeURIComponent(query)}`;
       const data = await fetchOpenAlex(url);
@@ -216,7 +258,7 @@ async function econBatchedSearch(
       `primary_location.source.issn:${issnBatches[i].join('|')}`,
     ];
 
-    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${batchPage}&api_key=${apiKey}`;
+    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${batchPage}`;
     url += `&filter=${batchFilters.join(',')}`;
     if (query) url += `&search=${encodeURIComponent(query)}`;
     url += buildSort(sort, !!query);
@@ -248,7 +290,6 @@ async function searchWithinIds(
   },
   sort: string,
   page: number,
-  apiKey: string,
   issnBatches: string[][] | null,
   perPage: number,
 ): Promise<{ results: any[]; count: number }> {
@@ -256,7 +297,7 @@ async function searchWithinIds(
 
   if (query) {
     const filters = buildFilters(filterParams);
-    let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=200&api_key=${apiKey}`;
+    let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=200`;
     if (filters.length) searchUrl += `&filter=${filters.join(',')}`;
 
     const searchData = await fetchOpenAlex(searchUrl);
@@ -274,7 +315,6 @@ async function searchWithinIds(
         '',
         sort,
         page,
-        apiKey,
         issnBatches,
         perPage,
       );
@@ -288,31 +328,55 @@ async function searchWithinIds(
     if (paginatedIds.length === 0) return { results: [], count: totalCount };
 
     const idsFilter = paginatedIds.map(toFullId).join('|');
-    let url = `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=${perPage}&api_key=${apiKey}`;
+    let url = `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=${perPage}`;
     url += buildSort(sort, true);
     const data = await fetchOpenAlex(url);
+
     return { results: data.results || [], count: totalCount };
   }
 
   // No query
-  if (issnBatches) {
-    const baseFilters = buildFilters({ ...filterParams, workIds });
-    return econBatchedSearch(
-      baseFilters,
-      '',
-      sort,
-      page,
-      apiKey,
-      issnBatches,
-      perPage,
-    );
-  }
+  {
+    const ID_BATCH_SIZE = 50;
 
-  const filters = buildFilters({ ...filterParams, workIds });
-  let url = `https://api.openalex.org/works?filter=${filters.join(',')}&per-page=${perPage}&page=${page}&api_key=${apiKey}`;
-  url += buildSort(sort, false);
-  const data = await fetchOpenAlex(url);
-  return { results: data.results || [], count: data.meta?.count || 0 };
+    const idBatches: string[][] = [];
+    for (let i = 0; i < workIds.length; i += ID_BATCH_SIZE) {
+      idBatches.push(workIds.slice(i, i + ID_BATCH_SIZE));
+    }
+
+    // Build the regular filters (topics/authors/institutions/type/year)
+    // so we can push them upstream rather than ignoring them.
+    const extraFilters = buildFilters(filterParams);
+
+    // STEP 1 — fetch ALL works in safe ID batches, with upstream filters applied
+    const batchResults = await Promise.all(
+      idBatches.map(async (batch) => {
+        const filters = [
+          `openalex_id:${batch.map(toFullId).join('|')}`,
+          ...extraFilters,
+        ];
+        const url = `https://api.openalex.org/works?filter=${filters.join(',')}&per-page=200`;
+        const data = await fetchOpenAlex(url);
+        return data.results || [];
+      }),
+    );
+
+    const allResults = batchResults.flat();
+
+    // STEP 2 — ECON ISSN whitelist still has to be applied locally because
+    // it can exceed the upstream filter's 100-value cap.
+    const filtered = allResults.filter((w: any) => {
+      if (!issnBatches) return true;
+      const issns = w.primary_location?.source?.issn || [];
+      const allowedIssns = issnBatches.flat();
+      return issns.some((i: string) => allowedIssns.includes(i));
+    });
+
+    const totalCount = filtered.length;
+    const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+
+    return { results: paginated, count: totalCount };
+  }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -321,7 +385,6 @@ async function searchWithinIds(
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const apiKey = process.env.OPEN_ALEX_API_KEY || '';
 
   const query = searchParams.get('query') || '';
   const journals = (searchParams.get('journals') || '')
@@ -339,10 +402,10 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get('to');
   const sort = searchParams.get('sort') || 'relevance_score';
   const page = Number(searchParams.get('page') || 1);
-  // perPage: 1..200, default 20. Used by graph mode (200) to fit more dots in
-  // a single round-trip.
+  // perPage: 1..100, default 20. Used by graph mode (100) to fit more dots in
+  // a single round-trip. Maxvalue by Open Alex is 100.
   const perPage = Math.min(
-    200,
+    100,
     Math.max(1, Number(searchParams.get('perPage') || 20)),
   );
 
@@ -364,7 +427,7 @@ export async function GET(req: NextRequest) {
   const econDom = (searchParams.get('econDom') || '')
     .split(',')
     .filter(Boolean);
-  // Explicit ISSN whitelist (used by ISSN-based presets like Top 5 GEN).
+  // Explicit ISSN whitelist (used by ISSN-based presets like Top 5).
   // When provided, overrides econCat/econDom server-side.
   const econIssns = (searchParams.get('econIssns') || '')
     .split(',')
@@ -390,7 +453,8 @@ export async function GET(req: NextRequest) {
     if (issns.length > 0) {
       // Small ISSN sets fit in a single OpenAlex filter — skip the batched
       // count/walk machinery and let the caller use the regular filter path.
-      issnBatches = issns.length <= 100 ? [issns] : batchISSNs(issns);
+      issnBatches =
+        issns.length <= ISSN_BATCH_SIZE ? [issns] : batchISSNs(issns);
     }
   }
 
@@ -399,7 +463,7 @@ export async function GET(req: NextRequest) {
     if (referencedBy) {
       const cleanId = normalizeId(referencedBy);
       const paperData = await fetchOpenAlex(
-        `https://api.openalex.org/works/${cleanId}?api_key=${apiKey}`,
+        `https://api.openalex.org/works/${cleanId}`,
       );
       const referencedWorks = paperData.referenced_works || [];
 
@@ -418,7 +482,6 @@ export async function GET(req: NextRequest) {
         filterParams,
         sort,
         page,
-        apiKey,
         issnBatches,
         perPage,
       );
@@ -435,7 +498,7 @@ export async function GET(req: NextRequest) {
       const referenceSets = await Promise.all(
         referencesAll.map(async (id) => {
           const data = await fetchOpenAlex(
-            `https://api.openalex.org/works/${normalizeId(id)}?api_key=${apiKey}`,
+            `https://api.openalex.org/works/${normalizeId(id)}`,
           );
           return (data.referenced_works || []).map(normalizeId);
         }),
@@ -457,7 +520,6 @@ export async function GET(req: NextRequest) {
         filterParams,
         sort,
         page,
-        apiKey,
         issnBatches,
         perPage,
       );
@@ -472,7 +534,7 @@ export async function GET(req: NextRequest) {
       const citingSets = await Promise.all(
         citingAll.map(async (id) => {
           const data = await fetchOpenAlex(
-            `https://api.openalex.org/works?per-page=200&filter=cites:${toFullId(id)}&api_key=${apiKey}`,
+            `https://api.openalex.org/works?per-page=200&filter=cites:${toFullId(id)}`,
           );
           return (data.results || []).map((w: any) => normalizeId(w.id));
         }),
@@ -494,7 +556,6 @@ export async function GET(req: NextRequest) {
         filterParams,
         sort,
         page,
-        apiKey,
         issnBatches,
         perPage,
       );
@@ -513,7 +574,6 @@ export async function GET(req: NextRequest) {
         query,
         sort,
         page,
-        apiKey,
         issnBatches,
         perPage,
       );
@@ -523,7 +583,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${page}&api_key=${apiKey}`;
+    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${page}`;
     if (filters.length) url += `&filter=${filters.join(',')}`;
     if (query) url += `&search=${encodeURIComponent(query)}`;
     url += buildSort(sort, !!query);

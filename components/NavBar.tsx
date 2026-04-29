@@ -1,9 +1,205 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Github } from 'lucide-react';
-import { useState, useEffect, Suspense } from 'react';
+import { Search, Database, Github, Info } from 'lucide-react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
+
+// Subtle info popover anchored to the search input. Click-outside / Esc closes.
+// Uses position: fixed because the layout shell has overflow-hidden, which
+// would otherwise clip an absolutely-positioned popover hanging below the nav.
+function SearchSyntaxHelp() {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const recomputeCoords = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setCoords({
+      top: rect.bottom + 8,
+      right: window.innerWidth - rect.right,
+    });
+  };
+
+  const handleToggle = () => {
+    if (!open) recomputeCoords();
+    setOpen((o) => !o);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        buttonRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const onResize = () => recomputeCoords();
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type='button'
+        onClick={handleToggle}
+        className='absolute right-2 top-1/2 -translate-y-1/2 text-app-soft hover:text-app transition p-1 rounded'
+        title='Search syntax'
+        aria-label='Search syntax help'
+        aria-expanded={open}
+      >
+        <Info size={16} />
+      </button>
+
+      {open && coords && (
+        <div
+          ref={popoverRef}
+          role='dialog'
+          aria-label='OpenAlex search syntax'
+          className='fixed w-[28rem] max-w-[92vw] surface-panel border border-app rounded-lg shadow-lg z-[100] p-4 text-sm'
+          style={{ top: coords.top, right: coords.right }}
+        >
+          <div className='flex items-center justify-between mb-3'>
+            <span className='font-medium text-app'>Search syntax</span>
+            <a
+              href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='text-xs text-app-soft hover:text-app underline'
+            >
+              OpenAlex docs
+            </a>
+          </div>
+
+          <div className='space-y-3 text-app-muted'>
+            <section>
+              <div className='text-app text-xs font-semibold mb-1'>
+                Boolean
+              </div>
+              <p>
+                Combine terms with{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  AND
+                </code>
+                ,{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  OR
+                </code>
+                ,{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  NOT
+                </code>{' '}
+                (uppercase). Plain words are joined by{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  AND
+                </code>
+                .
+              </p>
+              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`(firm AND "horizontal merger") NOT (chicken OR vertical)`}
+              </pre>
+            </section>
+
+            <section>
+              <div className='text-app text-xs font-semibold mb-1'>
+                Exact phrase
+              </div>
+              <p>Quote a phrase to match it exactly.</p>
+              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`"horizontal merger"`}
+              </pre>
+            </section>
+
+            <section>
+              <div className='text-app text-xs font-semibold mb-1'>
+                Proximity
+              </div>
+              <p>
+                Append{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  ~N
+                </code>{' '}
+                to a quoted phrase to find the words within N positions of
+                each other.
+              </p>
+              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`"climate change"~5`}
+              </pre>
+            </section>
+
+            <section>
+              <div className='text-app text-xs font-semibold mb-1'>
+                Wildcards
+              </div>
+              <p>
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  *
+                </code>{' '}
+                matches any characters,{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  ?
+                </code>{' '}
+                matches one. Need ≥3 chars before the wildcard. Leading
+                wildcards aren't supported.
+              </p>
+              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`machin*     wom?n`}
+              </pre>
+            </section>
+
+            <section>
+              <div className='text-app text-xs font-semibold mb-1'>
+                Fuzzy
+              </div>
+              <p>
+                Append{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  ~N
+                </code>{' '}
+                (N = 0, 1, 2) to a single term to tolerate typos. Need ≥3
+                chars before{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  ~
+                </code>
+                .
+              </p>
+              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`machin~1`}
+              </pre>
+            </section>
+
+            <p className='text-xs text-app-soft pt-1 border-t border-app'>
+              Results are sorted by{' '}
+              <code className='surface-subtle rounded px-1'>
+                relevance_score
+              </code>{' '}
+              by default — a blend of text similarity and citation count.
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function NavBarContent() {
   const pathname = usePathname();
@@ -87,8 +283,9 @@ function NavBarContent() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder='Search papers...'
-                  className='w-full pl-10 pr-4 py-2 border border-app rounded-lg focus-accent'
+                  className='w-full pl-10 pr-10 py-2 border border-app rounded-lg focus-accent'
                 />
+                <SearchSyntaxHelp />
               </div>
             </div>
             <button

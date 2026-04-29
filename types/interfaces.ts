@@ -67,7 +67,7 @@ export interface Filters {
     categories: number[]; // [1,2,3,4] — empty = all
     domains: string[]; // ['GEN','OrgInd',...] — empty = all
     presetId?: string | null; // id of an active built-in or saved preset, if any
-    issns?: string[]; // explicit ISSN whitelist (used for ISSN-based presets like Top 5 GEN)
+    issns?: string[]; // explicit ISSN whitelist (used for ISSN-based presets like Top 5)
   };
   // Which journal-filter source feeds the API. Both subsections retain their
   // state when inactive; only the active one is sent to /api/search.

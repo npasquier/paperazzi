@@ -30,7 +30,7 @@ import journals from './journals';
 
 // Built-in wide presets shown as pills in the Journals > Wide filter subsection.
 // A preset is either a (categories, domains) combo, or an explicit ISSN whitelist
-// (used when the desired set isn't expressible as cat/dom — e.g. "Top 5 GEN").
+// (used when the desired set isn't expressible as cat/dom — e.g. "Top 5").
 export interface EconPreset {
   id: string;
   name: string;
@@ -39,17 +39,18 @@ export interface EconPreset {
   issns?: readonly string[]; // when set, overrides cat/dom server-side
 }
 
-// Top 5 GEN = first 5 entries in journals.ts with domain='GEN' and category=1.
-// Computed at import time so it stays in sync if journals.ts is reordered.
-const TOP5_GEN_SET = new Set<string>([
-  '0002-8282', // AER
+// Top 5 — the canonical "top five" general-interest economics journals:
+// American Economic Review, Econometrica, Journal of Political Economy,
+// Quarterly Journal of Economics, Review of Economic Studies.
+// Hardcoded by ISSN (rather than derived from journals.ts ordering) so this
+// preset's meaning is independent of category/domain bookkeeping.
+export const TOP5_ISSNS: readonly string[] = [
+  '0002-8282', // American Economic Review
   '0012-9682', // Econometrica
-  '0022-3808', // JPE
-  '0033-5533', // QJE
-  '0034-6527', // ReStud
-]);
-
-export const TOP5_GEN_ISSNS: readonly string[] = [...TOP5_GEN_SET];
+  '0022-3808', // Journal of Political Economy
+  '0033-5533', // Quarterly Journal of Economics
+  '0034-6527', // Review of Economic Studies
+];
 
 export const ECON_PRESETS: readonly EconPreset[] = [
   {
@@ -60,9 +61,9 @@ export const ECON_PRESETS: readonly EconPreset[] = [
   },
   {
     id: 'top5gen',
-    name: 'Top 5 GEN',
+    name: 'Top 5',
     categories: [],
     domains: [],
-    issns: TOP5_GEN_ISSNS,
+    issns: TOP5_ISSNS,
   },
 ];
