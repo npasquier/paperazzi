@@ -80,7 +80,7 @@ function SearchSyntaxHelp({ semantic = false }: { semantic?: boolean }) {
         >
           <div className='flex items-center justify-between mb-3'>
             <span className='font-medium text-app'>
-              {semantic ? 'Semantic search' : 'Search syntax'}
+              {semantic ? 'Semantic search (Beta)' : 'Search syntax'}
             </span>
             <a
               href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
