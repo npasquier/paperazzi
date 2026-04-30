@@ -17,6 +17,8 @@ import {
   Check,
   ExternalLink,
   CheckCircle,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 function cleanHtml(text: string | null | undefined): string {
@@ -69,6 +71,10 @@ interface Props {
   // Semantic search mode (OpenAlex `search.semantic=`). When true the API
   // returns ≤50 results sorted by similarity and pagination is suppressed.
   semantic?: boolean;
+  // Network-view fullscreen toggle: collapses both side panels to give the
+  // graph the full main column. Wired by PaperazziApp.
+  sidebarsCollapsed?: boolean;
+  onToggleSidebars?: () => void;
 }
 
 export default function SearchResults({
@@ -97,6 +103,8 @@ export default function SearchResults({
   onAuthorSearch,
   onClearAuthor,
   semantic = false,
+  sidebarsCollapsed = false,
+  onToggleSidebars,
 }: Props) {
   const router = useRouter();
   const [results, setResults] = useState<Paper[]>([]);
@@ -750,7 +758,7 @@ export default function SearchResults({
   // ── Network view short-circuits the rest of the page ────────────
   if (networkId) {
     return (
-      <div className='flex h-full min-h-0 w-full flex-col overflow-hidden'>
+      <div className='flex h-full min-h-0 w-full flex-col overflow-hidden pb-3'>
         {/* Header banner with focal info + clear button */}
         <div className='mb-3 p-3 surface-card border border-app rounded-lg flex items-start gap-3'>
           <div className='flex-1 min-w-0'>
@@ -818,6 +826,26 @@ export default function SearchResults({
               <p className='text-sm text-stone-500'>Paper ID: {networkId}</p>
             )}
           </div>
+          {onToggleSidebars && (
+            <button
+              onClick={onToggleSidebars}
+              className='p-1 hover:bg-[var(--surface-muted)] rounded transition flex-shrink-0'
+              title={
+                sidebarsCollapsed
+                  ? 'Show side panels'
+                  : 'Hide side panels for a wider graph'
+              }
+              aria-label={
+                sidebarsCollapsed ? 'Show side panels' : 'Hide side panels'
+              }
+            >
+              {sidebarsCollapsed ? (
+                <Minimize2 size={16} className='text-stone-600' />
+              ) : (
+                <Maximize2 size={16} className='text-stone-600' />
+              )}
+            </button>
+          )}
           <button
             onClick={() => router.push('/search')}
             className='p-1 hover:bg-[var(--surface-muted)] rounded transition flex-shrink-0'
@@ -846,7 +874,7 @@ export default function SearchResults({
               (networkCitesTotal !== null &&
                 networkCitesTotal > networkCites.length)) && (
               <p className='text-[11px] text-stone-500 mb-2'>
-                Capped at top 200 by Most cited per direction.
+                Capped at top 100 by Most cited per direction.
                 {networkRefsTotal !== null &&
                   networkRefsTotal > networkRefs.length &&
                   ` Showing ${networkRefs.length} of ${networkRefsTotal.toLocaleString()} references.`}
@@ -855,7 +883,12 @@ export default function SearchResults({
                   ` Showing ${networkCites.length} of ${networkCitesTotal.toLocaleString()} citing papers.`}
               </p>
             )}
-            <div className='flex-1 min-h-0'>
+            {/* overflow-hidden is required because CitationsNetwork's SVG
+                uses w-full h-auto with a fixed viewBox aspect ratio (1400×640).
+                On wide layouts (panels collapsed), the SVG's natural height
+                can exceed the flex-allocated space and visually spill past
+                the wrapper, hiding the caption and the bottom margin. */}
+            <div className='flex-1 min-h-0 overflow-hidden'>
               <CitationsNetwork
                 focal={networkFocal}
                 refs={networkRefs}

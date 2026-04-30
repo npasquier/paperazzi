@@ -94,6 +94,20 @@ function PaperazziAppContent() {
       window.removeEventListener('paper-reported', handlePaperReported);
   }, []);
 
+  // Broadcast econ-filter activeness for the navbar's semantic toggle.
+  // The econ filter lives in component state (not URL-synced), so the navbar
+  // can't detect it from useSearchParams alone — this event fills that gap.
+  useEffect(() => {
+    const econActive =
+      filters.journalFilterMode === 'wide' &&
+      filters.econFilter?.enabled === true;
+    window.dispatchEvent(
+      new CustomEvent('semantic-conflict-econ', {
+        detail: { econActive },
+      }),
+    );
+  }, [filters.journalFilterMode, filters.econFilter]);
+
   // Sync state with URL parameters
   useEffect(() => {
     const syncFromURL = async () => {
@@ -287,27 +301,36 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  // Citation/reference click handlers in SearchResults auto-apply
+  // `sort=cited_by_count:desc` so the cite/refs view is useful by default.
+  // When the user dismisses that view, the auto-applied sort should also
+  // clear — otherwise it lingers as a "custom sort", which keeps semantic
+  // search disabled (and is a non-obvious side effect in general).
   const handleClearCiting = () => {
     const params = buildURLParams({ citing: undefined, page: 1 });
     params.delete('citing');
+    params.delete('sort');
     router.push(`/search?${params.toString()}`);
   };
 
   const handleClearCitingAll = () => {
     const params = buildURLParams({ citingAll: undefined, page: 1 });
     params.delete('citingAll');
+    params.delete('sort');
     router.push(`/search?${params.toString()}`);
   };
 
   const handleClearReferencedBy = () => {
     const params = buildURLParams({ referencedBy: undefined, page: 1 });
     params.delete('referencedBy');
+    params.delete('sort');
     router.push(`/search?${params.toString()}`);
   };
 
   const handleClearReferencesAll = () => {
     const params = buildURLParams({ referencesAll: undefined, page: 1 });
     params.delete('referencesAll');
+    params.delete('sort');
     router.push(`/search?${params.toString()}`);
   };
 
@@ -322,6 +345,21 @@ function PaperazziAppContent() {
   // journalFilterMode aren't URL-synced, so we set them via setFilters first;
   // the URL push that follows preserves them via the `prev` spread in the
   // URL-sync effect.
+  // Network-view "fullscreen" toggle: collapse / restore both side panels in
+  // one click so the citations graph gets the full main column. Treats both
+  // panels closed as the "collapsed" state; clicking when collapsed reopens
+  // both. The individual panel toggles still work independently.
+  const sidebarsCollapsed = !isFilterOpen && !isPinSidebarOpen;
+  const handleToggleSidebars = () => {
+    if (sidebarsCollapsed) {
+      setIsFilterOpen(true);
+      setIsPinSidebarOpen(true);
+    } else {
+      setIsFilterOpen(false);
+      setIsPinSidebarOpen(false);
+    }
+  };
+
   const handlePresetTile = (
     preset: 'top5-cited-recent' | 'demo-network' | 'recent-qje',
   ) => {
@@ -515,6 +553,8 @@ function PaperazziAppContent() {
             networkId={networkId}
             onPresetTile={handlePresetTile}
             semantic={semantic}
+            sidebarsCollapsed={sidebarsCollapsed}
+            onToggleSidebars={handleToggleSidebars}
           />
         </div>
       </main>

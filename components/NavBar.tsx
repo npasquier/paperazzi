@@ -8,7 +8,13 @@ import StorageModal from './StorageModal';
 // Subtle info popover anchored to the search input. Click-outside / Esc closes.
 // Uses position: fixed because the layout shell has overflow-hidden, which
 // would otherwise clip an absolutely-positioned popover hanging below the nav.
-function SearchSyntaxHelp({ semantic = false }: { semantic?: boolean }) {
+function SearchSyntaxHelp({
+  semantic = false,
+  conflicts = [],
+}: {
+  semantic?: boolean;
+  conflicts?: string[];
+}) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; right: number } | null>(
     null,
@@ -111,8 +117,10 @@ function SearchSyntaxHelp({ semantic = false }: { semantic?: boolean }) {
                   is disabled.
                 </li>
                 <li>
-                  Filters (year, journal, type) still apply best-effort on top
-                  of the semantic candidates.
+                  Filters (year, journal, type, etc.) and citation / reference
+                  constraints <strong>disable</strong> Semantic — the
+                  endpoint expects a bare concept query. Clear them to use
+                  Semantic, or stay on Keyword if you need filtering.
                 </li>
                 <li>
                   Rate-limited to <strong>1 request/second</strong> upstream.
@@ -125,6 +133,24 @@ function SearchSyntaxHelp({ semantic = false }: { semantic?: boolean }) {
             </div>
           ) : (
           <div className='space-y-3 text-app-muted'>
+            {conflicts.length > 0 && (
+              <div className='banner-info rounded p-2 text-xs flex gap-2'>
+                <Sparkles
+                  size={14}
+                  className='flex-shrink-0 mt-0.5 text-accent-strong'
+                />
+                <div>
+                  <div className='font-medium text-app mb-0.5'>
+                    Semantic search is disabled
+                  </div>
+                  <p>
+                    OpenAlex's semantic endpoint expects a bare concept query.
+                    Currently active: {conflicts.join(', ')}. Clear them to
+                    re-enable Semantic.
+                  </p>
+                </div>
+              </div>
+            )}
             <section>
               <div className='text-app text-xs font-semibold mb-1'>
                 Boolean
@@ -246,21 +272,72 @@ function NavBarContent() {
   const [query, setQuery] = useState('');
   // Semantic search mode (OpenAlex `search.semantic=`).
   const [semantic, setSemantic] = useState(false);
+  // Econ-filter activeness, broadcast by PaperazziApp (lives in component
+  // state, not URL params — see `semantic-conflict-econ` event).
+  const [econActive, setEconActive] = useState(false);
   // Storage viewer modal
   const [showStorage, setShowStorage] = useState(false);
 
+  // Compute the list of human-readable conflicts that make semantic search
+  // unavailable. Mirrors OpenAlex's "use keyword when you need filters /
+  // sorting / specific fields" guidance.
+  const semanticConflicts = (() => {
+    const c: string[] = [];
+    if (searchParams.get('journals')) c.push('journal filter');
+    if (searchParams.get('authors')) c.push('author filter');
+    if (searchParams.get('institutions')) c.push('institution filter');
+    if (searchParams.get('type')) c.push('publication type');
+    if (searchParams.get('from') || searchParams.get('to'))
+      c.push('date range');
+    const sort = searchParams.get('sort');
+    if (sort && sort !== 'relevance_score') c.push('custom sort');
+    if (searchParams.get('citing') || searchParams.get('citingAll'))
+      c.push('citation constraint');
+    if (searchParams.get('referencedBy') || searchParams.get('referencesAll'))
+      c.push('reference constraint');
+    if (searchParams.get('network')) c.push('network view');
+    if (econActive) c.push('economics journal whitelist');
+    return c;
+  })();
+  const semanticDisabled = semanticConflicts.length > 0;
+
+  // Listen for econ-filter activeness from PaperazziApp.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ econActive: boolean }>;
+      setEconActive(!!ev.detail?.econActive);
+    };
+    window.addEventListener('semantic-conflict-econ', handler);
+    return () =>
+      window.removeEventListener('semantic-conflict-econ', handler);
+  }, []);
+
   // Sync with URL when on search page
   useEffect(() => {
-    if (isSearchPage) {
-      setQuery(searchParams.get('q') || '');
-      setSemantic(searchParams.get('semantic') === 'true');
+    if (!isSearchPage) return;
+    setQuery(searchParams.get('q') || '');
+
+    const urlSemantic = searchParams.get('semantic') === 'true';
+    // Treat URL semantic=true as effective only when no conflicts are active;
+    // if a conflict slipped in (e.g. user added a filter while semantic was on),
+    // clean it out of the URL so the page is in a consistent state.
+    if (urlSemantic && semanticDisabled) {
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.delete('semantic');
+      router.replace(`/search?${params.toString()}`);
+      setSemantic(false);
+    } else {
+      setSemantic(urlSemantic);
     }
-  }, [searchParams, isSearchPage]);
+  }, [searchParams, isSearchPage, semanticDisabled, router]);
 
   // Toggle semantic mode. On the search page, push the URL change immediately
   // so the results refetch in the new mode. Off the search page, just keep
   // local state — it'll be applied when the user submits.
   const handleToggleSemantic = (next: boolean) => {
+    // Refuse to enable semantic when conflicts are active. The pill itself
+    // is disabled in that state, but this is a defensive guard.
+    if (next && semanticDisabled) return;
     setSemantic(next);
     if (!isSearchPage) return;
     const params = new URLSearchParams(Array.from(searchParams.entries()));
@@ -346,7 +423,10 @@ function NavBarContent() {
                   }
                   className='w-full pl-10 pr-10 py-2 border border-app rounded-lg focus-accent'
                 />
-                <SearchSyntaxHelp semantic={semantic} />
+                <SearchSyntaxHelp
+                  semantic={semantic}
+                  conflicts={semanticConflicts}
+                />
               </div>
             </div>
 
@@ -372,13 +452,23 @@ function NavBarContent() {
               <button
                 role='radio'
                 aria-checked={semantic}
+                aria-disabled={semanticDisabled}
+                disabled={semanticDisabled}
                 onClick={() => handleToggleSemantic(true)}
                 className={`px-3 py-1 text-sm rounded-md transition flex items-center gap-1 ${
                   semantic
                     ? 'surface-card text-accent-strong shadow-sm font-medium'
-                    : 'text-app-muted hover:text-app'
+                    : semanticDisabled
+                      ? 'text-app-soft opacity-50 cursor-not-allowed'
+                      : 'text-app-muted hover:text-app'
                 }`}
-                title='Semantic search — natural-language concept matching (max 50 results)'
+                title={
+                  semanticDisabled
+                    ? `Semantic disabled — clear ${semanticConflicts.join(
+                        ', ',
+                      )} to use Semantic. Click the info icon for details.`
+                    : 'Semantic search — natural-language concept matching (max 50 results)'
+                }
               >
                 <Sparkles size={13} />
                 Semantic

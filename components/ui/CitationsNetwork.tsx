@@ -335,7 +335,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
-    <div className='surface-card border border-app rounded p-3'>
+    <div className='surface-card border border-app rounded p-3 h-full flex flex-col min-h-0'>
       <div className='flex items-center gap-3 text-[10px] text-app-muted mb-2'>
         <span className='inline-flex items-center gap-1.5'>
           <span className='inline-block w-2.5 h-2.5 rounded-full bg-[var(--warning-foreground)]' />
@@ -395,11 +395,16 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
         </div>
       </div>
 
-      <div className='relative w-full'>
+      {/* flex-1 + min-h-0 lets the SVG container shrink to whatever vertical
+          space remains after the legend row. The SVG's preserveAspectRatio
+          (default "xMidYMid meet") keeps the chart's 1400×640 ratio and
+          letterboxes if the container's aspect ratio differs — so the years
+          axis at the bottom of the viewBox is always visible. */}
+      <div className='relative w-full flex-1 min-h-0'>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
-          className='w-full h-auto select-none'
+          className='w-full h-full select-none'
           style={{
             cursor: dragRef.current ? 'grabbing' : 'grab',
             touchAction: 'none',
