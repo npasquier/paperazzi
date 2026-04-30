@@ -34,8 +34,10 @@ interface Props {
   onClose: () => void;
 }
 
-// Fixed keys we know about. Wildcard keys (paper-reported-*, author-reported-*)
-// are handled via prefix matching at read time.
+// Fixed keys we know about. Wildcard report keys are handled via prefix
+// matching at read time:
+//   reported-author-<id>  — author reports (must be checked first, more specific)
+//   reported-<workId>     — paper reports
 const FIXED_KEYS = [
   'filterPresets',
   'journal-filter-presets',
@@ -73,8 +75,10 @@ function readStorage(): StorageData {
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k) continue;
-    if (k.startsWith('paper-reported-')) reportedPapers++;
-    else if (k.startsWith('author-reported-')) reportedAuthors++;
+    // Order matters: `reported-author-<id>` is a stricter prefix of
+    // `reported-<workId>`, so check the author key first.
+    if (k.startsWith('reported-author-')) reportedAuthors++;
+    else if (k.startsWith('reported-')) reportedPapers++;
   }
 
   const pinnedRaw = safeParse<unknown[]>('pinned-papers', []);
@@ -97,12 +101,13 @@ function readStorage(): StorageData {
 function eraseAll() {
   if (typeof window === 'undefined') return;
   for (const k of FIXED_KEYS) localStorage.removeItem(k);
-  // Wildcard keys
+  // Wildcard keys — both `reported-author-<id>` and `reported-<workId>` share
+  // the `reported-` prefix, so a single check sweeps them both.
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k) continue;
-    if (k.startsWith('paper-reported-') || k.startsWith('author-reported-')) {
+    if (k.startsWith('reported-')) {
       toRemove.push(k);
     }
   }
