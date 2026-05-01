@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Filter, Pin, Network as NetworkIcon } from 'lucide-react';
+import { Filter, Pin, Search } from 'lucide-react';
 
 export default function OnboardingOverlay() {
   const [show, setShow] = useState(false);
@@ -42,16 +42,16 @@ export default function OnboardingOverlay() {
         <div className='w-8 h-0.5 bg-[var(--border-strong)] ml-4 mt-2' />
       </div>
 
-      {/* Top hint - Network */}
+      {/* Top hint - Search */}
       <div className='absolute top-20 left-1/2 -translate-x-1/2 pointer-events-auto'>
         <div className='surface-card border border-app rounded-lg shadow-lg p-4 max-w-[240px] text-center'>
           <div className='flex items-center justify-center gap-2 mb-2'>
-            <NetworkIcon size={16} className='text-stone-600' />
-            <span className='font-medium text-stone-900 text-sm'>Network</span>
+            <Search size={16} className='text-stone-600' />
+            <span className='font-medium text-stone-900 text-sm'>Search</span>
           </div>
           <p className='text-xs text-stone-500'>
-            Click <em>see network</em> on any paper card to explore its
-            citation neighborhood
+            Type a query in the search bar to find papers related to your
+            keywords
           </p>
         </div>
         <div className='w-0.5 h-6 bg-[var(--border-strong)] mx-auto mt-2' />
