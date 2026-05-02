@@ -407,10 +407,8 @@ function PaperazziAppContent() {
   };
 
   const handlePresetTile = (
-    preset: 'top5-cited-recent' | 'demo-network' | 'recent-qje',
+    preset: 'climate-top5' | 'demo-network' | 'recent-qje',
   ) => {
-    const currentYear = new Date().getFullYear();
-
     if (preset === 'demo-network') {
       // Famous econ paper — Acemoglu, Johnson & Robinson (2001),
       // "The Colonial Origins of Comparative Development" in AER.
@@ -419,7 +417,7 @@ function PaperazziAppContent() {
       return;
     }
 
-    if (preset === 'top5-cited-recent') {
+    if (preset === 'climate-top5') {
       const top5 = ECON_PRESETS.find((p) => p.id === 'top5gen');
       setFilters((prev) => ({
         ...prev,
@@ -434,8 +432,8 @@ function PaperazziAppContent() {
         },
       }));
       const params = new URLSearchParams();
-      params.set('sort', 'cited_by_count:desc');
-      params.set('from', String(currentYear - 5));
+      params.set('q', 'climate change');
+      // Sort omitted — defaults to relevance_score.
       params.set('page', '1');
       router.push(`/search?${params.toString()}`);
       return;

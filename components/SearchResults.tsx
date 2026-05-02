@@ -59,7 +59,7 @@ interface Props {
   // Empty-state tile click — handled by parent (PaperazziApp), which sets
   // econFilter / journalFilterMode and pushes URL params accordingly.
   onPresetTile?: (
-    preset: 'top5-cited-recent' | 'demo-network' | 'recent-qje',
+    preset: 'climate-top5' | 'demo-network' | 'recent-qje',
   ) => void;
   loadMore?: (page: number) => void;
   onClearCiting?: () => void;
@@ -647,15 +647,16 @@ export default function SearchResults({
         </p>
         <div className='grid gap-3 md:grid-cols-3'>
           <button
-            onClick={() => onPresetTile?.('top5-cited-recent')}
+            onClick={() => onPresetTile?.('climate-top5')}
             className='surface-card border border-app rounded-lg p-4 text-left hover:bg-stone-50 transition'
           >
-            <h3 className='text-sm font-medium text-stone-900 mb-1'>
-              Filter by Top 5, last 5 years
+            <h3 className='text-sm font-medium text-stone-900 mb-1 whitespace-nowrap overflow-hidden text-ellipsis'>
+              Search &ldquo;climate change&rdquo; in Top&nbsp;5
             </h3>
             <p className='text-xs text-stone-500 leading-relaxed'>
-              Filter by the most-cited recent papers from American Economic
-              Review, Econometrica, JPE, QJE, and Review of Economic Studies.
+              Search for &ldquo;climate change&rdquo; across the Top 5 econ
+              journals (AER, Econometrica, JPE, QJE, REStud), ranked by
+              relevance.
             </p>
           </button>
           <button
