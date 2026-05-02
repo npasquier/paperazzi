@@ -10,6 +10,7 @@ import InstitutionModal from './InstitutionModal';
 import { Filters, Institution } from '../types/interfaces';
 import { ECON_PRESETS } from '@/data/econDomains';
 import mapIssnsToJournals from '@/utils/issnToJournals';
+import { extractMentions, resolveMentions } from '@/utils/queryMentions';
 import PinSidebar from './PinSidebar';
 import CreateAlertButton from './CreateAlertButton';
 import CelebrationOverlay from './ui/CelebrationOverlay';
@@ -315,26 +316,56 @@ function PaperazziAppContent() {
 
   // Listen for navbar search events
   useEffect(() => {
-    const handleNavbarSearch = (e: CustomEvent) => {
+    const handleNavbarSearch = async (e: CustomEvent) => {
+      const rawQuery = (e.detail.query as string) || '';
+      // The navbar maintains a per-session cache of explicit user picks from
+      // its autocomplete dropdown (slug → {id, name}). It serializes that
+      // cache as an array on the event so resolveMentions can prefer it
+      // over the silent top-match fallback — which is the whole point of
+      // the autocomplete (avoiding wrong matches on common surnames).
+      const mentionCacheArr = (e.detail.mentionCache as Array<
+        [string, { id: string; name?: string }]
+      >) || [];
+      const mentionCache = new Map(mentionCacheArr);
+
+      // Pull `@author` mentions out of the query and resolve them to
+      // OpenAlex author IDs. Resolved authors merge into the existing
+      // author filter (de-duped) so a `@` mention layers on top of any
+      // explicit panel selection rather than wiping it out.
+      const { cleanQuery, mentions } = extractMentions(rawQuery);
+      let mergedAuthors = filters.authors;
+      if (mentions.length > 0) {
+        const { resolved } = await resolveMentions(mentions, mentionCache);
+        if (resolved.length > 0) {
+          const seen = new Set(filters.authors.map((a) => a.id));
+          mergedAuthors = [
+            ...filters.authors,
+            ...resolved.filter((a) => !seen.has(a.id)),
+          ];
+        }
+      }
+
       const params = buildURLParams({
-        query: e.detail.query,
+        query: cleanQuery,
         page: 1,
         // Honor an explicit semantic flag from the navbar (toggle pill).
         // If undefined, buildURLParams falls back to the URL's current value.
         semantic: e.detail.semantic,
+        // Only override authors when we actually resolved something,
+        // otherwise let buildURLParams use its default (current filters).
+        authors: mentions.length > 0 ? mergedAuthors : undefined,
       });
       router.push(`/search?${params.toString()}`);
     };
 
-    window.addEventListener(
-      'navbar-search',
-      handleNavbarSearch as EventListener,
-    );
-    return () =>
-      window.removeEventListener(
-        'navbar-search',
-        handleNavbarSearch as EventListener,
-      );
+    // EventListener must be sync-returning; the async handler is fire-and-
+    // forget here (the inner router.push completes the navigation), so we
+    // wrap it in a void thunk.
+    const listener = (e: Event) => {
+      void handleNavbarSearch(e as CustomEvent);
+    };
+    window.addEventListener('navbar-search', listener);
+    return () => window.removeEventListener('navbar-search', listener);
   }, [filters, router, searchParams]);
 
   const handleSearch = (newPage = 1) => {

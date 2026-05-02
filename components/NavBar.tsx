@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search, Database, Github, Info, Sparkles } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
+import { extractMentions, resolveMentions } from '@/utils/queryMentions';
 
 // Subtle info popover anchored to the search input. Click-outside / Esc closes.
 // Uses position: fixed because the layout shell has overflow-hidden, which
@@ -153,6 +154,36 @@ function SearchSyntaxHelp({
             )}
             <section>
               <div className='text-app text-xs font-semibold mb-1'>
+                Author shortcut
+              </div>
+              <p>
+                Prefix a name with{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  @
+                </code>{' '}
+                to filter by that author. Suggestions appear as you type —
+                use{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  ↑↓
+                </code>{' '}
+                +{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  Enter
+                </code>{' '}
+                (or click) to pick the right one. Multiple{' '}
+                <code className='surface-subtle rounded px-1 text-xs'>
+                  @
+                </code>{' '}
+                tokens are AND-ed (intersection); the rest of the text is
+                searched as keywords.
+              </p>
+              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`@acemoglu institutions    @kahneman @tversky prospect`}
+              </pre>
+            </section>
+
+            <section>
+              <div className='text-app text-xs font-semibold mb-1'>
                 Boolean
               </div>
               <p>
@@ -262,6 +293,29 @@ function SearchSyntaxHelp({
   );
 }
 
+// Trailing @-mention pattern: matches `@xxx` at the end of the query, where
+// xxx starts with a letter and is at least 2 chars. We only suggest while the
+// user is actively typing the *last* token, which keeps the dropdown out of
+// the way for everything else.
+const TRAILING_MENTION_RE = /(?:^|\s)@([A-Za-z][A-Za-z0-9-]{1,})$/;
+
+interface AuthorSuggestion {
+  id: string; // OpenAlex ID, normalized (no URL prefix)
+  display_name: string;
+  works_count: number;
+  hint?: string; // last-known institution, when available
+}
+
+// Reduce a display name like "Daron Acemoglu" or "Maria de la Rica" to a
+// short, lowercase token suitable for replacing the user's @partial in the
+// input box. We use the surname-ish last word so the chip stays visually
+// close to what the user typed.
+function slugifyAuthorName(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  const last = parts[parts.length - 1] || displayName;
+  return last.toLowerCase().replace(/[^a-z0-9-]/g, '');
+}
+
 function NavBarContent() {
   const pathname = usePathname();
   const router = useRouter();
@@ -277,6 +331,27 @@ function NavBarContent() {
   const [econActive, setEconActive] = useState(false);
   // Storage viewer modal
   const [showStorage, setShowStorage] = useState(false);
+
+  // ── @author autocomplete ────────────────────────────────────────────
+  // Suggestions for the trailing @partial token. Open only while the user is
+  // typing inside an @mention; closes on selection, blur, or Esc.
+  const [mentionSuggestions, setMentionSuggestions] = useState<
+    AuthorSuggestion[]
+  >([]);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Cache of explicit user picks: slug → {id, displayName}. Survives across
+  // renders so submit-time resolution can prefer the user's choice over the
+  // silent top-match fallback. Forwarded to PaperazziApp via the
+  // navbar-search event so it can short-circuit there too.
+  const resolvedMentionsRef = useRef<
+    Map<string, { id: string; name?: string }>
+  >(new Map());
+  // One ref per suggestion row so arrow-key navigation can scroll the
+  // highlighted item into view inside the (overflow-y-auto) dropdown.
+  const mentionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Compute the list of human-readable conflicts that make semantic search
   // unavailable. Mirrors OpenAlex's "use keyword when you need filters /
@@ -347,30 +422,169 @@ function NavBarContent() {
     router.replace(`/search?${params.toString()}`);
   };
 
-  const handleSearch = () => {
+  // Debounced fetch of @-mention suggestions. Triggers only when the query
+  // ends in `@xxx` (xxx ≥ 2 chars), so the dropdown is fully opt-in to the
+  // `@` prefix and doesn't fire on plain keyword searches. 300ms debounce
+  // keeps API load proportional to user pauses, not keystrokes.
+  useEffect(() => {
+    const m = query.match(TRAILING_MENTION_RE);
+    if (!m) {
+      setMentionOpen(false);
+      setMentionSuggestions([]);
+      setMentionLoading(false);
+      return;
+    }
+    const partial = m[1];
+    setMentionLoading(true);
+    const handle = setTimeout(async () => {
+      try {
+        const url = `https://api.openalex.org/authors?search=${encodeURIComponent(
+          partial,
+        )}&per-page=25`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          setMentionSuggestions([]);
+          setMentionOpen(false);
+          return;
+        }
+        const data = await res.json();
+        const results: AuthorSuggestion[] = (data.results || []).map(
+          (a: {
+            id: string;
+            display_name: string;
+            works_count?: number;
+            last_known_institution?: { display_name?: string };
+            affiliations?: { institution?: { display_name?: string } }[];
+          }) => ({
+            id: a.id.replace('https://openalex.org/', ''),
+            display_name: a.display_name,
+            works_count: a.works_count || 0,
+            hint:
+              a.last_known_institution?.display_name ||
+              a.affiliations?.[0]?.institution?.display_name ||
+              undefined,
+          }),
+        );
+        setMentionSuggestions(results);
+        setMentionOpen(results.length > 0);
+        setMentionIdx(0);
+      } catch {
+        setMentionSuggestions([]);
+        setMentionOpen(false);
+      } finally {
+        setMentionLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [query]);
+
+  // Scroll the highlighted suggestion into view so arrow-key navigation
+  // doesn't lose the user inside a long, scrollable dropdown.
+  useEffect(() => {
+    if (!mentionOpen) return;
+    const el = mentionItemRefs.current[mentionIdx];
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [mentionIdx, mentionOpen]);
+
+  // Apply a suggestion: replace the trailing @partial with @<lastname-slug>
+  // and remember the resolved id so submit doesn't re-resolve via top-match.
+  const selectMention = (idx: number) => {
+    const sug = mentionSuggestions[idx];
+    if (!sug) return;
+    const slug = slugifyAuthorName(sug.display_name) || `a${sug.id}`;
+    const newQuery = query.replace(TRAILING_MENTION_RE, (match) => {
+      const leadingSpace = match.startsWith(' ') ? ' ' : '';
+      return `${leadingSpace}@${slug} `;
+    });
+    setQuery(newQuery);
+    resolvedMentionsRef.current.set(slug.toLowerCase(), {
+      id: sug.id,
+      name: sug.display_name,
+    });
+    setMentionOpen(false);
+    setMentionSuggestions([]);
+    // Keep focus in the input so the user can keep typing (keywords or
+    // another @mention) without clicking back into the bar.
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleSearch = async () => {
     if (isSearchPage) {
       // On search page, trigger event with the current query + mode.
+      // PaperazziApp's navbar-search handler resolves any `@` mentions on
+      // its side; we forward the user's pick cache so it can use the
+      // explicit choice instead of falling back to silent top-match.
       window.dispatchEvent(
         new CustomEvent('navbar-search', {
-          detail: { query: query.trim(), semantic },
+          detail: {
+            query: query.trim(),
+            semantic,
+            mentionCache: Array.from(resolvedMentionsRef.current.entries()),
+          },
         }),
       );
     } else {
-      // Not on search page, navigate there with query + mode.
+      // Not on search page, navigate there with query + mode. We do the
+      // `@author` resolution here too — there's no PaperazziApp listener
+      // to catch it on a fresh search-page load.
       if (query.trim()) {
+        const { cleanQuery, mentions } = extractMentions(query.trim());
         const params = new URLSearchParams();
-        params.set('q', query.trim());
+        if (cleanQuery) params.set('q', cleanQuery);
         if (semantic) params.set('semantic', 'true');
+        if (mentions.length > 0) {
+          const { resolved } = await resolveMentions(
+            mentions,
+            resolvedMentionsRef.current,
+          );
+          if (resolved.length > 0) {
+            params.set('authors', resolved.map((a) => a.id).join(','));
+          }
+        }
         params.set('page', '1');
         router.push(`/search?${params.toString()}`);
       }
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  // KeyDown (not KeyPress — KeyPress doesn't fire for arrow keys, which we
+  // need for dropdown navigation). When the dropdown is open, intercept
+  // Up/Down/Enter/Tab/Esc; otherwise Enter submits the search.
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (mentionOpen && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIdx((i) => (i + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIdx(
+          (i) =>
+            (i - 1 + mentionSuggestions.length) % mentionSuggestions.length,
+        );
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        selectMention(mentionIdx);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionOpen(false);
+        return;
+      }
+    }
     if (e.key === 'Enter') {
       handleSearch();
     }
+  };
+
+  // Close the dropdown when the input loses focus, with a small delay so a
+  // mouse click on a suggestion item still registers before we hide it.
+  const handleInputBlur = () => {
+    setTimeout(() => setMentionOpen(false), 150);
   };
 
   return (
@@ -412,10 +626,12 @@ function NavBarContent() {
               <div className='relative'>
                 <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400' />
                 <input
+                  ref={inputRef}
                   type='text'
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onKeyPress={handleKeyPress}
+                  onKeyDown={handleKeyDown}
+                  onBlur={handleInputBlur}
                   placeholder={
                     semantic
                       ? 'Describe a concept...'
@@ -427,6 +643,65 @@ function NavBarContent() {
                   semantic={semantic}
                   conflicts={semanticConflicts}
                 />
+
+                {/* @-mention autocomplete dropdown. Anchored to the input,
+                    z-50 so it sits above the search results below but under
+                    the help popover (z-100). Only renders when we have at
+                    least one suggestion for the trailing @partial. */}
+                {mentionOpen && mentionSuggestions.length > 0 && (
+                  <div
+                    role='listbox'
+                    aria-label='Author suggestions'
+                    // max-h caps the dropdown at ~8 visible rows (each row
+                    // is ~44–52px tall depending on whether it has a hint
+                    // line); overflow-y-auto turns the rest into a
+                    // scrollable list. overscroll-contain prevents wheel
+                    // events from leaking out and scrolling the page when
+                    // the user reaches the dropdown's edge.
+                    className='absolute left-0 right-0 top-full mt-1 surface-panel border border-app rounded-lg shadow-lg z-50 overflow-y-auto overscroll-contain max-h-80'
+                  >
+                    {mentionSuggestions.map((sug, idx) => {
+                      const active = idx === mentionIdx;
+                      return (
+                        <button
+                          key={sug.id}
+                          ref={(el) => {
+                            mentionItemRefs.current[idx] = el;
+                          }}
+                          role='option'
+                          aria-selected={active}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selectMention(idx)}
+                          onMouseEnter={() => setMentionIdx(idx)}
+                          className={`block w-full text-left px-3 py-2 text-sm transition ${
+                            active
+                              ? 'bg-[var(--surface-muted)] text-app'
+                              : 'text-app hover:bg-[var(--surface-muted)]'
+                          }`}
+                        >
+                          <div className='flex items-baseline justify-between gap-3'>
+                            <span className='font-medium truncate'>
+                              {sug.display_name}
+                            </span>
+                            <span className='text-[11px] text-app-soft flex-shrink-0'>
+                              {sug.works_count.toLocaleString()} works
+                            </span>
+                          </div>
+                          {sug.hint && (
+                            <div className='text-[11px] text-app-soft truncate mt-0.5'>
+                              {sug.hint}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {mentionLoading && (
+                      <div className='px-3 py-1.5 text-[11px] text-app-soft border-t border-app sticky bottom-0 surface-panel'>
+                        Searching…
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
