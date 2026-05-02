@@ -165,6 +165,69 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
       cy: yScale(Math.max(0, paper.cited_by_count || 0)),
     }));
 
+    // ── Beeswarm vertical jitter ───────────────────────────────────────
+    // Many papers stack at identical (year, log-cites) coordinates — a
+    // recent high-impact paper might share its slot with several others.
+    // We nudge stacked nodes vertically (preserving x = year) so they
+    // appear near their data position but don't perfectly overlap. This
+    // gives the collision-avoided label renderer downstream actual room
+    // to place labels even at default zoom.
+    //
+    // Trade-off: y-position is no longer exactly log(cites) — it's "near
+    // it". The chart's broad spatial story (early/recent on x, low/high
+    // impact on y) is preserved; exact y-readouts off the axis are not.
+    //
+    // Algorithm: place nodes in priority order (focal first, then by
+    // citation count desc — most-cited papers anchor their slot, less-
+    // cited get shifted). For each, search alternating offsets ±step,
+    // ±2·step… until the new position doesn't collide with any already
+    // placed node. Greedy O(n²) but n ≤ ~400 and runs only when
+    // focal/refs/cites change, so it's fine.
+    const MIN_CENTER_DIST = 14; // viewBox units — ~2× base node radius + gap
+    const STEP = MIN_CENTER_DIST / 2.5;
+    const placementOrder = nodes
+      .map((_, i) => i)
+      .sort((a, b) => {
+        if (nodes[a].role === 'focal' && nodes[b].role !== 'focal') return -1;
+        if (nodes[b].role === 'focal' && nodes[a].role !== 'focal') return 1;
+        return (
+          (nodes[b].paper.cited_by_count || 0) -
+          (nodes[a].paper.cited_by_count || 0)
+        );
+      });
+    const placedSlots: { cx: number; cy: number }[] = [];
+    for (const i of placementOrder) {
+      const node = nodes[i];
+      const desiredCy = node.cy;
+      let bestCy = desiredCy;
+      for (let j = 0; j < 80; j++) {
+        // Sequence: 0, +1, -1, +2, -2, +3, -3, … in units of STEP.
+        const offset =
+          j === 0
+            ? 0
+            : (j % 2 === 1 ? 1 : -1) * Math.ceil(j / 2) * STEP;
+        const tryCy = desiredCy + offset;
+        // Stay within the chart area (clamp would warp the search;
+        // instead, skip slots that would push nodes off-axis).
+        if (tryCy < PAD.top + 2 || tryCy > PAD.top + INNER_H - 2) continue;
+        let collides = false;
+        for (const p of placedSlots) {
+          const dx = p.cx - node.cx;
+          const dy = p.cy - tryCy;
+          if (dx * dx + dy * dy < MIN_CENTER_DIST * MIN_CENTER_DIST) {
+            collides = true;
+            break;
+          }
+        }
+        if (!collides) {
+          bestCy = tryCy;
+          break;
+        }
+      }
+      node.cy = bestCy;
+      placedSlots.push({ cx: node.cx, cy: bestCy });
+    }
+
     const idToNode = new Map<string, NodeView>();
     for (const n of nodes) idToNode.set(normalizeId(n.paper.id), n);
 
@@ -332,6 +395,24 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
 
   const isZoomed =
     transform.k !== 1 || transform.tx !== 0 || transform.ty !== 0;
+
+  // Label sizing — base sizes are in viewBox units, so on a laptop where the
+  // chart renders at ~900px wide, fontSize=9 was rendering at ~5–6px and was
+  // unreadable. Bumped to a base that's comfortable at 100% zoom AND multiplied
+  // by `labelScale` so zooming in actually grows the text. Cap is intentionally
+  // *much lower* than the position-zoom so each step of zoom genuinely opens
+  // up space rather than just enlarging text — at k=3 positions are 3× wider
+  // but labels are only 1.3× larger, so significantly more labels fit.
+  const labelScale = Math.min(transform.k, 1.3);
+  const LABEL_BASE = 13;
+  const LABEL_ACTIVE = 15;
+  const LABEL_FOCAL = 15;
+
+  // Dot sizing — `sqrt(k)` capped at 1.8 so dots grow with zoom but slower
+  // than the position-spacing (which scales linearly with k). Net effect:
+  // zooming in puts MORE relative whitespace around each dot, which helps
+  // de-crowd a cluster.
+  const dotScale = Math.min(Math.sqrt(transform.k), 1.8);
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -515,8 +596,10 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
           })()}
 
           {/* Data layer — clipped so it doesn't render outside the chart area.
-              All elements use screen coordinates (already transformed) so
-              dot radii / stroke widths / font sizes stay constant under zoom. */}
+              Positions use screen coordinates (already transformed). Dot radii
+              and stroke widths stay constant under zoom for visual stability;
+              label fontSize is multiplied by `labelScale` so zooming actually
+              enlarges the text (capped to avoid overflow at max zoom). */}
           <g clipPath='url(#chart-clip)'>
             {/* Edges */}
             {built.edges.map((e) => {
@@ -581,7 +664,17 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
                 : n.role === 'ref'
                   ? 'var(--graph-reference)'
                   : 'var(--graph-citing)';
-              const r = isFocal ? (isActive ? 11 : 9) : isActive ? 6 : 4.5;
+              // Base radius in viewBox units, then scaled by zoom (capped).
+              // Slightly larger baselines than before since the previous sizes
+              // were hard to see on a laptop.
+              const baseR = isFocal
+                ? isActive
+                  ? 12
+                  : 10
+                : isActive
+                  ? 7
+                  : 5.5;
+              const r = baseR * dotScale;
               return (
                 <g
                   key={id || `${n.paper.publication_year}-${n.paper.title}`}
@@ -638,60 +731,148 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               );
             })}
 
-            {/* Per-node short labels (FirstAuthor YYYY) for non-focal nodes */}
-            <g pointerEvents='none'>
-              {built.nodes.map((n) => {
-                if (n.role === 'focal') return null;
-                const id = normalizeId(n.paper.id);
-                const isActive = activeSet.has(id);
-                const isDimmed = anyActive && !isActive;
-                const label = shortLabel(n.paper);
-                if (!label) return null;
-                return (
-                  <text
-                    key={`lbl-${id}`}
-                    x={screenX(n.cx) + 6}
-                    y={screenY(n.cy) + 3}
-                    fontSize={isActive ? 11 : 9}
-                    fontWeight={isActive ? 600 : 400}
-                    fill={isActive ? 'var(--foreground)' : 'var(--foreground-muted)'}
-                    fillOpacity={isDimmed ? 0.25 : isActive ? 1 : 0.7}
-                    stroke='var(--background-card)'
-                    strokeWidth={3}
-                    paintOrder='stroke'
-                    strokeOpacity={isDimmed ? 0.4 : 0.9}
-                    style={{
-                      transition:
-                        'fill-opacity 180ms ease, stroke-opacity 180ms ease, font-size 150ms ease',
-                    }}
-                  >
-                    {label}
-                  </text>
-                );
-              })}
-            </g>
-
-            {/* Focal label — same FirstAuthor YYYY format as other nodes,
-                slightly larger and amber so it stands out without the title. */}
+            {/* Short labels (FirstAuthor YYYY) with greedy collision avoidance.
+                Pass 1 — collect every candidate label with its rendering style
+                and approximate bounding box.
+                Pass 2 — sort by priority (focal → active → most-cited) and
+                only keep labels whose box doesn't overlap one already kept.
+                This shows as many labels as actually fit at the current zoom;
+                zooming in spreads positions faster than labels grow, so more
+                labels become visible. Labels for hovered/pinned nodes are
+                forced through (they always show, even if they overlap). */}
             {(() => {
-              const focalNode = built.nodes.find((n) => n.role === 'focal');
-              if (!focalNode) return null;
-              const label = shortLabel(focalNode.paper);
-              if (!label) return null;
+              type Box = { x: number; y: number; w: number; h: number };
+              type Entry = {
+                key: string;
+                node: NodeView;
+                label: string;
+                isActive: boolean;
+                isFocal: boolean;
+                isDimmed: boolean;
+                fontSize: number;
+                offsetX: number;
+                box: Box;
+              };
+
+              // Approximate text width — average glyph ~0.55em is a reasonable
+              // mid-range for the system sans-serif we render in. It's an
+              // overestimate for narrow chars (i/l) and underestimate for wide
+              // ones (W/M), which is fine for collision avoidance.
+              const measure = (text: string, fontSize: number): Box => ({
+                x: 0,
+                y: 0,
+                w: text.length * fontSize * 0.55,
+                h: fontSize * 1.05,
+              });
+
+              const overlaps = (a: Box, b: Box) =>
+                a.x < b.x + b.w &&
+                a.x + a.w > b.x &&
+                a.y < b.y + b.h &&
+                a.y + a.h > b.y;
+
+              const entries: Entry[] = [];
+              for (const n of built.nodes) {
+                const label = shortLabel(n.paper);
+                if (!label) continue;
+                const id = normalizeId(n.paper.id);
+                const isFocal = n.role === 'focal';
+                const isActive = activeSet.has(id);
+                const isDimmed = anyActive && !isActive && !isFocal;
+                const baseSize = isFocal
+                  ? LABEL_FOCAL
+                  : isActive
+                    ? LABEL_ACTIVE
+                    : LABEL_BASE;
+                const fontSize = baseSize * labelScale;
+                const offsetX = isFocal ? 8 : 6;
+                const dims = measure(label, fontSize);
+                const box: Box = {
+                  // Text anchor is at (x, baseline). Shift up by ~0.75em so the
+                  // box approximates the glyph block, not the cap-line.
+                  x: screenX(n.cx) + offsetX,
+                  y: screenY(n.cy) + 3 - fontSize * 0.75,
+                  w: dims.w,
+                  h: dims.h,
+                };
+                entries.push({
+                  key: `lbl-${id || `${n.paper.publication_year}-${n.paper.title}`}`,
+                  node: n,
+                  label,
+                  isActive,
+                  isFocal,
+                  isDimmed,
+                  fontSize,
+                  offsetX,
+                  box,
+                });
+              }
+
+              // Priority: focal first, then active (hovered/pinned), then by
+              // citation count desc — most-influential papers get the visible
+              // labels in a crowded region.
+              entries.sort((a, b) => {
+                if (a.isFocal !== b.isFocal) return a.isFocal ? -1 : 1;
+                if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+                return (
+                  (b.node.paper.cited_by_count || 0) -
+                  (a.node.paper.cited_by_count || 0)
+                );
+              });
+
+              const placed: Box[] = [];
+              const kept: Entry[] = [];
+              for (const e of entries) {
+                // Focal + active labels are non-negotiable: they render
+                // regardless of overlap (they may stack visually with another
+                // active/focal label, but those are intentional emphasis).
+                const mustShow = e.isFocal || e.isActive;
+                if (!mustShow) {
+                  let collides = false;
+                  for (const p of placed) {
+                    if (overlaps(e.box, p)) {
+                      collides = true;
+                      break;
+                    }
+                  }
+                  if (collides) continue;
+                }
+                placed.push(e.box);
+                kept.push(e);
+              }
+
               return (
-                <text
-                  x={screenX(focalNode.cx) + 8}
-                  y={screenY(focalNode.cy) + 3}
-                  fontSize='11'
-                  fill='var(--warning-foreground)'
-                  fontWeight='700'
-                  stroke='var(--background-card)'
-                  strokeWidth={3}
-                  paintOrder='stroke'
-                  pointerEvents='none'
-                >
-                  {label}
-                </text>
+                <g pointerEvents='none'>
+                  {kept.map((e) => (
+                    <text
+                      key={e.key}
+                      x={screenX(e.node.cx) + e.offsetX}
+                      y={screenY(e.node.cy) + 3}
+                      fontSize={e.fontSize}
+                      fontWeight={e.isFocal ? 700 : e.isActive ? 600 : 400}
+                      fill={
+                        e.isFocal
+                          ? 'var(--warning-foreground)'
+                          : e.isActive
+                            ? 'var(--foreground)'
+                            : 'var(--foreground-muted)'
+                      }
+                      fillOpacity={
+                        e.isDimmed ? 0.25 : e.isActive || e.isFocal ? 1 : 0.7
+                      }
+                      stroke='var(--background-card)'
+                      strokeWidth={3}
+                      paintOrder='stroke'
+                      strokeOpacity={e.isDimmed ? 0.4 : 0.9}
+                      style={{
+                        transition:
+                          'fill-opacity 180ms ease, stroke-opacity 180ms ease, font-size 150ms ease',
+                      }}
+                    >
+                      {e.label}
+                    </text>
+                  ))}
+                </g>
               );
             })()}
           </g>
@@ -765,9 +946,11 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
       </div>
 
       <p className='text-[10px] text-app-soft mt-1'>
-        Drag to pan · Scroll to zoom · Click nodes to pin their links — keep
-        clicking to trace a path. Reference links stay green and citing links
-        stay blue when highlighted. Use the Clear chip to reset.
+        Drag to pan · Scroll or use +/− to zoom (more labels appear as space
+        opens up) · Hover any node for its title · Click to pin its links and
+        trace a path. Reference links stay green, citing links stay blue. Use
+        the Clear chip to reset. Stacked nodes are nudged vertically so labels
+        fit — y-axis values are approximate.
       </p>
     </div>
   );

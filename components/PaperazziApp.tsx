@@ -94,6 +94,52 @@ function PaperazziAppContent() {
       window.removeEventListener('paper-reported', handlePaperReported);
   }, []);
 
+  // When the user opens a cite/refs/network view from any paper card (in the
+  // results list OR the pinned sidebar), clear the persistent filters so they
+  // see the full set first and can re-apply filters from there. The URL-synced
+  // filters are already reset by the click handlers in SearchResults/PinSidebar
+  // (they push a fresh URLSearchParams). What's left to clear is component
+  // state that's not URL-synced — econFilter and journalFilterMode — which the
+  // syncFromURL effect would otherwise preserve via the `prev` spread.
+  useEffect(() => {
+    const handleClearTransientFilters = () => {
+      setFilters((prev) => ({
+        ...prev,
+        econFilter: {
+          enabled: false,
+          categories: [],
+          domains: [],
+          presetId: null,
+          issns: undefined,
+        },
+        journalFilterMode: 'off',
+      }));
+    };
+    window.addEventListener(
+      'paper-citing-click',
+      handleClearTransientFilters,
+    );
+    window.addEventListener('paper-refs-click', handleClearTransientFilters);
+    window.addEventListener(
+      'paper-network-click',
+      handleClearTransientFilters,
+    );
+    return () => {
+      window.removeEventListener(
+        'paper-citing-click',
+        handleClearTransientFilters,
+      );
+      window.removeEventListener(
+        'paper-refs-click',
+        handleClearTransientFilters,
+      );
+      window.removeEventListener(
+        'paper-network-click',
+        handleClearTransientFilters,
+      );
+    };
+  }, []);
+
   // Broadcast econ-filter activeness for the navbar's semantic toggle.
   // The econ filter lives in component state (not URL-synced), so the navbar
   // can't detect it from useSearchParams alone — this event fills that gap.

@@ -368,6 +368,12 @@ export default function SearchResults({
     // Skip the regular search entirely while we're rendering a network — the
     // network fetch (below) drives that view.
     if (networkId) return;
+    // Wide econ filter is a meaningful constraint on its own — the API can
+    // browse all econ journals without a query. Only short-circuit when no
+    // filter at all is active (otherwise wide-mode-without-query returned
+    // empty because `journals` is empty in wide mode).
+    const isWideEconActive =
+      journalFilterMode === 'wide' && (econFilter?.enabled ?? false);
     if (
       !citing &&
       !citingAll?.length &&
@@ -376,7 +382,8 @@ export default function SearchResults({
       !query &&
       journals.length === 0 &&
       authors.length === 0 &&
-      institutions.length === 0
+      institutions.length === 0 &&
+      !isWideEconActive
     ) {
       setResults([]);
       setTotalCount(0);
@@ -770,17 +777,51 @@ export default function SearchResults({
                 <p className='text-sm font-semibold text-stone-900 line-clamp-2 leading-snug'>
                   {networkFocal.title}
                 </p>
-                <p className='text-xs text-stone-500 mt-0.5'>
-                  {networkFocal.authors?.slice(0, 3).join(', ')}
-                  {networkFocal.authors && networkFocal.authors.length > 3
-                    ? ' et al.'
-                    : ''}
-                  {' · '}
-                  {networkFocal.publication_year}
-                  {' · '}
-                  {networkFocal.cited_by_count?.toLocaleString() || 0} citations
-                  {networkFocal.referenced_works_count !== undefined &&
-                    ` · ${networkFocal.referenced_works_count} references`}
+                <p className='text-xs text-stone-500 mt-0.5 flex flex-wrap items-center gap-x-1.5'>
+                  <span>
+                    {networkFocal.authors?.slice(0, 3).join(', ')}
+                    {networkFocal.authors && networkFocal.authors.length > 3
+                      ? ' et al.'
+                      : ''}
+                  </span>
+                  <span>·</span>
+                  <span>{networkFocal.publication_year}</span>
+                  <span>·</span>
+                  {/* Same dispatch pattern as PaperCard so SearchResults'
+                      existing window listener routes to the citing view
+                      (and PaperazziApp's listener clears transient filters). */}
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(
+                        new CustomEvent('paper-citing-click', {
+                          detail: { paper: networkFocal },
+                        }),
+                      );
+                    }}
+                    className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                    title='Find papers that cite this paper'
+                  >
+                    {networkFocal.cited_by_count?.toLocaleString() || 0}{' '}
+                    citations
+                  </button>
+                  {networkFocal.referenced_works_count !== undefined && (
+                    <>
+                      <span>·</span>
+                      <button
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent('paper-refs-click', {
+                              detail: { paper: networkFocal },
+                            }),
+                          );
+                        }}
+                        className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                        title='Find papers cited by this paper'
+                      >
+                        {networkFocal.referenced_works_count} references
+                      </button>
+                    </>
+                  )}
                 </p>
                 {/* Filter chip — when an active journal filter is narrowing
                     the refs/cites shown in the graph. */}
