@@ -650,8 +650,8 @@ export default function SearchResults({
             onClick={() => onPresetTile?.('climate-top5')}
             className='surface-card border border-app rounded-lg p-4 text-left hover:bg-stone-50 transition'
           >
-            <h3 className='text-sm font-medium text-stone-900 mb-1 whitespace-nowrap overflow-hidden text-ellipsis'>
-              Search &ldquo;climate change&rdquo; in Top&nbsp;5
+            <h3 className='text-sm font-medium text-stone-900 mb-1'>
+              Search &ldquo;climate change&rdquo; in&nbsp;Top&nbsp;5
             </h3>
             <p className='text-xs text-stone-500 leading-relaxed'>
               Search for &ldquo;climate change&rdquo; across the Top 5 econ
