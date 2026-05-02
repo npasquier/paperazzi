@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper } from '@/types/interfaces';
 import { Maximize2, Plus, Minus, ExternalLink } from 'lucide-react';
 import PinButton from './PinButton';
@@ -12,11 +12,14 @@ interface Props {
   cites: Paper[]; // papers that cite the focal
 }
 
-// SVG user-space dimensions. viewBox scales to container width via w-full.
-const W = 1400;
+// SVG user-space dimensions. H is fixed; W adapts to the container's aspect
+// ratio at runtime so the chart fills its column instead of letterboxing
+// (which is what `preserveAspectRatio="xMidYMid meet"` does on a wider
+// container against a fixed-W viewBox).
+const DEFAULT_W = 1400;
+const MIN_W = 800;
 const H = 640;
 const PAD = { top: 18, right: 24, bottom: 40, left: 56 };
-const INNER_W = W - PAD.left - PAD.right;
 const INNER_H = H - PAD.top - PAD.bottom;
 
 // Pan/zoom limits.
@@ -77,7 +80,33 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [transform, setTransform] = useState<Transform>(IDENTITY);
 
+  // Dynamic chart width — kept in sync with the container's aspect ratio via
+  // ResizeObserver. Without this, the SVG's fixed viewBox (DEFAULT_W × H)
+  // letterboxes inside wider containers (e.g. when both side panels are
+  // collapsed), leaving empty bands on left and right.
+  const [chartW, setChartW] = useState<number>(DEFAULT_W);
+  const INNER_W = chartW - PAD.left - PAD.right;
+
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      // Pick W so the viewBox aspect matches the container aspect — this
+      // is what eliminates letterboxing. Floor at MIN_W so portrait or very
+      // narrow containers don't squish the layout below readable density.
+      const target = Math.max(MIN_W, Math.round(H * (rect.width / rect.height)));
+      setChartW((prev) => (prev === target ? prev : target));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const dragRef = useRef<{
     startClientX: number;
     startClientY: number;
@@ -275,7 +304,10 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     if (xTicks[xTicks.length - 1] !== maxYear) xTicks.push(maxYear);
 
     return { nodes, edges, idToNode, xScale, yScale, yTicks, xTicks, minYear, maxYear };
-  }, [focal, refs, cites]);
+    // INNER_W is recomputed whenever chartW changes; recomputing layout keeps
+    // node x-positions filling the new chart width instead of clustering at
+    // the original DEFAULT_W footprint.
+  }, [focal, refs, cites, INNER_W]);
 
   if (built.nodes.length <= 1) {
     return (
@@ -295,7 +327,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     if (!svg) return { x: 0, y: 0 };
     const rect = svg.getBoundingClientRect();
     return {
-      x: ((clientX - rect.left) / rect.width) * W,
+      x: ((clientX - rect.left) / rect.width) * chartW,
       y: ((clientY - rect.top) / rect.height) * H,
     };
   };
@@ -325,7 +357,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
 
   // Centered-on-viewport zoom for +/− buttons.
   const zoomCenter = (factor: number) => {
-    zoomAt(factor, W / 2, H / 2);
+    zoomAt(factor, chartW / 2, H / 2);
   };
 
   const startPan = (e: React.PointerEvent<SVGRectElement>) => {
@@ -346,7 +378,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const dx = ((e.clientX - drag.startClientX) / rect.width) * W;
+    const dx = ((e.clientX - drag.startClientX) / rect.width) * chartW;
     const dy = ((e.clientY - drag.startClientY) / rect.height) * H;
     // Threshold to distinguish a click from a drag (in viewBox units).
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
@@ -477,14 +509,15 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
       </div>
 
       {/* flex-1 + min-h-0 lets the SVG container shrink to whatever vertical
-          space remains after the legend row. The SVG's preserveAspectRatio
-          (default "xMidYMid meet") keeps the chart's 1400×640 ratio and
-          letterboxes if the container's aspect ratio differs — so the years
-          axis at the bottom of the viewBox is always visible. */}
-      <div className='relative w-full flex-1 min-h-0'>
+          space remains after the legend row. We measure this container with
+          a ResizeObserver and feed its aspect ratio into the SVG viewBox's
+          width (chartW), so the chart fills the available width instead of
+          letterboxing on the left and right. H stays fixed so vertical
+          density (axis labels, fonts) is unaffected. */}
+      <div ref={containerRef} className='relative w-full flex-1 min-h-0'>
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${W} ${H}`}
+          viewBox={`0 0 ${chartW} ${H}`}
           className='w-full h-full select-none'
           style={{
             cursor: dragRef.current ? 'grabbing' : 'grab',
@@ -884,7 +917,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
           <div
             className='absolute pointer-events-auto surface-card border border-app rounded shadow-md p-2.5 max-w-xs text-xs'
             style={{
-              left: `${(screenX(hoveredNode.cx) / W) * 100}%`,
+              left: `${(screenX(hoveredNode.cx) / chartW) * 100}%`,
               top: `${(screenY(hoveredNode.cy) / H) * 100}%`,
               transform: 'translate(12px, -50%)',
             }}

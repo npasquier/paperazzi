@@ -562,8 +562,12 @@ function PaperazziAppContent() {
 
       <main className='flex-1 min-h-0 min-w-0 overflow-hidden'>
         <div
-          className={`mx-auto flex h-full min-h-0 w-full flex-col px-6 pt-6 pb-0 ${
-            networkId ? 'max-w-none' : 'max-w-5xl'
+          className={`mx-auto flex h-full min-h-0 w-full flex-col pt-6 pb-0 ${
+            networkId
+              ? sidebarsCollapsed
+                ? 'max-w-none px-2'
+                : 'max-w-none px-6'
+              : 'max-w-5xl px-6'
           }`}
         >
           <SearchResults
