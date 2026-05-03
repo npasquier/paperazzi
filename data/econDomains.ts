@@ -26,8 +26,6 @@ export const ECON_DOMAINS = [
 
 export const ECON_CATEGORIES = [1, 2, 3, 4] as const;
 
-import journals from './journals';
-
 // Built-in wide presets shown as pills in the Journals > Wide filter subsection.
 // A preset is either a (categories, domains) combo, or an explicit ISSN whitelist
 // (used when the desired set isn't expressible as cat/dom — e.g. "Top 5").

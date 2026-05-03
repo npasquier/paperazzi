@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   ExternalLink,
   Download,
@@ -8,6 +7,7 @@ import {
   Pin,
   BookOpen,
   Info,
+  FileText,
   Copy,
   Check,
   CheckCircle,
@@ -16,6 +16,7 @@ import {
 import { Paper } from '@/types/interfaces';
 import PinButton from './PinButton';
 import { reportedPaperKey } from '@/utils/storageKeys';
+import PaperInfoModal from '@/components/PaperInfoModal';
 
 interface PaperCardProps {
   paper: Paper;
@@ -36,7 +37,6 @@ export default function PaperCard({
   variant = 'default',
   showPinButton = true,
   showActions = true,
-  preserveParams = '',
   highlighted = false,
   onClick,
   onAuthorClick,
@@ -45,13 +45,9 @@ export default function PaperCard({
   const [isAbstractExpanded, setIsAbstractExpanded] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isAuthorsExpanded, setIsAuthorsExpanded] = useState(false);
+  const [isPaperInfoOpen, setIsPaperInfoOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [hasReported, setHasReported] = useState(false);
-  const router = useRouter();
-
-  const paperUrl = `/paper/${paper.id.split('/').pop()}${
-    preserveParams ? `?${preserveParams}` : ''
-  }`;
 
   const workId = paper.id.replace('https://openalex.org/', '');
 
@@ -74,6 +70,12 @@ export default function PaperCard({
       paper.title
     )}`;
     window.open(url, '_blank');
+  };
+
+  const openPaperInfo = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsPaperInfoOpen(true);
   };
 
   const toggleAbstract = (e: React.MouseEvent) => {
@@ -252,130 +254,134 @@ export default function PaperCard({
 
   if (variant === 'pinned') {
     return (
-      <div
-        className={`
-          surface-card border border-app rounded-lg p-3 relative group
-          ${
-            highlighted
-              ? 'border-[var(--warning-border)] bg-[var(--warning-bg)]'
-              : 'hover:border-[var(--border-strong)]'
+      <>
+        <div
+          className={`
+            surface-card border border-app rounded-lg p-3 relative group
+            ${
+              highlighted
+                ? 'border-[var(--warning-border)] bg-[var(--warning-bg)]'
+                : 'hover:border-[var(--border-strong)]'
+            }
+          `}
+          style={
+            groupColor
+              ? {
+                  borderLeftColor: groupColor,
+                  borderLeftWidth: 3,
+                }
+              : undefined
           }
-        `}
-        style={
-          groupColor
-            ? {
-                borderLeftColor: groupColor,
-                borderLeftWidth: 3,
-              }
-            : undefined
-        }
-      >
-        {showPinButton && (
-          <div className='absolute top-2 right-2'>
-            <PinButton paper={paper} size='sm' />
-          </div>
-        )}
+        >
+          {showPinButton && (
+            <div className='absolute top-2 right-2'>
+              <PinButton paper={paper} size='sm' />
+            </div>
+          )}
 
-        <div className='pr-8'>
-          <div
-            className='font-semibold text-stone-900 text-xs leading-snug mb-1 line-clamp-2 cursor-pointer'
-          >
-            {paper.title || (
-              <span className='text-stone-400 italic'>Untitled</span>
-            )}
-          </div>
+          <div className='pr-8'>
+            <div className='font-semibold text-stone-900 text-xs leading-snug mb-1 line-clamp-2 cursor-pointer'>
+              {paper.title || (
+                <span className='text-stone-400 italic'>Untitled</span>
+              )}
+            </div>
 
-          {/* Use expandable authors */}
-          {renderExpandableAuthors(2, 'text-xs')}
+            {/* Use expandable authors */}
+            {renderExpandableAuthors(2, 'text-xs')}
 
-          <div className='text-xs text-stone-500 flex items-center gap-1.5 min-w-0 flex-wrap'>
-            {paper.journal_name && (
-              <>
-                <span 
-                  className='truncate max-w-[100px] hover:max-w-none hover:whitespace-normal cursor-default transition-all'
-                >
-                  {paper.journal_name}
-                </span>
-                <span className='flex-shrink-0'>•</span>
-              </>
-            )}
-            <span className='flex-shrink-0'>{paper.publication_year || '—'}</span>
-            <span className='flex-shrink-0'>•</span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onClick) onClick();
-                const event = new CustomEvent('paper-citing-click', {
-                  detail: { paper },
-                });
-                window.dispatchEvent(event);
-              }}
-              className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
-              title='Find papers that cite this paper'
-            >
-              {paper.cited_by_count ?? 0} cites
-            </button>
-            {paper.referenced_works_count !== undefined && (
-              <>
-                <span className='flex-shrink-0'>•</span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onClick) onClick();
-                    const event = new CustomEvent('paper-refs-click', {
-                      detail: { paper },
-                    });
-                    window.dispatchEvent(event);
-                  }}
-                  className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
-                  title='Find papers cited by this paper'
-                >
-                  {paper.referenced_works_count} refs
-                </button>
-              </>
-            )}
-            <span className='flex-shrink-0'>•</span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onClick) onClick();
-                const event = new CustomEvent('paper-network-click', {
-                  detail: { paper },
-                });
-                window.dispatchEvent(event);
-              }}
-              className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
-              title='View references + citing papers as a network'
-            >
-              <NetworkIcon size={10} /> network
-            </button>
-            {/* Inline icon-only links: Scholar always, PDF if available.
-                Kept tiny and label-less to preserve the card's soberness. */}
-            <span className='flex-shrink-0'>•</span>
-            <button
-              onClick={openGoogleScholar}
-              className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
-              title='Open in Google Scholar'
-              aria-label='Open in Google Scholar'
-            >
-              <BookOpen size={11} />
-            </button>
-            {paper.pdf_url && (
-              <a
-                href={paper.pdf_url}
-                target='_blank'
-                rel='noopener noreferrer'
-                onClick={(e) => e.stopPropagation()}
-                className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
-                title='Open PDF'
-                aria-label='Open PDF'
+            <div className='text-xs text-stone-500 flex items-center gap-1.5 min-w-0 flex-wrap'>
+              {paper.journal_name && (
+                <>
+                  <span className='truncate max-w-[100px] hover:max-w-none hover:whitespace-normal cursor-default transition-all'>
+                    {paper.journal_name}
+                  </span>
+                  <span className='flex-shrink-0'>•</span>
+                </>
+              )}
+              <span className='flex-shrink-0'>
+                {paper.publication_year || '—'}
+              </span>
+              <span className='flex-shrink-0'>•</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onClick) onClick();
+                  const event = new CustomEvent('paper-citing-click', {
+                    detail: { paper },
+                  });
+                  window.dispatchEvent(event);
+                }}
+                className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
+                title='Find papers that cite this paper'
               >
-                <Download size={11} />
-              </a>
-            )}
+                {paper.cited_by_count ?? 0} cites
+              </button>
+              {paper.referenced_works_count !== undefined && (
+                <>
+                  <span className='flex-shrink-0'>•</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onClick) onClick();
+                      const event = new CustomEvent('paper-refs-click', {
+                        detail: { paper },
+                      });
+                      window.dispatchEvent(event);
+                    }}
+                    className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
+                    title='Find papers cited by this paper'
+                  >
+                    {paper.referenced_works_count} refs
+                  </button>
+                </>
+              )}
+              <span className='flex-shrink-0'>•</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onClick) onClick();
+                  const event = new CustomEvent('paper-network-click', {
+                    detail: { paper },
+                  });
+                  window.dispatchEvent(event);
+                }}
+                className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
+                title='View references + citing papers as a network'
+              >
+                <NetworkIcon size={10} /> network
+              </button>
+              <span className='flex-shrink-0'>•</span>
+              <button
+                onClick={openPaperInfo}
+                className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
+                title='Show abstract and paper details'
+                aria-label='Show abstract and paper details'
+              >
+                <FileText size={11} />
+              </button>
+              {/* {paper.pdf_url && (
+                <a
+                  href={paper.pdf_url}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  onClick={(e) => e.stopPropagation()}
+                  className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
+                  title='Open PDF'
+                  aria-label='Open PDF'
+                >
+                  <Download size={11} />
+                </a>
+              )} */}
+            </div>
           </div>
         </div>
-      </div>
+
+        <PaperInfoModal
+          paper={paper}
+          isOpen={isPaperInfoOpen}
+          onClose={() => setIsPaperInfoOpen(false)}
+        />
+      </>
     );
   }
 

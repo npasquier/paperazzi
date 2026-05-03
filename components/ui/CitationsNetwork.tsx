@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper } from '@/types/interfaces';
-import { Maximize2, Plus, Minus, ExternalLink } from 'lucide-react';
+import { Maximize2, Plus, Minus, ExternalLink, FileText } from 'lucide-react';
 import PinButton from './PinButton';
+import PaperInfoModal from '@/components/PaperInfoModal';
 
 export type NodeRole = 'focal' | 'ref' | 'cite';
 
@@ -78,6 +79,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
   // Pinned nodes — multi-select. Click toggles membership. Persists after
   // mouse leaves so users can chain clicks to trace a citation path.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
   const [transform, setTransform] = useState<Transform>(IDENTITY);
 
   // Dynamic chart width — kept in sync with the container's aspect ratio via
@@ -943,6 +945,15 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
             </p>
             <div className='flex items-center gap-2 mt-2 pt-2 border-t border-app-muted'>
               <PinButton paper={hoveredNode.paper} size='sm' />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDetailPaper(hoveredNode.paper);
+                }}
+                className='inline-flex items-center gap-1 px-2 py-1 text-[11px] button-secondary rounded transition'
+              >
+                <FileText size={11} /> Details
+              </button>
               <a
                 href={paperLink(hoveredNode.paper)}
                 target='_blank'
@@ -975,6 +986,14 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
               </p>
             )}
           </div>
+        )}
+
+        {detailPaper && (
+          <PaperInfoModal
+            paper={detailPaper}
+            isOpen={true}
+            onClose={() => setDetailPaper(null)}
+          />
         )}
       </div>
 

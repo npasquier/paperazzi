@@ -4,7 +4,6 @@ import {
   Bookmark,
   Network,
   Pin,
-  Bell,
   Database,
   Lightbulb,
 } from 'lucide-react';
@@ -263,10 +262,11 @@ export default function HelpPage() {
                 <strong>Drag papers</strong> between groups, or onto the
                 ungrouped section, to reorganize. Use{' '}
                 <strong>Select mode</strong> to bulk-act on multiple papers
-                (delete, move). Each pinned card shows the same{' '}
-                <em>cites · refs · network · scholar · pdf</em> action row as
-                the search results — clicking <em>see network</em> on a pinned
-                paper takes you to its network view directly.
+                (delete, move). Each pinned card exposes quick actions for{' '}
+                <em>cites · refs · network · details · pdf</em> — the details
+                button opens the paper abstract and external links, while
+                clicking <em>network</em> still takes you straight to that
+                paper&apos;s citation map.
               </p>
             </div>
           </section>
