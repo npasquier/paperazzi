@@ -262,10 +262,11 @@ export default function HelpPage() {
                 <strong>Drag papers</strong> between groups, or onto the
                 ungrouped section, to reorganize. Use{' '}
                 <strong>Select mode</strong> to bulk-act on multiple papers
-                (delete, move). Each pinned card exposes quick actions for{' '}
-                <em>cites · refs · network · details · pdf</em> — the details
-                button opens the paper abstract and external links, while
-                clicking <em>network</em> still takes you straight to that
+                (delete, move). Pinned cards stay intentionally tiny: a title,
+                one compact metadata line with clickable <em>cites</em> and{' '}
+                <em>refs</em> counts, and a subtle left color bar for group
+                identity. Clicking a card opens its details, while the inline
+                <em>network</em> shortcut still takes you straight to that
                 paper&apos;s citation map.
               </p>
             </div>

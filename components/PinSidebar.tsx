@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
-  BookOpen,
   Library,
   CheckSquare,
   Square,
@@ -60,7 +59,6 @@ export default function PinSidebar({
   const router = useRouter();
   const {
     pinnedPapers,
-    pinnedIds,
     groups,
     clearPins,
     isLoading,
@@ -236,9 +234,6 @@ export default function PinSidebar({
 
   const selectedCount = selectedIds.size;
   const getSelectedIds = () => Array.from(selectedIds);
-  const preserveParams =
-    pinnedIds.length > 0 ? `pinned=${pinnedIds.join(',')}` : '';
-
   // Handlers
   const handleSearchCiting = (paper: Paper) => {
     const paperId = normalizeId(paper.id);
@@ -474,9 +469,9 @@ export default function PinSidebar({
                 paper={paper}
                 variant='pinned'
                 showPinButton={!selectionMode}
-                preserveParams={preserveParams}
                 onAuthorClick={onAuthorSearch}
                 groupColor={groupColor}
+                disablePrimaryOpen={selectionMode}
               />
             </div>
           </div>

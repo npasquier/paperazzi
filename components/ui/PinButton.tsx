@@ -7,7 +7,7 @@ import { normalizeId } from '@/utils/normalizeId';
 
 interface PinButtonProps {
   paper: Paper;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
 }
 
 export default function PinButton({ paper, size = 'md' }: PinButtonProps) {
@@ -24,8 +24,14 @@ export default function PinButton({ paper, size = 'md' }: PinButtonProps) {
       }}
       className={`
         inline-flex items-center justify-center
-        rounded-lg border transition
-        ${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'}
+        border transition
+        ${
+          size === 'xs'
+            ? 'w-[20px] h-[20px] rounded-md'
+            : size === 'sm'
+              ? 'w-7 h-7 rounded-lg'
+              : 'w-9 h-9 rounded-lg'
+        }
         ${
           pinned
             ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-warning'
@@ -34,7 +40,10 @@ export default function PinButton({ paper, size = 'md' }: PinButtonProps) {
       `}
       title={pinned ? 'Unpin paper' : 'Pin paper'}
     >
-      <PinIcon size={size === 'sm' ? 14 : 16} className={pinned ? 'fill-[var(--warning-foreground)]' : ''} />
+      <PinIcon
+        size={size === 'xs' ? 11 : size === 'sm' ? 14 : 16}
+        className={pinned ? 'fill-[var(--warning-foreground)]' : ''}
+      />
     </button>
   );
 }

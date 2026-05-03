@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, ExternalLink, BookOpen } from 'lucide-react';
 import { Paper } from '@/types/interfaces';
 import PinButton from './ui/PinButton';
@@ -94,27 +95,28 @@ export default function PaperInfoModal({
     window.open(url, '_blank');
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className='fixed inset-0 z-50 flex items-center justify-center overlay-soft'
       onClick={onClose}
     >
       <div
-        className='surface-card border border-app rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col mx-4'
+        className='surface-card border border-app rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col mx-4 cursor-auto'
+        draggable={false}
         onClick={(e) => e.stopPropagation()}
       >
         <div className='flex items-start justify-between p-4 border-b border-app'>
-          <div className='flex-1 min-w-0 pr-4'>
-            <h2 className='text-lg font-semibold text-stone-900 leading-snug'>
+          <div className='flex-1 min-w-0 pr-4 select-text'>
+            <h2 className='text-lg font-semibold text-stone-900 leading-snug cursor-text'>
               {paper.title}
             </h2>
-            <p className='text-sm text-stone-600 mt-1'>
+            <p className='text-sm text-stone-600 mt-1 cursor-text'>
               {paper.authors.slice(0, 5).join(', ')}
               {paper.authors.length > 5 && ` +${paper.authors.length - 5} more`}
             </p>
-            <p className='text-xs text-stone-500 mt-1'>
+            <p className='text-xs text-stone-500 mt-1 cursor-text'>
               {paper.journal_name} • {paper.publication_year} •{' '}
               {paper.cited_by_count} citations
             </p>
@@ -155,12 +157,12 @@ export default function PaperInfoModal({
             )}
           </div>
 
-          <div>
+          <div className='select-text'>
             <h3 className='text-sm font-semibold text-stone-900 mb-2'>
               Abstract
             </h3>
             {abstract ? (
-              <p className='text-sm text-stone-600 leading-relaxed'>
+              <p className='text-sm text-stone-600 leading-relaxed cursor-text whitespace-pre-wrap'>
                 {abstract}
               </p>
             ) : isLoadingAbstract ? (
@@ -176,6 +178,7 @@ export default function PaperInfoModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

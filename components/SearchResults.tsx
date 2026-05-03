@@ -6,7 +6,6 @@ import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import CitationsNetwork from './ui/CitationsNetwork';
 import EmptyState, { PresetTileId } from './EmptyState';
-import { usePins } from '@/contexts/PinContext';
 import { reportedAuthorKey } from '@/utils/storageKeys';
 import {
   X,
@@ -145,8 +144,6 @@ export default function SearchResults({
   const [networkLoading, setNetworkLoading] = useState(false);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [hasAuthorReported, setHasAuthorReported] = useState(false);
-
-  const { pinnedIds } = usePins();
 
   const isEconActive = econFilter?.enabled ?? false;
 
@@ -661,9 +658,6 @@ export default function SearchResults({
   const handlePageChange = (newPage: number) => {
     if (loadMore) loadMore(newPage);
   };
-  const preserveParams =
-    pinnedIds.length > 0 ? `pinned=${pinnedIds.join(',')}` : '';
-
   if (isPending) {
     return (
       <div className='space-y-3'>
@@ -1278,7 +1272,6 @@ export default function SearchResults({
               variant='default'
               showPinButton={true}
               showActions={true}
-              preserveParams={preserveParams}
               onAuthorClick={onAuthorSearch}
             />
           ))}

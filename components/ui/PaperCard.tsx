@@ -7,7 +7,6 @@ import {
   Pin,
   BookOpen,
   Info,
-  FileText,
   Copy,
   Check,
   CheckCircle,
@@ -23,13 +22,13 @@ interface PaperCardProps {
   variant?: 'default' | 'compact' | 'pinned';
   showPinButton?: boolean;
   showActions?: boolean;
-  preserveParams?: string;
   highlighted?: boolean;
   onClick?: () => void;
   onAuthorClick?: (authorName: string) => void;
   // Color used to mark a paper as belonging to a pin group (rendered as a
   // thin left border on the pinned variant).
   groupColor?: string;
+  disablePrimaryOpen?: boolean;
 }
 
 export default function PaperCard({
@@ -41,10 +40,10 @@ export default function PaperCard({
   onClick,
   onAuthorClick,
   groupColor,
+  disablePrimaryOpen = false,
 }: PaperCardProps) {
   const [isAbstractExpanded, setIsAbstractExpanded] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
-  const [isAuthorsExpanded, setIsAuthorsExpanded] = useState(false);
   const [isPaperInfoOpen, setIsPaperInfoOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [hasReported, setHasReported] = useState(false);
@@ -72,10 +71,21 @@ export default function PaperCard({
     window.open(url, '_blank');
   };
 
-  const openPaperInfo = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const openPaperInfoModal = () => {
     setIsPaperInfoOpen(true);
+  };
+
+  const handlePinnedCardOpen = () => {
+    if (disablePrimaryOpen) return;
+    openPaperInfoModal();
+  };
+
+  const handlePinnedCardKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disablePrimaryOpen) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openPaperInfoModal();
+    }
   };
 
   const toggleAbstract = (e: React.MouseEvent) => {
@@ -94,12 +104,6 @@ export default function PaperCard({
     if (!isInfoExpanded) {
       setIsAbstractExpanded(false);
     }
-  };
-
-  const toggleAuthorsExpanded = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsAuthorsExpanded(!isAuthorsExpanded);
   };
 
   const handleAuthorClick = (e: React.MouseEvent, authorName: string) => {
@@ -198,58 +202,11 @@ export default function PaperCard({
     );
   };
 
-  // Render expandable authors for pinned variant
-  const renderExpandableAuthors = (
-    initialMax: number,
-    textSize: string = 'text-xs'
-  ) => {
-    if (!paper.authors || paper.authors.length === 0) {
-      return (
-        <div className={`${textSize} text-stone-400 italic mb-1`}>
-          Authors not available
-        </div>
-      );
-    }
-
-    const hasMore = paper.authors.length > initialMax;
-    const displayAuthors = isAuthorsExpanded
-      ? paper.authors
-      : paper.authors.slice(0, initialMax);
-
-    return (
-      <div className={`${textSize} text-stone-600 mb-1`}>
-        {displayAuthors.map((author, idx) => (
-          <span key={idx}>
-            <button
-              onClick={(e) => handleAuthorClick(e, author)}
-              className='hover:text-stone-900 hover:underline transition-colors cursor-pointer inline'
-              title={`Search papers by ${author}`}
-            >
-              {author}
-            </button>
-            {idx < displayAuthors.length - 1 && ', '}
-          </span>
-        ))}
-        {hasMore && !isAuthorsExpanded && (
-          <button
-            onClick={toggleAuthorsExpanded}
-            className='text-stone-500 hover:text-stone-700 hover:underline transition-colors cursor-pointer ml-0.5'
-            title='Show all authors'
-          >
-            +{paper.authors.length - initialMax} more
-          </button>
-        )}
-        {isAuthorsExpanded && hasMore && (
-          <button
-            onClick={toggleAuthorsExpanded}
-            className='text-stone-400 hover:text-stone-600 transition-colors cursor-pointer ml-1 text-[10px]'
-            title='Show fewer authors'
-          >
-            (show less)
-          </button>
-        )}
-      </div>
-    );
+  const getPinnedAuthorLabel = () => {
+    const firstAuthor = paper.authors?.[0]?.trim();
+    return firstAuthor
+      ? `${firstAuthor.split(/\s+/).pop()}${paper.authors.length > 1 ? ' et al.' : ''}`
+      : 'Unknown author';
   };
 
   if (variant === 'pinned') {
@@ -257,12 +214,13 @@ export default function PaperCard({
       <>
         <div
           className={`
-            surface-card border border-app rounded-lg p-3 relative group
+            surface-card border border-app rounded-lg px-2.5 py-2 relative group transition
             ${
               highlighted
                 ? 'border-[var(--warning-border)] bg-[var(--warning-bg)]'
                 : 'hover:border-[var(--border-strong)]'
             }
+            ${disablePrimaryOpen ? '' : 'cursor-pointer'}
           `}
           style={
             groupColor
@@ -272,36 +230,32 @@ export default function PaperCard({
                 }
               : undefined
           }
+          onClick={handlePinnedCardOpen}
+          onKeyDown={handlePinnedCardKeyDown}
+          role={disablePrimaryOpen ? undefined : 'button'}
+          tabIndex={disablePrimaryOpen ? undefined : 0}
         >
           {showPinButton && (
             <div className='absolute top-2 right-2'>
-              <PinButton paper={paper} size='sm' />
+              <PinButton paper={paper} size='xs' />
             </div>
           )}
 
-          <div className='pr-8'>
-            <div className='font-semibold text-stone-900 text-xs leading-snug mb-1 line-clamp-2 cursor-pointer'>
+          <div className='pr-11 min-w-0'>
+            <div className='font-semibold text-stone-900 text-[13px] leading-snug line-clamp-1'>
               {paper.title || (
                 <span className='text-stone-400 italic'>Untitled</span>
               )}
             </div>
-
-            {/* Use expandable authors */}
-            {renderExpandableAuthors(2, 'text-xs')}
-
-            <div className='text-xs text-stone-500 flex items-center gap-1.5 min-w-0 flex-wrap'>
-              {paper.journal_name && (
-                <>
-                  <span className='truncate max-w-[100px] hover:max-w-none hover:whitespace-normal cursor-default transition-all'>
-                    {paper.journal_name}
-                  </span>
-                  <span className='flex-shrink-0'>•</span>
-                </>
-              )}
+            <div className='mt-0.5 flex min-w-0 items-center gap-0.5 text-[10px] text-stone-500 overflow-hidden whitespace-nowrap'>
+              <span className='max-w-[82px] truncate flex-shrink'>
+                {getPinnedAuthorLabel()}
+              </span>
+              <span className='flex-shrink-0'>·</span>
               <span className='flex-shrink-0'>
                 {paper.publication_year || '—'}
               </span>
-              <span className='flex-shrink-0'>•</span>
+              <span className='flex-shrink-0'>·</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -314,11 +268,11 @@ export default function PaperCard({
                 className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
                 title='Find papers that cite this paper'
               >
-                {paper.cited_by_count ?? 0} cites
+                {(paper.cited_by_count ?? 0).toLocaleString()} cites
               </button>
               {paper.referenced_works_count !== undefined && (
                 <>
-                  <span className='flex-shrink-0'>•</span>
+                  <span className='flex-shrink-0'>·</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -335,7 +289,7 @@ export default function PaperCard({
                   </button>
                 </>
               )}
-              <span className='flex-shrink-0'>•</span>
+              <span className='flex-shrink-0'>·</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -345,33 +299,11 @@ export default function PaperCard({
                   });
                   window.dispatchEvent(event);
                 }}
-                className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
+                className='inline-flex items-center gap-0.5 hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
                 title='View references + citing papers as a network'
               >
-                <NetworkIcon size={10} /> network
+                <NetworkIcon size={9} /> network
               </button>
-              <span className='flex-shrink-0'>•</span>
-              <button
-                onClick={openPaperInfo}
-                className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
-                title='Show abstract and paper details'
-                aria-label='Show abstract and paper details'
-              >
-                <FileText size={11} />
-              </button>
-              {/* {paper.pdf_url && (
-                <a
-                  href={paper.pdf_url}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  onClick={(e) => e.stopPropagation()}
-                  className='p-0.5 text-stone-400 hover:text-stone-700 transition flex-shrink-0'
-                  title='Open PDF'
-                  aria-label='Open PDF'
-                >
-                  <Download size={11} />
-                </a>
-              )} */}
             </div>
           </div>
         </div>
