@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Pin,
@@ -113,29 +113,6 @@ export default function PinSidebar({
 
   const normalizeId = (id: string) => id.replace('https://openalex.org/', '');
 
-  // Listen for citation click events from PaperCard
-  useEffect(() => {
-    const handleCitingClick = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const paper = customEvent.detail.paper;
-      handleSearchCiting(paper);
-    };
-
-    const handleRefsClick = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const paper = customEvent.detail.paper;
-      handleSearchReferences(paper);
-    };
-
-    window.addEventListener('paper-citing-click', handleCitingClick);
-    window.addEventListener('paper-refs-click', handleRefsClick);
-
-    return () => {
-      window.removeEventListener('paper-citing-click', handleCitingClick);
-      window.removeEventListener('paper-refs-click', handleRefsClick);
-    };
-  }, [router]);
-
   // Resize handlers
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -185,7 +162,7 @@ export default function PinSidebar({
 
   useEffect(() => {
     setExpandedGroups(new Set(groups.map((g) => g.id)));
-  }, [groups.length]);
+  }, [groups]);
 
   useEffect(() => {
     if (showNewGroupInput && newGroupInputRef.current) {
@@ -235,23 +212,51 @@ export default function PinSidebar({
   const selectedCount = selectedIds.size;
   const getSelectedIds = () => Array.from(selectedIds);
   // Handlers
-  const handleSearchCiting = (paper: Paper) => {
-    const paperId = normalizeId(paper.id);
-    const params = new URLSearchParams();
-    params.set('citing', paperId);
-    params.set('sort', 'cited_by_count:desc');
-    params.set('page', '1');
-    router.push(`/search?${params.toString()}`);
-  };
+  const handleSearchCiting = useCallback(
+    (paper: Paper) => {
+      const paperId = normalizeId(paper.id);
+      const params = new URLSearchParams();
+      params.set('citing', paperId);
+      params.set('sort', 'cited_by_count:desc');
+      params.set('page', '1');
+      router.push(`/search?${params.toString()}`);
+    },
+    [router],
+  );
 
-  const handleSearchReferences = (paper: Paper) => {
-    const paperId = normalizeId(paper.id);
-    const params = new URLSearchParams();
-    params.set('referencedBy', paperId);
-    params.set('sort', 'cited_by_count:desc');
-    params.set('page', '1');
-    router.push(`/search?${params.toString()}`);
-  };
+  const handleSearchReferences = useCallback(
+    (paper: Paper) => {
+      const paperId = normalizeId(paper.id);
+      const params = new URLSearchParams();
+      params.set('referencedBy', paperId);
+      params.set('sort', 'cited_by_count:desc');
+      params.set('page', '1');
+      router.push(`/search?${params.toString()}`);
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    const handleCitingClick = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const paper = customEvent.detail.paper;
+      handleSearchCiting(paper);
+    };
+
+    const handleRefsClick = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const paper = customEvent.detail.paper;
+      handleSearchReferences(paper);
+    };
+
+    window.addEventListener('paper-citing-click', handleCitingClick);
+    window.addEventListener('paper-refs-click', handleRefsClick);
+
+    return () => {
+      window.removeEventListener('paper-citing-click', handleCitingClick);
+      window.removeEventListener('paper-refs-click', handleRefsClick);
+    };
+  }, [handleSearchCiting, handleSearchReferences]);
 
   const handleSearchCitingAll = () => {
     const ids = getSelectedIds();
@@ -462,7 +467,9 @@ export default function PinSidebar({
 
             <div
               className={`flex-1 rounded transition ${
-                selectionMode && isSelected ? 'ring-1 ring-[var(--accent-border)]' : ''
+                selectionMode && isSelected
+                  ? 'ring-1 ring-[var(--accent-border)]'
+                  : ''
               }`}
             >
               <PaperCard
@@ -485,21 +492,16 @@ export default function PinSidebar({
   };
 
   // Render group
-  const renderGroup = (
-    groupId: string,
-    groupName: string,
-    papers: Paper[],
-    isLastGroup: boolean,
-  ) => {
+  const renderGroup = (groupId: string, groupName: string, papers: Paper[]) => {
     const isExpanded = expandedGroups.has(groupId);
     const isEditing = editingGroupId === groupId;
     const isDragOver = dragOverGroupId === groupId && !dropIndicatorPosition;
 
     return (
-      <div key={groupId} className='mb-3'>
+      <div key={groupId} className='mb-4'>
         {/* Group Header */}
         <div
-          className={`group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md transition ${
+          className={`group flex items-center gap-2 py-1 px-1.5 -mx-1.5 rounded-md transition ${
             isDragOver ? 'surface-muted' : 'hover:bg-[var(--surface-muted)]'
           }`}
           onDragOver={(e) => handleDragOverGroup(e, groupId)}
@@ -508,17 +510,17 @@ export default function PinSidebar({
         >
           <button
             onClick={() => toggleGroupExpanded(groupId)}
-            className='p-1 hover:bg-[var(--surface-subtle)] rounded transition flex-shrink-0'
+            className='p-0.5 text-stone-400 hover:text-stone-600 rounded transition flex-shrink-0'
           >
             {isExpanded ? (
-              <ChevronDown size={14} className='text-stone-500' />
+              <ChevronDown size={13} />
             ) : (
-              <ChevronRight size={14} className='text-stone-500' />
+              <ChevronRight size={13} />
             )}
           </button>
 
           {isEditing ? (
-            <div className='flex-1 flex items-center gap-1'>
+            <div className='flex-1 flex items-center gap-1.5'>
               <input
                 ref={editGroupInputRef}
                 type='text'
@@ -531,53 +533,51 @@ export default function PinSidebar({
                     setEditingName('');
                   }
                 }}
-                className='flex-1 px-2 py-1 text-xs border border-app rounded focus-accent'
+                className='flex-1 px-2 py-1 text-[11px] border border-app rounded-md bg-transparent focus-accent'
               />
               <button
                 onClick={() => handleRenameGroup(groupId)}
-                className='p-1 text-stone-500 hover:text-stone-700'
+                className='p-0.5 text-stone-500 hover:text-stone-700'
               >
-                <Check size={14} />
+                <Check size={13} />
               </button>
               <button
                 onClick={() => {
                   setEditingGroupId(null);
                   setEditingName('');
                 }}
-                className='p-1 text-stone-400 hover:text-stone-600'
+                className='p-0.5 text-stone-400 hover:text-stone-600'
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             </div>
           ) : (
             <>
-              {/* Colored dot — same color used as the left border on this
-                  group's papers, so the visual link is immediate. */}
               <span
-                className='inline-block w-2 h-2 rounded-full flex-shrink-0'
+                className='inline-block w-1.5 h-1.5 rounded-full flex-shrink-0'
                 style={{ backgroundColor: getGroupColor(groupId) }}
                 aria-hidden='true'
               />
-              <span className='flex-1 text-xs text-stone-600 uppercase tracking-wide'>
+              <span className='flex-1 min-w-0 truncate text-[11px] font-medium text-stone-700'>
                 {groupName}
               </span>
-              <span className='text-xs text-stone-400 surface-muted px-1.5 py-0.5 rounded'>
+              <span className='text-[11px] text-stone-400'>
                 {papers.length}
               </span>
-              <div className='flex items-center opacity-0 group-hover:opacity-100 transition'>
+              <div className='flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition'>
                 <button
                   onClick={() => {
                     setEditingGroupId(groupId);
                     setEditingName(groupName);
                   }}
-                  className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
+                  className='p-0.5 text-stone-400 hover:text-stone-600 transition'
                   title='Rename'
                 >
                   <Edit2 size={12} />
                 </button>
                 <button
                   onClick={() => deleteGroup(groupId)}
-                  className='p-1 text-stone-400 hover:text-danger hover:bg-[var(--danger-bg)] rounded transition'
+                  className='p-0.5 text-stone-400 hover:text-danger transition'
                   title='Delete'
                 >
                   <Trash2 size={12} />
@@ -587,11 +587,10 @@ export default function PinSidebar({
           )}
         </div>
 
-        {/* Group Content - No left padding */}
         {isExpanded && (
-          <div className='mt-2 space-y-2'>
+          <div className='mt-1.5 space-y-1.5'>
             {papers.length === 0 ? (
-              <p className='text-xs text-stone-400 italic py-2 pl-2'>
+              <p className='text-[11px] text-stone-400 italic py-1 pl-4'>
                 Drag papers here
               </p>
             ) : (
@@ -601,9 +600,6 @@ export default function PinSidebar({
             )}
           </div>
         )}
-
-        {/* Bottom separator - not for the last group if there are no ungrouped papers */}
-        {!isLastGroup && <div className='mt-3 border-b border-app' />}
       </div>
     );
   };
@@ -654,85 +650,69 @@ export default function PinSidebar({
         </div>
 
         {/* Header */}
-        <div className='px-4 py-3 border-b border-app flex-shrink-0'>
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-2'>
-              <Pin size={14} className='text-stone-400' />
-              <span className='text-sm font-medium text-stone-700'>Pinned</span>
-              {pinnedPapers.length > 0 && (
-                <span className='text-xs text-stone-400'>
-                  {pinnedPapers.length}/{MAX_PINS}
+        <div className='px-4 pt-4 pb-3 border-b border-app flex-shrink-0 space-y-3'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <div className='flex items-center gap-2'>
+                <Pin size={13} className='text-stone-400' />
+                <span className='text-sm font-medium text-stone-700'>
+                  Pinned papers
                 </span>
-              )}
+                {pinnedPapers.length > 0 && (
+                  <span className='text-xs text-stone-400'>
+                    ({pinnedPapers.length}/{MAX_PINS})
+                  </span>
+                )}
+              </div>
             </div>
             <button
               onClick={onToggle}
-              className='p-1 hover:bg-[var(--surface-muted)] rounded transition'
+              className='p-1 text-stone-400 hover:text-stone-600 rounded transition'
               title='Close'
             >
-              <ChevronRight size={14} className='text-stone-400' />
+              <ChevronRight size={14} />
             </button>
           </div>
 
           {pinnedPapers.length > 0 && (
-            <div className='flex items-center justify-between mt-2'>
+            <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
               <button
                 onClick={clearPins}
-                className='text-xs text-stone-400 hover:text-stone-600 transition'
+                className='text-stone-400 hover:text-stone-600 transition'
               >
-                Clear
+                Clear all
               </button>
-              <div className='flex items-center gap-1'>
-                {pinnedPapers.length >= 2 && (
-                  <button
-                    onClick={() => setSelectionMode((v) => !v)}
-                    className={`text-xs px-2 py-0.5 rounded transition ${
-                      selectionMode
-                        ? 'button-primary'
-                        : 'text-stone-500 hover:bg-[var(--surface-muted)]'
-                    }`}
-                  >
-                    {selectionMode ? 'Done' : 'Select'}
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowNewGroupInput(true)}
-                  className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
-                  title='New group'
-                >
-                  <FolderPlus size={14} />
-                </button>
-              </div>
+              <button
+                onClick={() => setShowNewGroupInput(true)}
+                className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition'
+                title='New group'
+              >
+                <FolderPlus size={12} />
+                New group
+              </button>
             </div>
           )}
 
-          {/* Selection controls */}
           {selectionMode && pinnedPapers.length >= 2 && (
-            <div className='mt-2 pt-2 border-t border-app-muted flex items-center justify-between'>
-              <span className='text-xs text-stone-500'>
-                {selectedCount} selected
-              </span>
-              <div className='flex gap-2 text-xs'>
-                <button
-                  onClick={selectAll}
-                  className='text-stone-500 hover:text-stone-700'
-                >
-                  All
-                </button>
-                <span className='text-stone-200'>|</span>
-                <button
-                  onClick={selectNone}
-                  className='text-stone-400 hover:text-stone-600'
-                >
-                  None
-                </button>
-              </div>
+            <div className='flex items-center gap-3 text-[11px] text-stone-500'>
+              <span>{selectedCount} selected</span>
+              <button
+                onClick={selectAll}
+                className='text-stone-500 hover:text-stone-700 transition'
+              >
+                All
+              </button>
+              <button
+                onClick={selectNone}
+                className='text-stone-400 hover:text-stone-600 transition'
+              >
+                None
+              </button>
             </div>
           )}
 
-          {/* New group input */}
           {showNewGroupInput && (
-            <div className='mt-2 pt-2 border-t border-app-muted flex items-center gap-1'>
+            <div className='flex items-center gap-1.5 pt-1'>
               <input
                 ref={newGroupInputRef}
                 type='text'
@@ -746,58 +726,56 @@ export default function PinSidebar({
                   }
                 }}
                 placeholder='Group name'
-                className='flex-1 px-2 py-1 text-xs border border-app rounded focus-accent'
+                className='flex-1 px-2 py-1 text-[11px] border border-app rounded-md bg-transparent focus-accent'
               />
               <button
                 onClick={handleCreateGroup}
-                className='p-1 text-stone-500 hover:text-stone-700'
+                className='p-0.5 text-stone-500 hover:text-stone-700'
               >
-                <Check size={14} />
+                <Check size={13} />
               </button>
               <button
                 onClick={() => {
                   setShowNewGroupInput(false);
                   setNewGroupName('');
                 }}
-                className='p-1 text-stone-400 hover:text-stone-600'
+                className='p-0.5 text-stone-400 hover:text-stone-600'
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             </div>
           )}
         </div>
 
-        {/* Content */}
-        <div className='app-scrollbar flex-1 overflow-y-auto px-4 py-3'>
+        <div className='app-scrollbar flex-1 overflow-y-auto px-4 py-4'>
           {isLoading ? (
             <div className='flex items-center justify-center py-8'>
               <Loader2 className='animate-spin text-stone-300' size={20} />
             </div>
           ) : pinnedPapers.length === 0 ? (
-            <div className='text-center py-8'>
-              <p className='text-xs text-stone-400'>No papers pinned</p>
+            <div className='text-center py-10'>
+              <p className='text-xs text-stone-400'>No papers pinned yet</p>
+              <p className='text-[11px] text-stone-400 mt-1'>
+                Use the pin button from search results to build a reading list.
+              </p>
             </div>
           ) : (
-            <div className='space-y-2'>
-              {/* Groups */}
+            <div className='space-y-4'>
               {groups.map((group, index) =>
-                renderGroup(
-                  group.id,
-                  group.name,
-                  getPapersInGroup(group.id),
-                  index === groups.length - 1 && ungroupedPapers.length === 0,
-                ),
+                renderGroup(group.id, group.name, getPapersInGroup(group.id)),
               )}
 
-              {/* Separator before ungrouped */}
               {hasGroups && ungroupedPapers.length > 0 && (
-                <div className='border-t border-app my-3' />
+                <div className='pt-1'>
+                  <p className='text-[10px] uppercase tracking-[0.12em] text-stone-400 mb-2'>
+                    Ungrouped
+                  </p>
+                </div>
               )}
 
-              {/* Ungrouped */}
               {ungroupedPapers.length > 0 && (
                 <div
-                  className={`space-y-2 transition rounded ${
+                  className={`space-y-1.5 transition rounded ${
                     dragOverGroupId === 'ungrouped' && !dropIndicatorPosition
                       ? 'surface-muted p-2 -m-2'
                       : ''
@@ -815,38 +793,47 @@ export default function PinSidebar({
           )}
         </div>
 
-        {/* Actions */}
         {pinnedPapers.length >= 2 && (
-          <div className='px-4 py-3 border-t border-app-muted space-y-2'>
-            <button
-              onClick={handleSearchCitingAll}
-              disabled={selectedCount < 2}
-              className='w-full flex items-center justify-center gap-2 px-3 py-2 button-secondary rounded transition text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed'
-            >
-              <Search size={12} />
-              Citing all
-              {selectedCount >= 2 && (
-                <span className='text-stone-400'>({selectedCount})</span>
-              )}
-            </button>
+          <div className='px-4 py-3 border-t border-app'>
+            <div className='flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-stone-400'>
+              <span>Selection</span>
+              <span>{selectedCount} selected</span>
+            </div>
 
-            <button
-              onClick={handleSearchReferencesAll}
-              disabled={selectedCount < 2}
-              className='w-full flex items-center justify-center gap-2 px-3 py-2 button-secondary rounded transition text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed'
-            >
-              <Library size={12} />
-              Common refs
-              {selectedCount >= 2 && (
-                <span className='text-stone-400'>({selectedCount})</span>
-              )}
-            </button>
+            <div className='mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
+              <button
+                onClick={() => setSelectionMode((v) => !v)}
+                className={`transition ${
+                  selectionMode
+                    ? 'text-stone-700'
+                    : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                {selectionMode ? 'Done selecting' : 'Select papers'}
+              </button>
 
-            {selectionMode && selectedCount < 2 && (
-              <p className='text-xs text-stone-400 text-center'>
-                Select at least 2
-              </p>
-            )}
+              <button
+                onClick={handleSearchCitingAll}
+                disabled={selectedCount < 2}
+                className='inline-flex items-center gap-1 text-stone-600 hover:text-stone-800 transition disabled:text-stone-300 disabled:cursor-not-allowed'
+              >
+                <Search size={11} />
+                Citing all
+              </button>
+
+              <button
+                onClick={handleSearchReferencesAll}
+                disabled={selectedCount < 2}
+                className='inline-flex items-center gap-1 text-stone-600 hover:text-stone-800 transition disabled:text-stone-300 disabled:cursor-not-allowed'
+              >
+                <Library size={11} />
+                Common refs
+              </button>
+
+              {selectionMode && selectedCount < 2 && (
+                <span className='text-stone-400'>Select at least 2</span>
+              )}
+            </div>
           </div>
         )}
       </aside>
