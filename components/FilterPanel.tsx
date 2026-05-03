@@ -17,7 +17,7 @@ import {
   ECON_CATEGORIES,
   ECON_PRESETS,
 } from '@/data/econDomains';
-import econJournalList from '@/data/journals';
+import { countEconJournals } from '@/utils/loadJournals';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 export interface FilterPreset {
@@ -91,6 +91,29 @@ export default function FilterPanel({
   const [activeJournalPresetId, setActiveJournalPresetId] = useState<
     string | null
   >(null);
+
+  // Live count of journals matching the current econ filter — backed by
+  // an async data fetch (`utils/loadJournals`) so the 5k-line journal
+  // dataset doesn't ship in the initial bundle. Recomputes whenever the
+  // econFilter object changes; cancellation guard keeps stale results
+  // from clobbering a fresher computation when the user toggles filter
+  // pills quickly. Declared up here (above any early returns) so it
+  // satisfies React's rules-of-hooks ordering.
+  const [econJournalCount, setEconJournalCount] = useState(0);
+  useEffect(() => {
+    const econ = filters.econFilter;
+    if (!econ?.enabled) {
+      setEconJournalCount(0);
+      return;
+    }
+    let cancelled = false;
+    countEconJournals(econ.categories, econ.domains).then((n) => {
+      if (!cancelled) setEconJournalCount(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.econFilter]);
 
   const updateJournalPresets = (next: JournalFilterPreset[]) => {
     setJournalPresets(next);
@@ -315,17 +338,6 @@ export default function FilterPanel({
     </span>
   );
 
-  const getEconJournalCount = () => {
-    if (!filters.econFilter?.enabled) return 0;
-    let filtered = econJournalList as any[];
-    const cats = filters.econFilter.categories;
-    const doms = filters.econFilter.domains;
-    if (cats.length > 0)
-      filtered = filtered.filter((j: any) => cats.includes(j.category));
-    if (doms.length > 0)
-      filtered = filtered.filter((j: any) => doms.includes(j.domain));
-    return filtered.length;
-  };
 
   // Compute `enabled` from the rest of the wide-filter state. Wide filter is
   // active iff any of: a preset is selected, an ISSN whitelist is set, or
@@ -939,7 +951,7 @@ export default function FilterPanel({
                         <p className='text-[10px] text-app-soft mt-1.5'>
                           {hasIssnWhitelist
                             ? `${econ.issns!.length} journals (whitelist)`
-                            : `${getEconJournalCount()} journals selected`}
+                            : `${econJournalCount} journals selected`}
                         </p>
                       )}
                     </div>

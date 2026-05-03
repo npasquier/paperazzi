@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Github, Sparkles, X } from 'lucide-react';
+import { Search, Database, Sparkles, X } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import SearchSyntaxHelp from './SearchSyntaxHelp';
@@ -812,17 +812,6 @@ function NavBarContent() {
         )}
 
         {/* GitHub link — open source signal */}
-        {/* <a
-          href='https://github.com/npasquier/paperazzi'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='text-app-soft hover:text-app transition flex-shrink-0 ml-auto p-1'
-          title='View source on GitHub'
-          aria-label='View source on GitHub'
-        >
-          <Github size={18} />
-        </a> */}
-
         {/* Stored-data viewer */}
         <button
           onClick={() => setShowStorage(true)}

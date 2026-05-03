@@ -1,10 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from 'react-modal';
 import Select from 'react-select';
-import journals from '../data/journals';
+import { loadJournals } from '@/utils/loadJournals';
 import domains from '../data/domains';
-import { SelectedJournal } from '../types/interfaces';
+import { Journal, SelectedJournal } from '../types/interfaces';
 
 interface Props {
   isOpen: boolean;
@@ -36,6 +36,21 @@ export default function JournalModal({
   const isOverLimit = pendingJournals.length > MAX_JOURNALS;
   const isAtLimit = pendingJournals.length === MAX_JOURNALS;
   const canApply = pendingJournals.length <= MAX_JOURNALS;
+
+  // Lazy-load the full journal dataset (~5k entries). The fetch is shared
+  // across all callers via the loader's promise cache, so opening this
+  // modal more than once costs at most one network/parse pass total.
+  const [journals, setJournals] = useState<readonly Journal[]>([]);
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    loadJournals().then((list) => {
+      if (!cancelled) setJournals(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   // Filter journals according to domain and category
   const filteredJournals = journals.filter(

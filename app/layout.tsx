@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import NavBar from '../components/NavBar';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { PinProvider } from '@/contexts/PinContext';
 import { Analytics } from '@vercel/analytics/next';
 
@@ -39,7 +40,11 @@ export default function RootLayout({
               page-level scrollbar. */}
           <div className='flex h-[100dvh] flex-col overflow-hidden'>
             <NavBar />
-            <div className='flex-1 min-h-0 overflow-hidden'>{children}</div>
+            {/* ErrorBoundary scoped to the content slot only — the navbar
+                stays mounted (and usable) if a search-page render throws. */}
+            <div className='flex-1 min-h-0 overflow-hidden'>
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </div>
           </div>
         </PinProvider>
       </body>

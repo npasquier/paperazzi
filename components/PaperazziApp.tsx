@@ -1,12 +1,22 @@
 'use client';
 
 import { useEffect, useState, Suspense, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
 import SearchResults from './SearchResults';
-import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
 import InstitutionModal from './InstitutionModal';
+
+// JournalModal carries the heaviest deps in the modal trio (the full
+// journals dataset is fetched on mount, plus react-select). Loading it
+// dynamically removes its component code from the initial /search bundle;
+// it streams in only when the user first opens the journal picker.
+// ssr: false because this is purely user-interactive UI — no SEO value
+// from server-rendering an empty closed modal.
+const JournalModal = dynamic(() => import('./JournalModal'), {
+  ssr: false,
+});
 import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
 import { ECON_PRESETS } from '@/data/econDomains';
 import mapIssnsToJournals from '@/utils/issnToJournals';
@@ -19,7 +29,6 @@ import {
   resolveJournalShortcuts,
 } from '@/utils/queryMentions';
 import PinSidebar from './PinSidebar';
-import CreateAlertButton from './CreateAlertButton';
 import CelebrationOverlay from './ui/CelebrationOverlay';
 
 function PaperazziAppContent() {
@@ -205,7 +214,7 @@ function PaperazziAppContent() {
       const network = searchParams.get('network') || '';
       const isSemantic = searchParams.get('semantic') === 'true';
 
-      const journals = mapIssnsToJournals(journalIssns);
+      const journals = await mapIssnsToJournals(journalIssns);
 
       // Fetch authors
       const authors = await Promise.all(
@@ -722,8 +731,6 @@ function PaperazziAppContent() {
         onToggle={() => setIsPinSidebarOpen((v) => !v)}
         onAuthorSearch={handleAuthorSearch}
       />
-
-      {/* <CreateAlertButton filters={searchFilters} query={searchQuery} /> */}
 
       {/* Modals */}
       <AuthorModal
