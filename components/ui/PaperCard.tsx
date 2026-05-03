@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Paper } from '@/types/interfaces';
 import PinButton from './PinButton';
+import { reportedPaperKey } from '@/utils/storageKeys';
 
 interface PaperCardProps {
   paper: Paper;
@@ -58,7 +59,7 @@ export default function PaperCard({
   const hasAbstract = paper.abstract && paper.abstract.trim().length > 0;
 
   // Check localStorage for reported status
-  const reportedKey = `reported-${workId}`;
+  const reportedKey = reportedPaperKey(workId);
   const [isReportedStored] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(reportedKey) === 'true';

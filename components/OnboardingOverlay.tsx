@@ -2,19 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { Filter, Pin, Search } from 'lucide-react';
+import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 export default function OnboardingOverlay() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+    const hasSeenOnboarding = localStorage.getItem(
+      STORAGE_KEYS.hasSeenOnboarding,
+    );
     if (!hasSeenOnboarding) {
       setShow(true);
     }
   }, []);
 
   const dismiss = () => {
-    localStorage.setItem('hasSeenOnboarding', 'true');
+    localStorage.setItem(STORAGE_KEYS.hasSeenOnboarding, 'true');
     setShow(false);
   };
 

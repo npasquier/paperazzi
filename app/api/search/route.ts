@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import buildAbstract from '@/utils/abstract';
 import econJournalList from '@/data/journals';
+import type {
+  OpenAlexWork,
+  OpenAlexResultsPage,
+} from '@/types/openalex';
 
-// Build a filtered set of ISSNs based on category/domain selections
+interface JournalRow {
+  name: string;
+  issn: string;
+  domain: string;
+  category: number;
+}
+
+// Build a filtered set of ISSNs based on category/domain selections.
 function getEconISSNs(categories: number[], domains: string[]): string[] {
-  let filtered = econJournalList as any[];
+  let filtered = econJournalList as JournalRow[];
   if (categories.length > 0) {
     filtered = filtered.filter((j) => categories.includes(j.category));
   }
@@ -109,12 +120,12 @@ function buildFilters(params: {
   return filters;
 }
 
-// Helper to map OpenAlex results to Paper objects
-function mapToPapers(results: any[]): any[] {
-  return results.map((w: any) => ({
+// Helper to map OpenAlex results to Paper objects.
+function mapToPapers(results: OpenAlexWork[]) {
+  return results.map((w) => ({
     id: w.id,
-    title: cleanHtml(w.title),
-    authors: w.authorships?.map((a: any) => a.author.display_name) || [],
+    title: cleanHtml(w.title ?? ''),
+    authors: w.authorships?.map((a) => a.author.display_name) || [],
     publication_year: w.publication_year,
     journal_name: w.primary_location?.source?.display_name || 'Unknown',
     doi: w.doi,
@@ -139,12 +150,15 @@ function buildSort(sort: string, hasQuery: boolean): string {
   return '';
 }
 
-// Helper to fetch with error handling and retry logic
-async function fetchOpenAlex(
+// Helper to fetch with error handling and retry logic. The body is loosely
+// typed because this is a thin wrapper used by callers that know which
+// endpoint they hit and the response shape it returns; the caller annotates
+// the `await` site (e.g. `await fetchOpenAlex<OpenAlexResultsPage<Work>>(…)`).
+async function fetchOpenAlex<T = unknown>(
   url: string,
   getKey: KeyPicker,
   retries = 3,
-): Promise<any> {
+): Promise<T> {
   const apiKey = getKey();
   if (apiKey) {
     url += (url.includes('?') ? '&' : '?') + `api_key=${apiKey}`;
@@ -197,7 +211,7 @@ async function fetchOpenAlex(
 
       const text = await res.text();
       try {
-        return JSON.parse(text);
+        return JSON.parse(text) as T;
       } catch {
         console.error('Failed to parse JSON. URL:', url);
         throw new Error('Invalid JSON response from OpenAlex');
@@ -228,7 +242,7 @@ async function econBatchedSearch(
   issnBatches: string[][],
   perPage: number,
   getKey: KeyPicker,
-): Promise<{ results: any[]; count: number }> {
+): Promise<{ results: OpenAlexWork[]; count: number }> {
   // Step 1: Get count from each batch in parallel (cheap: per-page=1)
   const batchCounts = await Promise.all(
     issnBatches.map(async (batch) => {
@@ -239,7 +253,10 @@ async function econBatchedSearch(
       let url = `https://api.openalex.org/works?per-page=1&page=1`;
       url += `&filter=${batchFilters.join(',')}`;
       if (query) url += `&search=${encodeURIComponent(query)}`;
-      const data = await fetchOpenAlex(url, getKey);
+      const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+        url,
+        getKey,
+      );
       return data.meta?.count || 0;
     }),
   );
@@ -249,7 +266,7 @@ async function econBatchedSearch(
 
   // Step 2: Walk batches to find which one(s) contain the requested page
   let skipRemaining = (page - 1) * perPage;
-  const resultsToReturn: any[] = [];
+  const resultsToReturn: OpenAlexWork[] = [];
 
   for (let i = 0; i < issnBatches.length; i++) {
     const batchCount = batchCounts[i];
@@ -274,7 +291,10 @@ async function econBatchedSearch(
     if (query) url += `&search=${encodeURIComponent(query)}`;
     url += buildSort(sort, !!query);
 
-    const data = await fetchOpenAlex(url, getKey);
+    const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+      url,
+      getKey,
+    );
     const batchResults = data.results || [];
     const sliced = batchResults.slice(offsetInPage, offsetInPage + needed);
     resultsToReturn.push(...sliced);
@@ -304,7 +324,7 @@ async function searchWithinIds(
   issnBatches: string[][] | null,
   perPage: number,
   getKey: KeyPicker,
-): Promise<{ results: any[]; count: number }> {
+): Promise<{ results: OpenAlexWork[]; count: number }> {
   if (workIds.length === 0) return { results: [], count: 0 };
 
   if (query) {
@@ -312,8 +332,11 @@ async function searchWithinIds(
     let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=200`;
     if (filters.length) searchUrl += `&filter=${filters.join(',')}`;
 
-    const searchData = await fetchOpenAlex(searchUrl, getKey);
-    const searchIds = (searchData.results || []).map((w: any) =>
+    const searchData = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+      searchUrl,
+      getKey,
+    );
+    const searchIds = (searchData.results || []).map((w) =>
       normalizeId(w.id),
     );
     const intersectedIds = workIds.filter((id) => searchIds.includes(id));
@@ -343,7 +366,10 @@ async function searchWithinIds(
     const idsFilter = paginatedIds.map(toFullId).join('|');
     let url = `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=${perPage}`;
     url += buildSort(sort, true);
-    const data = await fetchOpenAlex(url, getKey);
+    const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+      url,
+      getKey,
+    );
 
     return { results: data.results || [], count: totalCount };
   }
@@ -369,16 +395,19 @@ async function searchWithinIds(
           ...extraFilters,
         ];
         const url = `https://api.openalex.org/works?filter=${filters.join(',')}&per-page=200`;
-        const data = await fetchOpenAlex(url, getKey);
+        const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+          url,
+          getKey,
+        );
         return data.results || [];
       }),
     );
 
-    const allResults = batchResults.flat();
+    const allResults: OpenAlexWork[] = batchResults.flat();
 
     // STEP 2 — ECON ISSN whitelist still has to be applied locally because
     // it can exceed the upstream filter's 100-value cap.
-    const filtered = allResults.filter((w: any) => {
+    const filtered = allResults.filter((w) => {
       if (!issnBatches) return true;
       const issns = w.primary_location?.source?.issn || [];
       const allowedIssns = issnBatches.flat();
@@ -486,7 +515,7 @@ export async function GET(req: NextRequest) {
     // CASE 1: referencedBy
     if (referencedBy) {
       const cleanId = normalizeId(referencedBy);
-      const paperData = await fetchOpenAlex(
+      const paperData = await fetchOpenAlex<OpenAlexWork>(
         `https://api.openalex.org/works/${cleanId}`,
         getKey,
       );
@@ -523,7 +552,7 @@ export async function GET(req: NextRequest) {
     if (referencesAll.length > 0) {
       const referenceSets = await Promise.all(
         referencesAll.map(async (id) => {
-          const data = await fetchOpenAlex(
+          const data = await fetchOpenAlex<OpenAlexWork>(
             `https://api.openalex.org/works/${normalizeId(id)}`,
             getKey,
           );
@@ -561,11 +590,11 @@ export async function GET(req: NextRequest) {
     if (citingAll.length > 0) {
       const citingSets = await Promise.all(
         citingAll.map(async (id) => {
-          const data = await fetchOpenAlex(
+          const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
             `https://api.openalex.org/works?per-page=200&filter=cites:${toFullId(id)}`,
             getKey,
           );
-          return (data.results || []).map((w: any) => normalizeId(w.id));
+          return (data.results || []).map((w) => normalizeId(w.id));
         }),
       );
       const commonIds = citingSets.reduce((a, b) =>
@@ -607,15 +636,18 @@ export async function GET(req: NextRequest) {
       if (filters.length) url += `&filter=${filters.join(',')}`;
       // Don't override sort: semantic returns by similarity.
 
-      const data = await fetchOpenAlex(url, getKey);
-      let results = data.results || [];
+      const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+        url,
+        getKey,
+      );
+      let results: OpenAlexWork[] = data.results || [];
 
       // Apply ECON ISSN whitelist locally — the wide list can exceed
       // OpenAlex's 100-OR-per-filter cap, but with ≤50 results to filter
       // it's trivial in memory and avoids the rate-limited batched path.
       if (issnBatches) {
         const allowedIssns = new Set(issnBatches.flat());
-        results = results.filter((w: any) => {
+        results = results.filter((w) => {
           const issns = w.primary_location?.source?.issn || [];
           return issns.some((i: string) => allowedIssns.has(i));
         });
@@ -664,7 +696,10 @@ export async function GET(req: NextRequest) {
     if (query) url += `&search=${encodeURIComponent(query)}`;
     url += buildSort(sort, !!query);
 
-    const data = await fetchOpenAlex(url, getKey);
+    const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+      url,
+      getKey,
+    );
 
     return NextResponse.json(
       {

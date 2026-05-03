@@ -21,6 +21,7 @@ import {
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
+import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 // Warm, library-friendly palette for pin groups. The hues stay distinct, but
 // they sit closer to the parchment/teal app theme than the old bright rainbow.
@@ -79,7 +80,7 @@ export default function PinSidebar({
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
 
   useEffect(() => {
-    const saved = localStorage.getItem('pinSidebarWidth');
+    const saved = localStorage.getItem(STORAGE_KEYS.pinSidebarWidth);
     if (saved) setSidebarWidth(parseInt(saved, 10));
   }, []);
   const [isResizing, setIsResizing] = useState(false);
@@ -152,7 +153,10 @@ export default function PinSidebar({
       if (isResizing) {
         setIsResizing(false);
         // Save to localStorage
-        localStorage.setItem('pinSidebarWidth', sidebarWidth.toString());
+        localStorage.setItem(
+          STORAGE_KEYS.pinSidebarWidth,
+          sidebarWidth.toString(),
+        );
       }
     };
 

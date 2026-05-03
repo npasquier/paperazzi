@@ -18,6 +18,7 @@ import {
   ECON_PRESETS,
 } from '@/data/econDomains';
 import econJournalList from '@/data/journals';
+import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 export interface FilterPreset {
   id: string;
@@ -66,7 +67,7 @@ export default function FilterPanel({
   // Load presets from localStorage on mount
   const [presets, setPresets] = useState<FilterPreset[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('filterPresets');
+      const saved = localStorage.getItem(STORAGE_KEYS.filterPresets);
       return saved ? JSON.parse(saved) : [];
     }
     return [];
@@ -79,7 +80,7 @@ export default function FilterPanel({
   const [journalPresets, setJournalPresets] = useState<JournalFilterPreset[]>(
     () => {
       if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('journal-filter-presets');
+        const saved = localStorage.getItem(STORAGE_KEYS.journalPresets);
         return saved ? JSON.parse(saved) : [];
       }
       return [];
@@ -94,7 +95,10 @@ export default function FilterPanel({
   const updateJournalPresets = (next: JournalFilterPreset[]) => {
     setJournalPresets(next);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('journal-filter-presets', JSON.stringify(next));
+      localStorage.setItem(
+        STORAGE_KEYS.journalPresets,
+        JSON.stringify(next),
+      );
     }
   };
 
@@ -180,7 +184,10 @@ export default function FilterPanel({
   const updatePresets = (newPresets: FilterPreset[]) => {
     setPresets(newPresets);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('filterPresets', JSON.stringify(newPresets));
+      localStorage.setItem(
+        STORAGE_KEYS.filterPresets,
+        JSON.stringify(newPresets),
+      );
     }
   };
   const saveCurrentFilters = () => {

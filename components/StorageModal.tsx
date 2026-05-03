@@ -1,6 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { X, Database, AlertTriangle } from 'lucide-react';
+import {
+  ALL_FIXED_KEYS,
+  STORAGE_KEYS,
+  STORAGE_KEY_PREFIXES,
+} from '@/utils/storageKeys';
 
 // ── Shapes we read from localStorage (kept loose; we only show summaries) ──
 interface FilterPresetSummary {
@@ -34,18 +39,10 @@ interface Props {
   onClose: () => void;
 }
 
-// Fixed keys we know about. Wildcard report keys are handled via prefix
-// matching at read time:
-//   reported-author-<id>  — author reports (must be checked first, more specific)
-//   reported-<workId>     — paper reports
-const FIXED_KEYS = [
-  'filterPresets',
-  'journal-filter-presets',
-  'pinned-papers',
-  'pin-groups',
-  'pinSidebarWidth',
-  'hasSeenOnboarding',
-];
+// Fixed keys we know about — sourced from utils/storageKeys.ts so adding a
+// new persisted preference there automatically lands in this modal's
+// "Erase all" sweep. Wildcard report keys (`reported-author-<id>`,
+// `reported-<workId>`) are handled by prefix matching, see eraseAll().
 
 function safeParse<T>(key: string, fallback: T): T {
   try {
@@ -77,37 +74,42 @@ function readStorage(): StorageData {
     if (!k) continue;
     // Order matters: `reported-author-<id>` is a stricter prefix of
     // `reported-<workId>`, so check the author key first.
-    if (k.startsWith('reported-author-')) reportedAuthors++;
-    else if (k.startsWith('reported-')) reportedPapers++;
+    if (k.startsWith(STORAGE_KEY_PREFIXES.reportedAuthor)) reportedAuthors++;
+    else if (k.startsWith(STORAGE_KEY_PREFIXES.reportedPaper))
+      reportedPapers++;
   }
 
-  const pinnedRaw = safeParse<unknown[]>('pinned-papers', []);
+  const pinnedRaw = safeParse<unknown[]>(STORAGE_KEYS.pinnedPapers, []);
 
   return {
-    filterPresets: safeParse<FilterPresetSummary[]>('filterPresets', []),
+    filterPresets: safeParse<FilterPresetSummary[]>(
+      STORAGE_KEYS.filterPresets,
+      [],
+    ),
     journalPresets: safeParse<JournalPresetSummary[]>(
-      'journal-filter-presets',
+      STORAGE_KEYS.journalPresets,
       [],
     ),
     pinnedCount: Array.isArray(pinnedRaw) ? pinnedRaw.length : 0,
-    pinGroups: safeParse<PinGroupSummary[]>('pin-groups', []),
+    pinGroups: safeParse<PinGroupSummary[]>(STORAGE_KEYS.pinGroups, []),
     reportedPapers,
     reportedAuthors,
-    hasOnboarded: localStorage.getItem('hasSeenOnboarding') === 'true',
-    sidebarWidth: localStorage.getItem('pinSidebarWidth'),
+    hasOnboarded:
+      localStorage.getItem(STORAGE_KEYS.hasSeenOnboarding) === 'true',
+    sidebarWidth: localStorage.getItem(STORAGE_KEYS.pinSidebarWidth),
   };
 }
 
 function eraseAll() {
   if (typeof window === 'undefined') return;
-  for (const k of FIXED_KEYS) localStorage.removeItem(k);
-  // Wildcard keys — both `reported-author-<id>` and `reported-<workId>` share
-  // the `reported-` prefix, so a single check sweeps them both.
+  for (const k of ALL_FIXED_KEYS) localStorage.removeItem(k);
+  // Wildcard keys — both `reported-author-<id>` and `reported-<workId>`
+  // share the `reported-` prefix, so a single check sweeps them both.
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k) continue;
-    if (k.startsWith('reported-')) {
+    if (k.startsWith(STORAGE_KEY_PREFIXES.reportedPaper)) {
       toRemove.push(k);
     }
   }

@@ -11,6 +11,8 @@ import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
 import { ECON_PRESETS } from '@/data/econDomains';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import { usePersistedBoolean } from '@/utils/usePersistedBoolean';
+import { STORAGE_KEYS } from '@/utils/storageKeys';
+import type { PresetTileId } from './EmptyState';
 import {
   extractMentions,
   resolveMentions,
@@ -32,11 +34,11 @@ function PaperazziAppContent() {
   // a user left with is the layout they come back to. Default to open on
   // first visit (no persisted value yet).
   const [isFilterOpen, setIsFilterOpen] = usePersistedBoolean(
-    'paperazzi:filterPanelOpen',
+    STORAGE_KEYS.filterPanelOpen,
     true,
   );
   const [isPinSidebarOpen, setIsPinSidebarOpen] = usePersistedBoolean(
-    'paperazzi:pinSidebarOpen',
+    STORAGE_KEYS.pinSidebarOpen,
     true,
   );
   const [isSearchingAuthor, setIsSearchingAuthor] = useState(false);
@@ -516,9 +518,7 @@ function PaperazziAppContent() {
     }
   };
 
-  const handlePresetTile = (
-    preset: 'climate-top5' | 'demo-network' | 'recent-qje',
-  ) => {
+  const handlePresetTile = (preset: PresetTileId) => {
     if (preset === 'demo-network') {
       // Famous econ paper — Acemoglu, Johnson & Robinson (2001),
       // "The Colonial Origins of Comparative Development" in AER.

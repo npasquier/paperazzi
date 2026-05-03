@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import buildAbstract from '@/utils/abstract';
 import cleanHtml from '@/utils/cleanHtml';
+import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 // Utility to normalize IDs
 function normalizeId(id: string) {
@@ -48,8 +49,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
   // Load from localStorage
   useEffect(() => {
     const loadPinnedPapers = async () => {
-      const raw = localStorage.getItem('pinned-papers');
-      const rawGroups = localStorage.getItem('pin-groups');
+      const raw = localStorage.getItem(STORAGE_KEYS.pinnedPapers);
+      const rawGroups = localStorage.getItem(STORAGE_KEYS.pinGroups);
 
       if (rawGroups) {
         try {
@@ -128,14 +129,17 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         ...p,
         id: normalizeId(p.id),
       }));
-      localStorage.setItem('pinned-papers', JSON.stringify(normalized));
+      localStorage.setItem(
+        STORAGE_KEYS.pinnedPapers,
+        JSON.stringify(normalized),
+      );
     }
   }, [pinnedPapers, isLoading]);
 
   // Save groups to localStorage
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem('pin-groups', JSON.stringify(groups));
+      localStorage.setItem(STORAGE_KEYS.pinGroups, JSON.stringify(groups));
     }
   }, [groups, isLoading]);
 
