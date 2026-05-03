@@ -16,7 +16,6 @@ import {
   abbrevForIssn,
 } from '@/data/journalAbbreviations';
 
-
 // Trailing shortcut pattern: matches `@xxx` (author) or `#xxx` (journal) at
 // the end of the query, where xxx starts with a letter and is at least 2
 // chars. We only suggest while the user is actively typing the *last* token,
@@ -133,8 +132,7 @@ function NavBarContent() {
       setEconActive(!!ev.detail?.econActive);
     };
     window.addEventListener('semantic-conflict-econ', handler);
-    return () =>
-      window.removeEventListener('semantic-conflict-econ', handler);
+    return () => window.removeEventListener('semantic-conflict-econ', handler);
   }, []);
 
   // Sync with URL when on search page
@@ -496,7 +494,7 @@ function NavBarContent() {
       <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
         {/* Brand */}
         <Link
-          href='/'
+          href='/search'
           className='flex items-center gap-2 flex-shrink-0 text-accent-strong'
         >
           <svg
@@ -603,9 +601,7 @@ function NavBarContent() {
                         }}
                         title={tooltip}
                       >
-                        <span className='truncate max-w-[180px]'>
-                          #{label}
-                        </span>
+                        <span className='truncate max-w-[180px]'>#{label}</span>
                         <button
                           type='button'
                           onMouseDown={(e) => e.preventDefault()}
@@ -638,6 +634,7 @@ function NavBarContent() {
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
+                  
                   {/* Clear-all: wipes query, chips, and non-URL state, then
                       navigates to /search so the welcome state renders
                       (instead of running an unfiltered "search everything"
@@ -659,6 +656,7 @@ function NavBarContent() {
                       <X size={14} />
                     </button>
                   )}
+                  
                 </div>
 
                 <SearchSyntaxHelp
@@ -684,9 +682,7 @@ function NavBarContent() {
                     {mentionSuggestions.map((sug, idx) => {
                       const active = idx === mentionIdx;
                       const key =
-                        sug.kind === 'author'
-                          ? `a-${sug.id}`
-                          : `j-${sug.issn}`;
+                        sug.kind === 'author' ? `a-${sug.id}` : `j-${sug.issn}`;
                       return (
                         <button
                           key={key}
@@ -752,11 +748,10 @@ function NavBarContent() {
                       className='flex-shrink-0 mt-0.5 text-accent-strong'
                     />
                     <p className='text-app-muted leading-snug'>
-                      <code className='surface-subtle rounded px-1'>@</code>{' '}
-                      and{' '}
+                      <code className='surface-subtle rounded px-1'>@</code> and{' '}
                       <code className='surface-subtle rounded px-1'>#</code>{' '}
-                      shortcuts are inactive in Semantic mode — the tokens
-                      will be searched as literal text. Switch to{' '}
+                      shortcuts are inactive in Semantic mode — the tokens will
+                      be searched as literal text. Switch to{' '}
                       <strong>Keyword</strong> to filter by author or journal.
                     </p>
                   </div>
@@ -809,17 +804,17 @@ function NavBarContent() {
               </button>
             </div>
 
-            <button
+            {/* <button
               onClick={handleSearch}
-              className='px-6 py-2 button-primary rounded-lg transition font-medium flex-shrink-0'
+              className='h-8 px-3 text-sm button-primary rounded-md transition font-medium shrink-0 inline-flex items-center justify-center'
             >
               Search
-            </button>
+            </button> */}
           </>
         ) : (
           // Other pages: Show tagline
           <div className='hidden ml-6 md:flex items-center gap-2 text-sm text-stone-600 flex-1'>
-              {' '}
+            {' '}
           </div>
         )}
 
@@ -861,33 +856,37 @@ function NavBarContent() {
 
 export default function NavBar() {
   return (
-    <Suspense fallback={
-      <nav className='surface-panel border-app border-b h-16 shrink-0'>
-        <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
-          <div className='flex items-center gap-2 flex-shrink-0 text-accent-strong'>
-            <svg
-              viewBox='0 0 24 24'
-              width='22'
-              height='22'
-              fill='none'
-              stroke='currentColor'
-              strokeWidth='1.6'
-              strokeLinecap='round'
-              strokeLinejoin='round'
-              aria-hidden='true'
-            >
-              <rect x='3' y='5' width='6' height='14' rx='3' />
-              <rect x='15' y='5' width='6' height='14' rx='3' />
-              <line x1='9' y1='11' x2='15' y2='11' />
-              <line x1='9' y1='13' x2='15' y2='13' />
-              <circle cx='6' cy='15' r='1.3' />
-              <circle cx='18' cy='15' r='1.3' />
-            </svg>
-            <span className='text-xl font-semibold tracking-tight'>Paperazzi</span>
+    <Suspense
+      fallback={
+        <nav className='surface-panel border-app border-b h-16 shrink-0'>
+          <div className='flex h-full items-center px-6 max-w-7xl mx-auto gap-6'>
+            <div className='flex items-center gap-2 flex-shrink-0 text-accent-strong'>
+              <svg
+                viewBox='0 0 24 24'
+                width='22'
+                height='22'
+                fill='none'
+                stroke='currentColor'
+                strokeWidth='1.6'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                aria-hidden='true'
+              >
+                <rect x='3' y='5' width='6' height='14' rx='3' />
+                <rect x='15' y='5' width='6' height='14' rx='3' />
+                <line x1='9' y1='11' x2='15' y2='11' />
+                <line x1='9' y1='13' x2='15' y2='13' />
+                <circle cx='6' cy='15' r='1.3' />
+                <circle cx='18' cy='15' r='1.3' />
+              </svg>
+              <span className='text-xl font-semibold tracking-tight'>
+                Paperazzi
+              </span>
+            </div>
           </div>
-        </div>
-      </nav>
-    }>
+        </nav>
+      }
+    >
       <NavBarContent />
     </Suspense>
   );
