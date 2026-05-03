@@ -129,7 +129,17 @@ function PaperazziAppContent() {
       'paper-network-click',
       handleClearTransientFilters,
     );
+    // Navbar's "clear search" button: same reset as a citation drill-down,
+    // since it's also "wipe everything that isn't in the URL".
+    window.addEventListener(
+      'paperazzi-reset-search',
+      handleClearTransientFilters,
+    );
     return () => {
+      window.removeEventListener(
+        'paperazzi-reset-search',
+        handleClearTransientFilters,
+      );
       window.removeEventListener(
         'paper-citing-click',
         handleClearTransientFilters,

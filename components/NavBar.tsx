@@ -655,6 +655,30 @@ function NavBarContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  // Wipe the search bar to a neutral state: clear text, clear all chips,
+  // clear non-URL state (journalFilterMode, econFilter — handled by
+  // PaperazziApp via the paperazzi-reset-search event), and navigate to
+  // bare /search so SearchResults renders its welcome/use-case tiles
+  // instead of running a "find everything" query.
+  //
+  // We don't gate this on isSearchPage — pressing it from elsewhere just
+  // takes you back to the empty search page, which is also the right
+  // outcome of "reset".
+  const clearAll = () => {
+    setQuery('');
+    setChips([]);
+    setJournalChips([]);
+    setMentionOpen(false);
+    setMentionSuggestions([]);
+    window.dispatchEvent(new CustomEvent('paperazzi-reset-search'));
+    router.push('/search');
+  };
+
+  // True when there's anything visible to clear. Drives the X button's
+  // visibility — no point showing it on an already-empty bar.
+  const hasSomethingToClear =
+    query.length > 0 || chips.length > 0 || journalChips.length > 0;
+
   // Same for journal chips, but routes to the `journals=` URL param.
   const removeJournalChip = (issn: string) => {
     setJournalChips((prev) => prev.filter((j) => j.issn !== issn));
@@ -926,6 +950,25 @@ function NavBarContent() {
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-0.5'
                   />
+                  {/* Clear-all: wipes query, chips, and non-URL state, then
+                      navigates to /search so the welcome state renders
+                      (instead of running an unfiltered "search everything"
+                      query). Hidden when the bar is already empty. */}
+                  {hasSomethingToClear && (
+                    <button
+                      type='button'
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearAll();
+                      }}
+                      className='flex-shrink-0 p-1 rounded text-app-soft hover:text-app hover:bg-[var(--surface-muted)] transition'
+                      title='Clear search'
+                      aria-label='Clear search'
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
 
                 <SearchSyntaxHelp
