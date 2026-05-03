@@ -126,6 +126,18 @@ function SearchSyntaxHelp({
               </pre>
               <ul className='list-disc pl-5 space-y-1 text-xs'>
                 <li>
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    @
+                  </code>{' '}
+                  and{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    #
+                  </code>{' '}
+                  shortcuts are inactive — author/journal filters are not
+                  supported by this endpoint, and the tokens stay as
+                  literal text in the query.
+                </li>
+                <li>
                   Boolean operators, wildcards, and quotes don&apos;t apply here.
                 </li>
                 <li>
@@ -373,6 +385,10 @@ function SearchSyntaxHelp({
 // chars. We only suggest while the user is actively typing the *last* token,
 // which keeps the dropdown out of the way for everything else.
 const TRAILING_SHORTCUT_RE = /(?:^|\s)([@#])([A-Za-z][A-Za-z0-9-]{1,})$/;
+// Anywhere-in-query variant — used purely to detect "is the user typing a
+// shortcut while semantic mode is on?" so we can surface a warning. We
+// don't need to capture or strip; presence is the only signal.
+const SHORTCUT_ANYWHERE_RE = /(?:^|\s)[@#][A-Za-z][A-Za-z0-9-]+/;
 
 type Suggestion =
   | {
@@ -524,7 +540,17 @@ function NavBarContent() {
   // shortcut prefix and never fires on plain keyword searches.
   //   @ → fetch /authors?search= (300ms debounce, network)
   //   # → filter the static JOURNAL_SHORTCUTS map (no debounce, no network)
+  // Semantic mode disables the dropdown entirely — OpenAlex's semantic
+  // endpoint expects a bare concept query, so author/journal shortcuts
+  // would defeat the point. Users can still *type* `@x` or `#y`; those
+  // characters just stay in the query as literal text.
   useEffect(() => {
+    if (semantic) {
+      setMentionOpen(false);
+      setMentionSuggestions([]);
+      setMentionLoading(false);
+      return;
+    }
     const m = query.match(TRAILING_SHORTCUT_RE);
     if (!m) {
       setMentionOpen(false);
@@ -594,7 +620,7 @@ function NavBarContent() {
       }
     }, 300);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [query, semantic]);
 
   // Scroll the highlighted suggestion into view so arrow-key navigation
   // doesn't lose the user inside a long, scrollable dropdown.
@@ -698,54 +724,69 @@ function NavBarContent() {
     if (isSearchPage) {
       // On search page: dispatch the full chip state (authors + journals)
       // and let PaperazziApp's listener resolve any leftover @text / #text
-      // tokens before pushing the URL.
+      // tokens before pushing the URL. In semantic mode we skip the
+      // shortcut machinery entirely — the OpenAlex semantic endpoint
+      // expects a bare concept query, so we send the raw text untouched
+      // and zero chips. (The toggle pill is already disabled when chips
+      // exist, so this case in practice means the user toggled to
+      // semantic on an empty bar.)
       window.dispatchEvent(
         new CustomEvent('navbar-search', {
           detail: {
             query: query.trim(),
             semantic,
-            chipAuthors: chips.map((c) => ({ id: c.id, name: c.name })),
-            chipJournals: journalChips.map((j) => ({
-              issn: j.issn,
-              name: j.name,
-            })),
+            chipAuthors: semantic
+              ? []
+              : chips.map((c) => ({ id: c.id, name: c.name })),
+            chipJournals: semantic
+              ? []
+              : journalChips.map((j) => ({
+                  issn: j.issn,
+                  name: j.name,
+                })),
           },
         }),
       );
     } else {
       // Off search page: build the URL ourselves. Resolve @ tokens via API
-      // and # tokens via the static map, then assemble the params.
+      // and # tokens via the static map, then assemble the params — unless
+      // semantic mode is on, in which case the query goes through as-is
+      // with no filter resolution.
       if (
         query.trim() ||
-        chips.length > 0 ||
-        journalChips.length > 0
+        (!semantic && (chips.length > 0 || journalChips.length > 0))
       ) {
-        const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
-          query.trim(),
-        );
         const params = new URLSearchParams();
-        if (cleanQuery) params.set('q', cleanQuery);
-        if (semantic) params.set('semantic', 'true');
 
-        const allAuthorIds = chips.map((c) => c.id);
-        if (mentions.length > 0) {
-          const { resolved } = await resolveMentions(mentions);
-          for (const r of resolved)
-            if (!allAuthorIds.includes(r.id)) allAuthorIds.push(r.id);
-        }
-        if (allAuthorIds.length > 0) {
-          params.set('authors', allAuthorIds.join(','));
-        }
+        if (semantic) {
+          if (query.trim()) params.set('q', query.trim());
+          params.set('semantic', 'true');
+        } else {
+          const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
+            query.trim(),
+          );
+          if (cleanQuery) params.set('q', cleanQuery);
 
-        const allJournalIssns = journalChips.map((j) => j.issn);
-        if (journalAbbrevs.length > 0) {
-          const { resolved } = resolveJournalShortcuts(journalAbbrevs);
-          for (const r of resolved)
-            if (!allJournalIssns.includes(r.issn))
-              allJournalIssns.push(r.issn);
-        }
-        if (allJournalIssns.length > 0) {
-          params.set('journals', allJournalIssns.join(','));
+          const allAuthorIds = chips.map((c) => c.id);
+          if (mentions.length > 0) {
+            const { resolved } = await resolveMentions(mentions);
+            for (const r of resolved)
+              if (!allAuthorIds.includes(r.id)) allAuthorIds.push(r.id);
+          }
+          if (allAuthorIds.length > 0) {
+            params.set('authors', allAuthorIds.join(','));
+          }
+
+          const allJournalIssns = journalChips.map((j) => j.issn);
+          if (journalAbbrevs.length > 0) {
+            const { resolved } = resolveJournalShortcuts(journalAbbrevs);
+            for (const r of resolved)
+              if (!allJournalIssns.includes(r.issn))
+                allJournalIssns.push(r.issn);
+          }
+          if (allJournalIssns.length > 0) {
+            params.set('journals', allJournalIssns.join(','));
+          }
         }
 
         params.set('page', '1');
@@ -1042,6 +1083,33 @@ function NavBarContent() {
                         Searching…
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Just-in-time hint: surface only when the user types a
+                    shortcut-shaped token in semantic mode. Tells them why
+                    the dropdown didn't fire and what their `@`/`#` will
+                    actually do — namely, stay as literal text. Disappears
+                    the moment they remove the token or switch back to
+                    Keyword mode. */}
+                {semantic && SHORTCUT_ANYWHERE_RE.test(query) && (
+                  <div
+                    role='status'
+                    aria-live='polite'
+                    className='absolute left-0 right-0 top-full mt-1 banner-info rounded p-2 text-[11px] flex items-start gap-2 z-40'
+                  >
+                    <Sparkles
+                      size={12}
+                      className='flex-shrink-0 mt-0.5 text-accent-strong'
+                    />
+                    <p className='text-app-muted leading-snug'>
+                      <code className='surface-subtle rounded px-1'>@</code>{' '}
+                      and{' '}
+                      <code className='surface-subtle rounded px-1'>#</code>{' '}
+                      shortcuts are inactive in Semantic mode — the tokens
+                      will be searched as literal text. Switch to{' '}
+                      <strong>Keyword</strong> to filter by author or journal.
+                    </p>
                   </div>
                 )}
               </div>

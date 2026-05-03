@@ -72,6 +72,11 @@ export const JOURNAL_SHORTCUTS: Record<string, JournalShortcut> = {
     name: 'International Economic Review',
     issn: '0020-6598',
   },
+  ms: {
+    abbrev: 'ms',
+    name: 'Management Science',
+    issn: '0025-1909',
+  },
   jel: {
     abbrev: 'jel',
     name: 'Journal of Economic Literature',
@@ -104,7 +109,8 @@ export const JOURNAL_SHORTCUTS: Record<string, JournalShortcut> = {
   // Note: `jie` is reserved for the Journal of Industrial Economics (see
   // the Industrial Organization block below). The Journal of International
   // Economics is keyed under `jintec` to avoid the collision — both are
-  // commonly called "JIE" in their respective subfields.
+  // commonly called "JIE" in their respective subfields. But I am an IO guy so
+  // I get to keep the `jie` shortcut for Journal of Industrial Economics 😎
   jintec: {
     abbrev: 'jintec',
     name: 'Journal of International Economics',

@@ -10,6 +10,7 @@ import InstitutionModal from './InstitutionModal';
 import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
 import { ECON_PRESETS } from '@/data/econDomains';
 import mapIssnsToJournals from '@/utils/issnToJournals';
+import { usePersistedBoolean } from '@/utils/usePersistedBoolean';
 import {
   extractMentions,
   resolveMentions,
@@ -27,8 +28,17 @@ function PaperazziAppContent() {
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [showAuthorModal, setShowAuthorModal] = useState(false);
   const [showInstitutionModal, setShowInstitutionModal] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(true);
-  const [isPinSidebarOpen, setIsPinSidebarOpen] = useState(true);
+  // Panel open/closed preferences — persisted to localStorage so the layout
+  // a user left with is the layout they come back to. Default to open on
+  // first visit (no persisted value yet).
+  const [isFilterOpen, setIsFilterOpen] = usePersistedBoolean(
+    'paperazzi:filterPanelOpen',
+    true,
+  );
+  const [isPinSidebarOpen, setIsPinSidebarOpen] = usePersistedBoolean(
+    'paperazzi:pinSidebarOpen',
+    true,
+  );
   const [isSearchingAuthor, setIsSearchingAuthor] = useState(false);
 
   // --- Celebration state ---
@@ -372,14 +382,16 @@ function PaperazziAppContent() {
         (e.detail.chipJournals as Array<{ issn: string; name?: string }>) ||
         [];
 
-      // Tokens that the user typed but never picked from the dropdown still
-      // resolve via the fallback paths (silent top-match for @, static-map
-      // lookup for #) and get added on top of the chip set so a
-      // fast-typing user who hits Enter before the UI catches up still
-      // gets *something*.
-      const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
-        rawQuery,
-      );
+      // In semantic mode the @/# shortcuts are inert — OpenAlex's semantic
+      // endpoint expects a bare concept query, so we skip extraction and
+      // resolution and let the raw text through. NavBar already sends
+      // empty chip arrays in this case; this guard is the server-side
+      // mirror so the literal `@tirole` tokens remain part of the query.
+      const isSemantic =
+        e.detail.semantic ?? searchParams.get('semantic') === 'true';
+      const { cleanQuery, mentions, journalAbbrevs } = isSemantic
+        ? { cleanQuery: rawQuery, mentions: [], journalAbbrevs: [] }
+        : extractMentions(rawQuery);
 
       const seenAuthors = new Set(chipAuthors.map((a) => a.id));
       const finalAuthors: SelectedAuthor[] = chipAuthors.map((a) => ({
