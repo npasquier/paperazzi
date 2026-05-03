@@ -1,40 +1,69 @@
-// Lightweight @author syntax for the search bar.
+// Lightweight shortcut syntax for the search bar.
 //
-// Users can type "@acemoglu institutions" to filter by author *and* search
-// for keywords in one shot. Each `@token` is stripped from the query and
-// resolved to an OpenAlex author id via /authors?search=. Multiple mentions
-// are AND-ed (intersected) since that's what people usually want for
-// co-author lookups.
+//   @name  → filter by author (resolved via OpenAlex /authors?search=)
+//   #abbr  → filter by journal (resolved via the static JOURNAL_SHORTCUTS
+//            map in data/journalAbbreviations.ts)
 //
-// Resolution failures are returned alongside successes so callers can decide
-// whether to surface a "couldn't find author X" hint. The bare-keyword
-// fallback (run the original query as text) is the caller's responsibility.
+// Both shortcuts are stripped from the query before submission and routed
+// to their respective URL params (`authors=`, `journals=`). Multiple
+// shortcuts of the same kind are AND-ed (intersected). Anything left in the
+// query after stripping is searched as keywords as usual.
+//
+// Resolution failures are returned alongside successes so callers can
+// decide whether to surface "couldn't find X" hints.
 
 import { SelectedAuthor } from '@/types/interfaces';
+import {
+  JOURNAL_SHORTCUTS,
+  JournalShortcut,
+} from '@/data/journalAbbreviations';
 
-// Match @ followed by a name token: starts with a letter, can include
-// letters, digits, and hyphens (e.g. @lopez-garcia). Requires the @ to be at
-// the start of the string OR preceded by whitespace, so "foo@bar" inside an
-// email-like blob isn't accidentally treated as a mention. Word-boundary at
-// the end stops matches at punctuation like apostrophes.
+// @ pattern: consumed by extractMentions. Requires whitespace or start
+// before `@` so "foo@bar.com" isn't treated as a mention. Word-boundary at
+// the end stops at apostrophes and the like.
 const MENTION_RE = /(?:^|\s)@([A-Za-z][A-Za-z0-9-]{1,})\b/g;
+// # pattern: same shape, different prefix.
+const JOURNAL_RE = /(?:^|\s)#([A-Za-z][A-Za-z0-9-]{1,})\b/g;
 
 export function extractMentions(query: string): {
   cleanQuery: string;
   mentions: string[];
+  journalAbbrevs: string[];
 } {
   const mentions: string[] = [];
+  const journalAbbrevs: string[] = [];
   const cleanQuery = query
     .replace(MENTION_RE, (_match, name) => {
       mentions.push(name);
-      // Replace the consumed token (and its leading whitespace, if any) with
-      // a single space so adjacent words don't run together: "a @b c" → "a  c"
+      // Replace the consumed token (with its leading whitespace) by a
+      // single space so adjacent words don't run together: "a @b c" → "a  c"
       // → collapsed below to "a c".
+      return ' ';
+    })
+    .replace(JOURNAL_RE, (_match, abbrev) => {
+      journalAbbrevs.push(abbrev);
       return ' ';
     })
     .trim()
     .replace(/\s+/g, ' ');
-  return { cleanQuery, mentions };
+  return { cleanQuery, mentions, journalAbbrevs };
+}
+
+// Look up a list of `#abbrev` tokens against the static journal-shortcut
+// map. Resolution is purely client-side and synchronous — no API calls.
+// Returns `{ resolved, unresolved }` to mirror resolveMentions.
+export function resolveJournalShortcuts(abbrevs: string[]): {
+  resolved: JournalShortcut[];
+  unresolved: string[];
+} {
+  const resolved: JournalShortcut[] = [];
+  const unresolved: string[] = [];
+  for (const a of abbrevs) {
+    const hit = JOURNAL_SHORTCUTS[a.toLowerCase()];
+    if (hit) resolved.push(hit);
+    else unresolved.push(a);
+  }
+  return { resolved, unresolved };
 }
 
 // Resolve a list of name tokens to OpenAlex authors.

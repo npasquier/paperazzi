@@ -7,10 +7,14 @@ import SearchResults from './SearchResults';
 import JournalModal from './JournalModal';
 import AuthorModal from './AuthorModal';
 import InstitutionModal from './InstitutionModal';
-import { Filters, Institution } from '../types/interfaces';
+import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
 import { ECON_PRESETS } from '@/data/econDomains';
 import mapIssnsToJournals from '@/utils/issnToJournals';
-import { extractMentions, resolveMentions } from '@/utils/queryMentions';
+import {
+  extractMentions,
+  resolveMentions,
+  resolveJournalShortcuts,
+} from '@/utils/queryMentions';
 import PinSidebar from './PinSidebar';
 import CreateAlertButton from './CreateAlertButton';
 import CelebrationOverlay from './ui/CelebrationOverlay';
@@ -228,20 +232,47 @@ function PaperazziAppContent() {
         referencesAll,
       };
 
+      // If the URL carries any `journals=` ISSN, the user clearly wants
+      // those journals to actually filter. The default mode is 'off',
+      // which would silently swallow the filter — so promote to
+      // 'specific'. Empty journals preserve the previous mode (so a user
+      // who deliberately set the panel to 'off' isn't reset on every
+      // navigation that doesn't touch journals). This is the single
+      // chokepoint that fixes both the navbar `#abbrev` chip path and
+      // direct URL navigation with a journals param.
+      const journalModeOverride =
+        journals.length > 0 ? 'specific' : undefined;
+
       setFilters((prev) => ({
         ...newFilters,
         econFilter: prev.econFilter,
-        journalFilterMode: prev.journalFilterMode,
+        journalFilterMode: journalModeOverride ?? prev.journalFilterMode,
       }));
       setSearchFilters((prev) => ({
         ...newFilters,
         econFilter: prev.econFilter,
-        journalFilterMode: prev.journalFilterMode,
+        journalFilterMode: journalModeOverride ?? prev.journalFilterMode,
       }));
       setSearchQuery(q);
       setPage(p);
       setNetworkId(network || null);
       setSemantic(isSemantic);
+
+      // Broadcast the resolved author list (with display names) so the
+      // navbar's chip facade can render the same authors that are actually
+      // filtering the results — without having to refetch the names itself.
+      window.dispatchEvent(
+        new CustomEvent('paperazzi-authors-changed', {
+          detail: { authors },
+        }),
+      );
+      // Same idea for journals — the navbar's #journal chips mirror the
+      // current journal filter (including manual picks from the panel).
+      window.dispatchEvent(
+        new CustomEvent('paperazzi-journals-changed', {
+          detail: { journals },
+        }),
+      );
     };
 
     syncFromURL();
@@ -318,30 +349,55 @@ function PaperazziAppContent() {
   useEffect(() => {
     const handleNavbarSearch = async (e: CustomEvent) => {
       const rawQuery = (e.detail.query as string) || '';
-      // The navbar maintains a per-session cache of explicit user picks from
-      // its autocomplete dropdown (slug → {id, name}). It serializes that
-      // cache as an array on the event so resolveMentions can prefer it
-      // over the silent top-match fallback — which is the whole point of
-      // the autocomplete (avoiding wrong matches on common surnames).
-      const mentionCacheArr = (e.detail.mentionCache as Array<
-        [string, { id: string; name?: string }]
-      >) || [];
-      const mentionCache = new Map(mentionCacheArr);
+      // chipAuthors / chipJournals are the *complete* lists the navbar is
+      // currently showing as chips. Both mirror filters.{authors,journals}
+      // via paperazzi-{authors,journals}-changed, so they already include
+      // panel-added entries + any user picks from the autocomplete dropdowns
+      // and reflect any chips the user removed. We treat them as the
+      // authoritative filter for this search instead of merging on top of
+      // the existing filters.
+      const chipAuthors =
+        (e.detail.chipAuthors as Array<{ id: string; name?: string }>) || [];
+      const chipJournals =
+        (e.detail.chipJournals as Array<{ issn: string; name?: string }>) ||
+        [];
 
-      // Pull `@author` mentions out of the query and resolve them to
-      // OpenAlex author IDs. Resolved authors merge into the existing
-      // author filter (de-duped) so a `@` mention layers on top of any
-      // explicit panel selection rather than wiping it out.
-      const { cleanQuery, mentions } = extractMentions(rawQuery);
-      let mergedAuthors = filters.authors;
+      // Tokens that the user typed but never picked from the dropdown still
+      // resolve via the fallback paths (silent top-match for @, static-map
+      // lookup for #) and get added on top of the chip set so a
+      // fast-typing user who hits Enter before the UI catches up still
+      // gets *something*.
+      const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
+        rawQuery,
+      );
+
+      const seenAuthors = new Set(chipAuthors.map((a) => a.id));
+      const finalAuthors: SelectedAuthor[] = chipAuthors.map((a) => ({
+        id: a.id,
+        name: a.name,
+      }));
       if (mentions.length > 0) {
-        const { resolved } = await resolveMentions(mentions, mentionCache);
-        if (resolved.length > 0) {
-          const seen = new Set(filters.authors.map((a) => a.id));
-          mergedAuthors = [
-            ...filters.authors,
-            ...resolved.filter((a) => !seen.has(a.id)),
-          ];
+        const { resolved } = await resolveMentions(mentions);
+        for (const a of resolved) {
+          if (!seenAuthors.has(a.id)) {
+            seenAuthors.add(a.id);
+            finalAuthors.push(a);
+          }
+        }
+      }
+
+      const seenJournals = new Set(chipJournals.map((j) => j.issn));
+      const finalJournals = chipJournals.map((j) => ({
+        issn: j.issn,
+        name: j.name,
+      }));
+      if (journalAbbrevs.length > 0) {
+        const { resolved } = resolveJournalShortcuts(journalAbbrevs);
+        for (const j of resolved) {
+          if (!seenJournals.has(j.issn)) {
+            seenJournals.add(j.issn);
+            finalJournals.push({ issn: j.issn, name: j.name });
+          }
         }
       }
 
@@ -351,9 +407,10 @@ function PaperazziAppContent() {
         // Honor an explicit semantic flag from the navbar (toggle pill).
         // If undefined, buildURLParams falls back to the URL's current value.
         semantic: e.detail.semantic,
-        // Only override authors when we actually resolved something,
-        // otherwise let buildURLParams use its default (current filters).
-        authors: mentions.length > 0 ? mergedAuthors : undefined,
+        // Chips are always authoritative — even when empty (the user may
+        // have just removed all of them).
+        authors: finalAuthors,
+        journals: finalJournals,
       });
       router.push(`/search?${params.toString()}`);
     };

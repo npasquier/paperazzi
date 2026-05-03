@@ -298,3 +298,12 @@ textarea::placeholder {
   border-color: var(--accent-border);
   box-shadow: 0 0 0 1px var(--accent-border);
 }
+
+/* Same ring, but applied when any descendant has focus — used by the
+   chip-facade in the search bar (which is a div containing chips + a
+   real input, so :focus on the wrapper itself never fires). */
+.focus-within-accent:focus-within {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-border);
+}

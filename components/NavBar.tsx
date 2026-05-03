@@ -1,10 +1,20 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Github, Info, Sparkles } from 'lucide-react';
+import { Search, Database, Github, Info, Sparkles, X } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
-import { extractMentions, resolveMentions } from '@/utils/queryMentions';
+import {
+  extractMentions,
+  resolveMentions,
+  resolveJournalShortcuts,
+} from '@/utils/queryMentions';
+import { SelectedAuthor, SelectedJournal } from '@/types/interfaces';
+import {
+  searchJournalShortcuts,
+  JOURNAL_SHORTCUTS_LIST,
+  abbrevForIssn,
+} from '@/data/journalAbbreviations';
 
 // Subtle info popover anchored to the search input. Click-outside / Esc closes.
 // Uses position: fixed because the layout shell has overflow-hidden, which
@@ -82,10 +92,15 @@ function SearchSyntaxHelp({
           ref={popoverRef}
           role='dialog'
           aria-label='OpenAlex search syntax'
-          className='fixed w-[28rem] max-w-[92vw] surface-panel border border-app rounded-lg shadow-lg z-[100] p-4 text-sm'
+          // Capped to 80vh so the popover never escapes the viewport, even
+          // on short laptop screens. Outer is a flex column: sticky header,
+          // then a scrollable content region (overflow-y-auto on the inner
+          // div). overscroll-contain keeps the page from scrolling when
+          // the user wheels past the dropdown's edges.
+          className='fixed w-[28rem] max-w-[92vw] max-h-[80vh] surface-panel border border-app rounded-lg shadow-lg z-[100] text-sm flex flex-col'
           style={{ top: coords.top, right: coords.right }}
         >
-          <div className='flex items-center justify-between mb-3'>
+          <div className='flex items-center justify-between px-4 pt-4 pb-2 border-b border-app flex-shrink-0'>
             <span className='font-medium text-app'>
               {semantic ? 'Semantic search (Beta)' : 'Search syntax'}
             </span>
@@ -100,7 +115,7 @@ function SearchSyntaxHelp({
           </div>
 
           {semantic ? (
-            <div className='space-y-3 text-app-muted'>
+            <div className='space-y-3 text-app-muted overflow-y-auto overscroll-contain px-4 py-3'>
               <p>
                 Describe a concept in natural language — even a sentence or
                 paragraph. Results are returned by similarity, so conceptually
@@ -111,7 +126,7 @@ function SearchSyntaxHelp({
               </pre>
               <ul className='list-disc pl-5 space-y-1 text-xs'>
                 <li>
-                  Boolean operators, wildcards, and quotes don't apply here.
+                  Boolean operators, wildcards, and quotes don&apos;t apply here.
                 </li>
                 <li>
                   Capped at <strong>50 results</strong> per query — pagination
@@ -133,7 +148,7 @@ function SearchSyntaxHelp({
               </p>
             </div>
           ) : (
-          <div className='space-y-3 text-app-muted'>
+          <div className='space-y-4 text-app-muted overflow-y-auto overscroll-contain px-4 py-3'>
             {conflicts.length > 0 && (
               <div className='banner-info rounded p-2 text-xs flex gap-2'>
                 <Sparkles
@@ -145,42 +160,101 @@ function SearchSyntaxHelp({
                     Semantic search is disabled
                   </div>
                   <p>
-                    OpenAlex's semantic endpoint expects a bare concept query.
+                    OpenAlex&apos;s semantic endpoint expects a bare concept query.
                     Currently active: {conflicts.join(', ')}. Clear them to
                     re-enable Semantic.
                   </p>
                 </div>
               </div>
             )}
-            <section>
-              <div className='text-app text-xs font-semibold mb-1'>
-                Author shortcut
+
+            {/* ─── SHORTCUTS group ─────────────────────────────────── */}
+            <div className='space-y-3'>
+              <div className='text-[10px] uppercase tracking-wider text-app-soft font-semibold'>
+                Shortcuts
               </div>
-              <p>
-                Prefix a name with{' '}
-                <code className='surface-subtle rounded px-1 text-xs'>
-                  @
-                </code>{' '}
-                to filter by that author. Suggestions appear as you type —
-                use{' '}
-                <code className='surface-subtle rounded px-1 text-xs'>
-                  ↑↓
-                </code>{' '}
-                +{' '}
-                <code className='surface-subtle rounded px-1 text-xs'>
-                  Enter
-                </code>{' '}
-                (or click) to pick the right one. Multiple{' '}
-                <code className='surface-subtle rounded px-1 text-xs'>
-                  @
-                </code>{' '}
-                tokens are AND-ed (intersection); the rest of the text is
-                searched as keywords.
-              </p>
-              <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+
+              <section>
+                <div className='text-app text-xs font-semibold mb-1'>
+                  Author —{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    @name
+                  </code>
+                </div>
+                <p>
+                  Suggestions appear as you type;{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    ↑↓
+                  </code>{' '}
+                  +{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    Enter
+                  </code>{' '}
+                  picks one. The picked author becomes a green chip in the
+                  bar — click its{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    ✕
+                  </code>{' '}
+                  or press{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    Backspace
+                  </code>{' '}
+                  with an empty input to remove it.
+                </p>
+                <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
 {`@acemoglu institutions    @kahneman @tversky prospect`}
-              </pre>
-            </section>
+                </pre>
+              </section>
+
+              <section>
+                <div className='text-app text-xs font-semibold mb-1'>
+                  Journal —{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    #abbrev
+                  </code>
+                </div>
+                <p>
+                  Same idea, but resolves a journal abbreviation against a
+                  built-in list. The picked journal becomes a purple chip in
+                  the bar.
+                </p>
+                <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`#aer minimum wage    #qje #jpe inequality`}
+                </pre>
+                <details className='mt-2 text-xs'>
+                  <summary className='cursor-pointer text-app-soft hover:text-app select-none'>
+                    Available journal abbreviations (
+                    {JOURNAL_SHORTCUTS_LIST.length})
+                  </summary>
+                  <div className='mt-2 grid grid-cols-2 gap-x-3 gap-y-1'>
+                    {JOURNAL_SHORTCUTS_LIST.map((j) => (
+                      <div
+                        key={j.abbrev}
+                        className='flex items-baseline gap-1.5 text-[11px]'
+                      >
+                        <code className='surface-subtle rounded px-1 text-app font-mono flex-shrink-0'>
+                          #{j.abbrev}
+                        </code>
+                        <span className='text-app-soft truncate'>
+                          {j.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </section>
+
+              <p className='text-[11px] text-app-soft'>
+                Multiple chips of the same kind are AND-ed (intersection).
+                The rest of the text is searched as keywords.
+              </p>
+            </div>
+
+            {/* ─── BOOLEAN group ──────────────────────────────────── */}
+            <div className='space-y-3 pt-1 border-t border-app'>
+              <div className='text-[10px] uppercase tracking-wider text-app-soft font-semibold pt-2'>
+                Operators &amp; matching
+              </div>
 
             <section>
               <div className='text-app text-xs font-semibold mb-1'>
@@ -250,7 +324,7 @@ function SearchSyntaxHelp({
                   ?
                 </code>{' '}
                 matches one. Need ≥3 chars before the wildcard. Leading
-                wildcards aren't supported.
+                wildcards aren&apos;t supported.
               </p>
               <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
 {`machin*     wom?n`}
@@ -277,6 +351,7 @@ function SearchSyntaxHelp({
 {`machin~1`}
               </pre>
             </section>
+            </div>{/* /Operators & matching group */}
 
             <p className='text-xs text-app-soft pt-1 border-t border-app'>
               Results are sorted by{' '}
@@ -293,28 +368,26 @@ function SearchSyntaxHelp({
   );
 }
 
-// Trailing @-mention pattern: matches `@xxx` at the end of the query, where
-// xxx starts with a letter and is at least 2 chars. We only suggest while the
-// user is actively typing the *last* token, which keeps the dropdown out of
-// the way for everything else.
-const TRAILING_MENTION_RE = /(?:^|\s)@([A-Za-z][A-Za-z0-9-]{1,})$/;
+// Trailing shortcut pattern: matches `@xxx` (author) or `#xxx` (journal) at
+// the end of the query, where xxx starts with a letter and is at least 2
+// chars. We only suggest while the user is actively typing the *last* token,
+// which keeps the dropdown out of the way for everything else.
+const TRAILING_SHORTCUT_RE = /(?:^|\s)([@#])([A-Za-z][A-Za-z0-9-]{1,})$/;
 
-interface AuthorSuggestion {
-  id: string; // OpenAlex ID, normalized (no URL prefix)
-  display_name: string;
-  works_count: number;
-  hint?: string; // last-known institution, when available
-}
-
-// Reduce a display name like "Daron Acemoglu" or "Maria de la Rica" to a
-// short, lowercase token suitable for replacing the user's @partial in the
-// input box. We use the surname-ish last word so the chip stays visually
-// close to what the user typed.
-function slugifyAuthorName(displayName: string): string {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean);
-  const last = parts[parts.length - 1] || displayName;
-  return last.toLowerCase().replace(/[^a-z0-9-]/g, '');
-}
+type Suggestion =
+  | {
+      kind: 'author';
+      id: string; // OpenAlex ID, normalized (no URL prefix)
+      display_name: string;
+      works_count: number;
+      hint?: string; // last-known institution, when available
+    }
+  | {
+      kind: 'journal';
+      issn: string;
+      display_name: string;
+      abbrev: string;
+    };
 
 function NavBarContent() {
   const pathname = usePathname();
@@ -332,26 +405,50 @@ function NavBarContent() {
   // Storage viewer modal
   const [showStorage, setShowStorage] = useState(false);
 
-  // ── @author autocomplete ────────────────────────────────────────────
-  // Suggestions for the trailing @partial token. Open only while the user is
-  // typing inside an @mention; closes on selection, blur, or Esc.
-  const [mentionSuggestions, setMentionSuggestions] = useState<
-    AuthorSuggestion[]
-  >([]);
+  // ── @author / #journal autocomplete ─────────────────────────────────
+  // Suggestions for the trailing @partial or #partial token. Open only
+  // while the user is typing inside a shortcut; closes on selection, blur,
+  // or Esc. The suggestion union carries enough info that the dropdown UI
+  // can switch on `.kind` to render the right secondary line.
+  const [mentionSuggestions, setMentionSuggestions] = useState<Suggestion[]>(
+    [],
+  );
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionIdx, setMentionIdx] = useState(0);
   const [mentionLoading, setMentionLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Cache of explicit user picks: slug → {id, displayName}. Survives across
-  // renders so submit-time resolution can prefer the user's choice over the
-  // silent top-match fallback. Forwarded to PaperazziApp via the
-  // navbar-search event so it can short-circuit there too.
-  const resolvedMentionsRef = useRef<
-    Map<string, { id: string; name?: string }>
-  >(new Map());
   // One ref per suggestion row so arrow-key navigation can scroll the
   // highlighted item into view inside the (overflow-y-auto) dropdown.
   const mentionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // ── In-bar chips (authors + journals) ───────────────────────────────
+  // Visual representation of the currently active author + journal filters,
+  // rendered as pills inside the search-bar facade. Single source of truth:
+  // PaperazziApp's syncFromURL broadcasts `paperazzi-authors-changed` and
+  // `paperazzi-journals-changed` whenever it resolves the URL params; we
+  // mirror those into local state. On submit, the current chip lists are
+  // sent back (chipAuthors / chipJournals) and become the next URL's filter
+  // — so removing a chip propagates on the next search, and explicit picks
+  // from the autocomplete stack additively until submit.
+  const [chips, setChips] = useState<SelectedAuthor[]>([]);
+  const [journalChips, setJournalChips] = useState<SelectedJournal[]>([]);
+
+  useEffect(() => {
+    const onAuthors = (e: Event) => {
+      const ev = e as CustomEvent<{ authors: SelectedAuthor[] }>;
+      setChips(ev.detail?.authors || []);
+    };
+    const onJournals = (e: Event) => {
+      const ev = e as CustomEvent<{ journals: SelectedJournal[] }>;
+      setJournalChips(ev.detail?.journals || []);
+    };
+    window.addEventListener('paperazzi-authors-changed', onAuthors);
+    window.addEventListener('paperazzi-journals-changed', onJournals);
+    return () => {
+      window.removeEventListener('paperazzi-authors-changed', onAuthors);
+      window.removeEventListener('paperazzi-journals-changed', onJournals);
+    };
+  }, []);
 
   // Compute the list of human-readable conflicts that make semantic search
   // unavailable. Mirrors OpenAlex's "use keyword when you need filters /
@@ -422,19 +519,39 @@ function NavBarContent() {
     router.replace(`/search?${params.toString()}`);
   };
 
-  // Debounced fetch of @-mention suggestions. Triggers only when the query
-  // ends in `@xxx` (xxx ≥ 2 chars), so the dropdown is fully opt-in to the
-  // `@` prefix and doesn't fire on plain keyword searches. 300ms debounce
-  // keeps API load proportional to user pauses, not keystrokes.
+  // Debounced suggestion update. Triggers only when the query ends in
+  // `@xxx` or `#xxx` (xxx ≥ 2 chars), so the dropdown is fully opt-in to a
+  // shortcut prefix and never fires on plain keyword searches.
+  //   @ → fetch /authors?search= (300ms debounce, network)
+  //   # → filter the static JOURNAL_SHORTCUTS map (no debounce, no network)
   useEffect(() => {
-    const m = query.match(TRAILING_MENTION_RE);
+    const m = query.match(TRAILING_SHORTCUT_RE);
     if (!m) {
       setMentionOpen(false);
       setMentionSuggestions([]);
       setMentionLoading(false);
       return;
     }
-    const partial = m[1];
+    const prefix = m[1];
+    const partial = m[2];
+
+    // Journal: synchronous static lookup, no need to debounce or load.
+    if (prefix === '#') {
+      const hits = searchJournalShortcuts(partial, 25);
+      const results: Suggestion[] = hits.map((j) => ({
+        kind: 'journal' as const,
+        issn: j.issn,
+        display_name: j.name,
+        abbrev: j.abbrev,
+      }));
+      setMentionSuggestions(results);
+      setMentionOpen(results.length > 0);
+      setMentionIdx(0);
+      setMentionLoading(false);
+      return;
+    }
+
+    // Author: debounced network call.
     setMentionLoading(true);
     const handle = setTimeout(async () => {
       try {
@@ -448,7 +565,7 @@ function NavBarContent() {
           return;
         }
         const data = await res.json();
-        const results: AuthorSuggestion[] = (data.results || []).map(
+        const results: Suggestion[] = (data.results || []).map(
           (a: {
             id: string;
             display_name: string;
@@ -456,6 +573,7 @@ function NavBarContent() {
             last_known_institution?: { display_name?: string };
             affiliations?: { institution?: { display_name?: string } }[];
           }) => ({
+            kind: 'author' as const,
             id: a.id.replace('https://openalex.org/', ''),
             display_name: a.display_name,
             works_count: a.works_count || 0,
@@ -486,61 +604,126 @@ function NavBarContent() {
     el?.scrollIntoView({ block: 'nearest' });
   }, [mentionIdx, mentionOpen]);
 
-  // Apply a suggestion: replace the trailing @partial with @<lastname-slug>
-  // and remember the resolved id so submit doesn't re-resolve via top-match.
+  // Apply a suggestion: strip the trailing @ or # token out of the query
+  // (chips replace inline text) and add an author or journal chip. De-dup
+  // is per kind: picking the same author or the same journal twice is a
+  // no-op, but the same abbreviation could in theory match both an author
+  // (unlikely for `#`) and a journal — they're stored in separate lists.
   const selectMention = (idx: number) => {
     const sug = mentionSuggestions[idx];
     if (!sug) return;
-    const slug = slugifyAuthorName(sug.display_name) || `a${sug.id}`;
-    const newQuery = query.replace(TRAILING_MENTION_RE, (match) => {
-      const leadingSpace = match.startsWith(' ') ? ' ' : '';
-      return `${leadingSpace}@${slug} `;
-    });
+    const newQuery = query
+      .replace(TRAILING_SHORTCUT_RE, (match) =>
+        match.startsWith(' ') ? ' ' : '',
+      )
+      .trimEnd();
     setQuery(newQuery);
-    resolvedMentionsRef.current.set(slug.toLowerCase(), {
-      id: sug.id,
-      name: sug.display_name,
-    });
+    if (sug.kind === 'author') {
+      setChips((prev) =>
+        prev.find((c) => c.id === sug.id)
+          ? prev
+          : [...prev, { id: sug.id, name: sug.display_name }],
+      );
+    } else {
+      setJournalChips((prev) =>
+        prev.find((j) => j.issn === sug.issn)
+          ? prev
+          : [...prev, { issn: sug.issn, name: sug.display_name }],
+      );
+    }
     setMentionOpen(false);
     setMentionSuggestions([]);
     // Keep focus in the input so the user can keep typing (keywords or
-    // another @mention) without clicking back into the bar.
+    // another @ / # token) without clicking back into the bar.
     setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  // Remove an author chip — immediately update the URL so results refresh
+  // without that author. Clicking X already expresses the intent "stop
+  // filtering by this".
+  const removeAuthorChip = (id: string) => {
+    setChips((prev) => prev.filter((c) => c.id !== id));
+    if (!isSearchPage) return;
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    const remaining = (params.get('authors') || '')
+      .split(',')
+      .filter(Boolean)
+      .filter((a) => a !== id);
+    if (remaining.length > 0) params.set('authors', remaining.join(','));
+    else params.delete('authors');
+    params.set('page', '1');
+    router.push(`/search?${params.toString()}`);
+  };
+
+  // Same for journal chips, but routes to the `journals=` URL param.
+  const removeJournalChip = (issn: string) => {
+    setJournalChips((prev) => prev.filter((j) => j.issn !== issn));
+    if (!isSearchPage) return;
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    const remaining = (params.get('journals') || '')
+      .split(',')
+      .filter(Boolean)
+      .filter((j) => j !== issn);
+    if (remaining.length > 0) params.set('journals', remaining.join(','));
+    else params.delete('journals');
+    params.set('page', '1');
+    router.push(`/search?${params.toString()}`);
   };
 
   const handleSearch = async () => {
     if (isSearchPage) {
-      // On search page, trigger event with the current query + mode.
-      // PaperazziApp's navbar-search handler resolves any `@` mentions on
-      // its side; we forward the user's pick cache so it can use the
-      // explicit choice instead of falling back to silent top-match.
+      // On search page: dispatch the full chip state (authors + journals)
+      // and let PaperazziApp's listener resolve any leftover @text / #text
+      // tokens before pushing the URL.
       window.dispatchEvent(
         new CustomEvent('navbar-search', {
           detail: {
             query: query.trim(),
             semantic,
-            mentionCache: Array.from(resolvedMentionsRef.current.entries()),
+            chipAuthors: chips.map((c) => ({ id: c.id, name: c.name })),
+            chipJournals: journalChips.map((j) => ({
+              issn: j.issn,
+              name: j.name,
+            })),
           },
         }),
       );
     } else {
-      // Not on search page, navigate there with query + mode. We do the
-      // `@author` resolution here too — there's no PaperazziApp listener
-      // to catch it on a fresh search-page load.
-      if (query.trim()) {
-        const { cleanQuery, mentions } = extractMentions(query.trim());
+      // Off search page: build the URL ourselves. Resolve @ tokens via API
+      // and # tokens via the static map, then assemble the params.
+      if (
+        query.trim() ||
+        chips.length > 0 ||
+        journalChips.length > 0
+      ) {
+        const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
+          query.trim(),
+        );
         const params = new URLSearchParams();
         if (cleanQuery) params.set('q', cleanQuery);
         if (semantic) params.set('semantic', 'true');
+
+        const allAuthorIds = chips.map((c) => c.id);
         if (mentions.length > 0) {
-          const { resolved } = await resolveMentions(
-            mentions,
-            resolvedMentionsRef.current,
-          );
-          if (resolved.length > 0) {
-            params.set('authors', resolved.map((a) => a.id).join(','));
-          }
+          const { resolved } = await resolveMentions(mentions);
+          for (const r of resolved)
+            if (!allAuthorIds.includes(r.id)) allAuthorIds.push(r.id);
         }
+        if (allAuthorIds.length > 0) {
+          params.set('authors', allAuthorIds.join(','));
+        }
+
+        const allJournalIssns = journalChips.map((j) => j.issn);
+        if (journalAbbrevs.length > 0) {
+          const { resolved } = resolveJournalShortcuts(journalAbbrevs);
+          for (const r of resolved)
+            if (!allJournalIssns.includes(r.issn))
+              allJournalIssns.push(r.issn);
+        }
+        if (allJournalIssns.length > 0) {
+          params.set('journals', allJournalIssns.join(','));
+        }
+
         params.set('page', '1');
         router.push(`/search?${params.toString()}`);
       }
@@ -573,6 +756,25 @@ function NavBarContent() {
       if (e.key === 'Escape') {
         e.preventDefault();
         setMentionOpen(false);
+        return;
+      }
+    }
+    // Backspace at the very start of an empty input deletes the last chip
+    // — same gesture as Slack/Gmail/Linear's chip inputs. Journal chips
+    // come visually after author chips, so they get popped first.
+    if (
+      e.key === 'Backspace' &&
+      query === '' &&
+      (e.currentTarget.selectionStart ?? 0) === 0
+    ) {
+      if (journalChips.length > 0) {
+        e.preventDefault();
+        removeJournalChip(journalChips[journalChips.length - 1].issn);
+        return;
+      }
+      if (chips.length > 0) {
+        e.preventDefault();
+        removeAuthorChip(chips[chips.length - 1].id);
         return;
       }
     }
@@ -624,21 +826,108 @@ function NavBarContent() {
           <>
             <div className='flex-1 max-w-2xl ml-auto'>
               <div className='relative'>
-                <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400' />
-                <input
-                  ref={inputRef}
-                  type='text'
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={handleInputBlur}
-                  placeholder={
-                    semantic
-                      ? 'Describe a concept...'
-                      : 'Search papers...'
-                  }
-                  className='w-full pl-10 pr-10 py-2 border border-app rounded-lg focus-accent'
-                />
+                <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 pointer-events-none z-10' />
+
+                {/* Chip facade. Looks like the original `<input>` (same
+                    border, padding, rounded, focus ring) but is actually a
+                    flex container holding green author chips followed by
+                    the real text input. Click anywhere in the bar to focus
+                    the input — common chip-input UX. */}
+                <div
+                  onClick={() => inputRef.current?.focus()}
+                  className='w-full flex flex-wrap items-center gap-1 pl-10 pr-10 py-1.5 min-h-[40px] border border-app rounded-lg focus-within-accent cursor-text bg-[var(--background)]'
+                >
+                  {/* Author chips — green (success palette). */}
+                  {chips.map((chip) => (
+                    <span
+                      key={`a-${chip.id}`}
+                      className='inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded text-xs font-medium border'
+                      style={{
+                        background: 'var(--success-bg)',
+                        borderColor: 'var(--success-border)',
+                        color: 'var(--success-foreground)',
+                      }}
+                      title={`Filtering by author: ${chip.name || chip.id}`}
+                    >
+                      <span className='truncate max-w-[180px]'>
+                        @{chip.name || chip.id}
+                      </span>
+                      <button
+                        type='button'
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeAuthorChip(chip.id);
+                        }}
+                        className='rounded p-0.5 hover:bg-black/10 transition'
+                        aria-label={`Remove ${chip.name || chip.id} author filter`}
+                        title='Remove'
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                  {/* Journal chips — purple (analysis palette). Visually
+                      distinct from author chips. Pill label is the
+                      abbreviation (e.g. `#aer`) so it stays compact even
+                      for journals with long names; full name shows in the
+                      hover tooltip. Falls back to the name/ISSN for
+                      journals added via the panel that aren't in our
+                      shortcut catalog. */}
+                  {journalChips.map((chip) => {
+                    const abbrev = abbrevForIssn(chip.issn);
+                    const label = abbrev || chip.name || chip.issn;
+                    const tooltip = chip.name
+                      ? `Filtering by journal: ${chip.name}${abbrev ? ` (#${abbrev})` : ''}`
+                      : `Filtering by journal: ${chip.issn}`;
+                    return (
+                      <span
+                        key={`j-${chip.issn}`}
+                        className='inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded text-xs font-medium border'
+                        style={{
+                          background: 'var(--analysis-bg)',
+                          borderColor: 'var(--analysis-border)',
+                          color: 'var(--analysis-foreground)',
+                        }}
+                        title={tooltip}
+                      >
+                        <span className='truncate max-w-[180px]'>
+                          #{label}
+                        </span>
+                        <button
+                          type='button'
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeJournalChip(chip.issn);
+                          }}
+                          className='rounded p-0.5 hover:bg-black/10 transition'
+                          aria-label={`Remove ${chip.name || chip.issn} journal filter`}
+                          title='Remove'
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  <input
+                    ref={inputRef}
+                    type='text'
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={handleInputBlur}
+                    placeholder={
+                      chips.length > 0 || journalChips.length > 0
+                        ? ''
+                        : semantic
+                          ? 'Describe a concept...'
+                          : 'Search papers...'
+                    }
+                    className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-0.5'
+                  />
+                </div>
+
                 <SearchSyntaxHelp
                   semantic={semantic}
                   conflicts={semanticConflicts}
@@ -651,20 +940,23 @@ function NavBarContent() {
                 {mentionOpen && mentionSuggestions.length > 0 && (
                   <div
                     role='listbox'
-                    aria-label='Author suggestions'
-                    // max-h caps the dropdown at ~8 visible rows (each row
-                    // is ~44–52px tall depending on whether it has a hint
-                    // line); overflow-y-auto turns the rest into a
-                    // scrollable list. overscroll-contain prevents wheel
-                    // events from leaking out and scrolling the page when
-                    // the user reaches the dropdown's edge.
+                    aria-label='Shortcut suggestions'
+                    // max-h caps the dropdown at ~7-8 visible rows;
+                    // overflow-y-auto turns the rest into a scrollable list.
+                    // overscroll-contain prevents wheel events from leaking
+                    // out and scrolling the page when the user reaches the
+                    // dropdown's edge.
                     className='absolute left-0 right-0 top-full mt-1 surface-panel border border-app rounded-lg shadow-lg z-50 overflow-y-auto overscroll-contain max-h-80'
                   >
                     {mentionSuggestions.map((sug, idx) => {
                       const active = idx === mentionIdx;
+                      const key =
+                        sug.kind === 'author'
+                          ? `a-${sug.id}`
+                          : `j-${sug.issn}`;
                       return (
                         <button
-                          key={sug.id}
+                          key={key}
                           ref={(el) => {
                             mentionItemRefs.current[idx] = el;
                           }}
@@ -684,12 +976,19 @@ function NavBarContent() {
                               {sug.display_name}
                             </span>
                             <span className='text-[11px] text-app-soft flex-shrink-0'>
-                              {sug.works_count.toLocaleString()} works
+                              {sug.kind === 'author'
+                                ? `${sug.works_count.toLocaleString()} works`
+                                : `#${sug.abbrev}`}
                             </span>
                           </div>
-                          {sug.hint && (
+                          {sug.kind === 'author' && sug.hint && (
                             <div className='text-[11px] text-app-soft truncate mt-0.5'>
                               {sug.hint}
+                            </div>
+                          )}
+                          {sug.kind === 'journal' && (
+                            <div className='text-[11px] text-app-soft truncate mt-0.5'>
+                              ISSN {sug.issn}
                             </div>
                           )}
                         </button>
