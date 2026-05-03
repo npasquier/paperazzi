@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Sparkles, X } from 'lucide-react';
+import { Search, Database, Sparkles, X, ArrowRight } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import SearchSyntaxHelp from './SearchSyntaxHelp';
@@ -528,22 +528,32 @@ function NavBarContent() {
           <>
             <div className='flex-1 max-w-2xl ml-auto'>
               <div className='relative'>
-                <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 pointer-events-none z-10' />
-
-                {/* Chip facade. Looks like the original `<input>` (same
-                    border, padding, rounded, focus ring) but is actually a
-                    flex container holding green author chips followed by
-                    the real text input. Click anywhere in the bar to focus
-                    the input — common chip-input UX. */}
+                {/* Chip facade. Functions exactly like the previous
+                    bordered <input> — chips + the real text input share
+                    one focus-ring container. Visual refresh: unified 44px
+                    height, inline (no longer absolute) search icon,
+                    rounded-md chips with tinted hover on their X button,
+                    subtle shadow + smoother focus transition. */}
                 <div
                   onClick={() => inputRef.current?.focus()}
-                  className='w-full flex flex-wrap items-center gap-1 pl-10 pr-10 py-1.5 min-h-[40px] border border-app rounded-lg focus-within-accent cursor-text bg-[var(--background)]'
+                  // Visual: rounded-full (pill) for the softest possible
+                  // perimeter; warmer "paper on desk" fill (`background-card`)
+                  // so the bar reads as an inset card rather than a hard
+                  // input field; subtle border + soft shadow + smooth focus
+                  // ring transition.
+                  className='w-full flex flex-wrap items-center gap-1.5 px-4 py-1.5 min-h-[44px] rounded-full cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
                 >
+                  <Search
+                    size={16}
+                    className='flex-shrink-0 text-app-soft pointer-events-none'
+                    aria-hidden='true'
+                  />
+
                   {/* Author chips — green (success palette). */}
                   {chips.map((chip) => (
                     <span
                       key={`a-${chip.id}`}
-                      className='inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded text-xs font-medium border'
+                      className='inline-flex items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
                       style={{
                         background: 'var(--success-bg)',
                         borderColor: 'var(--success-border)',
@@ -561,7 +571,7 @@ function NavBarContent() {
                           e.stopPropagation();
                           removeAuthorChip(chip.id);
                         }}
-                        className='rounded p-0.5 hover:bg-black/10 transition'
+                        className='rounded-full p-0.5 transition hover:bg-[var(--success-border)]'
                         aria-label={`Remove ${chip.name || chip.id} author filter`}
                         title='Remove'
                       >
@@ -585,7 +595,7 @@ function NavBarContent() {
                     return (
                       <span
                         key={`j-${chip.issn}`}
-                        className='inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded text-xs font-medium border'
+                        className='inline-flex items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
                         style={{
                           background: 'var(--analysis-bg)',
                           borderColor: 'var(--analysis-border)',
@@ -603,7 +613,7 @@ function NavBarContent() {
                             e.stopPropagation();
                             removeJournalChip(chip.issn);
                           }}
-                          className='rounded p-0.5 hover:bg-black/10 transition'
+                          className='rounded-full p-0.5 transition hover:bg-[var(--analysis-border)]'
                           aria-label={`Remove ${chip.name || chip.issn} journal filter`}
                           title='Remove'
                         >
@@ -624,14 +634,16 @@ function NavBarContent() {
                         ? ''
                         : semantic
                           ? 'Describe a concept...'
-                          : 'Search papers...'
+                          : 'Search papers, @authors, #journals…'
                     }
-                    className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-0.5'
+                    className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
                   {/* Clear-all: wipes query, chips, and non-URL state, then
                       navigates to /search so the welcome state renders
                       (instead of running an unfiltered "search everything"
-                      query). Hidden when the bar is already empty. */}
+                      query). Hidden when the bar is already empty.
+                      `mr-7` reserves the spot covered by the absolutely-
+                      positioned (i) help icon so the two never overlap. */}
                   {hasSomethingToClear && (
                     <button
                       type='button'
@@ -640,7 +652,7 @@ function NavBarContent() {
                         e.stopPropagation();
                         clearAll();
                       }}
-                      className='flex-shrink-0 p-1 rounded text-app-soft hover:text-app hover:bg-[var(--surface-muted)] transition'
+                      className='flex-shrink-0 mr-7 p-1 rounded-md text-app-soft hover:text-app hover:bg-[var(--surface-muted)] transition'
                       title='Clear search'
                       aria-label='Clear search'
                     >

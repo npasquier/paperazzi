@@ -7,6 +7,7 @@ import PaperCard from './ui/PaperCard';
 import CitationsNetwork from './ui/CitationsNetwork';
 import EmptyState, { PresetTileId } from './EmptyState';
 import { reportedAuthorKey } from '@/utils/storageKeys';
+import { cachedFetch } from '@/utils/searchCache';
 import {
   X,
   Quote,
@@ -435,15 +436,24 @@ export default function SearchResults({
         // Semantic mode — server uses search.semantic= and caps at 50 results.
         if (semantic) params.set('semantic', 'true');
 
-        const res = await fetch(`/api/search?${params.toString()}`);
-        const data = await res.json();
+        // cachedFetch: in-session memo of identical URLs (page-flip,
+        // chip-toggle round-trips, browser back/forward) come back without
+        // a network round-trip. Error envelopes (5xx) are returned but
+        // not cached, so transient failures don't stick.
+        const data = (await cachedFetch(
+          `/api/search?${params.toString()}`,
+        )) as {
+          results?: Paper[];
+          meta?: { count?: number };
+          error?: string;
+        };
 
         if (data.error) {
           setError(data.error);
           setResults([]);
           setTotalCount(0);
         } else {
-          setResults(data.results);
+          setResults(data.results || []);
           setTotalCount(data.meta?.count || 0);
         }
       } catch (err) {
@@ -527,34 +537,53 @@ export default function SearchResults({
     citesParams.set('perPage', '200');
     citesParams.set('sort', 'cited_by_count:desc');
 
+    // All three calls go through cachedFetch so toggling between two
+    // networks the user has already opened (e.g. clicking back into a
+    // graph node they explored earlier) is instant. The OpenAlex
+    // /works/<id> call is the slowest and most cache-friendly — its
+    // payload is invariant across page reloads within a session.
+    type FocalRaw = {
+      id: string;
+      title?: string | null;
+      authorships?: { author: { display_name: string } }[];
+      publication_year?: number;
+      primary_location?: { source?: { display_name?: string } };
+      doi?: string | null;
+      cited_by_count?: number;
+      referenced_works_count?: number;
+      referenced_works?: string[];
+    };
+    type SearchResp = {
+      results?: Paper[];
+      meta?: { count?: number };
+      error?: string;
+    };
     Promise.all([
-      fetch(`https://api.openalex.org/works/${networkId}`).then((r) =>
-        r.json(),
-      ),
-      fetch(`/api/search?${refsParams.toString()}`).then((r) => r.json()),
-      fetch(`/api/search?${citesParams.toString()}`).then((r) => r.json()),
+      cachedFetch<FocalRaw>(`https://api.openalex.org/works/${networkId}`),
+      cachedFetch<SearchResp>(`/api/search?${refsParams.toString()}`),
+      cachedFetch<SearchResp>(`/api/search?${citesParams.toString()}`),
     ])
       .then(([focalRaw, refsResp, citesResp]) => {
         if (aborted) return;
         if (refsResp.error || citesResp.error) {
-          setNetworkError(refsResp.error || citesResp.error);
+          setNetworkError(refsResp.error || citesResp.error || null);
           return;
         }
         const focal: Paper = {
           id: focalRaw.id,
           title: cleanHtml(focalRaw.title),
           authors: (focalRaw.authorships || []).map(
-            (a: { author: { display_name: string } }) => a.author.display_name,
+            (a) => a.author.display_name,
           ),
-          publication_year: focalRaw.publication_year,
+          publication_year: focalRaw.publication_year ?? 0,
           journal_name:
             focalRaw.primary_location?.source?.display_name || 'Unknown',
-          doi: focalRaw.doi,
+          doi: focalRaw.doi ?? undefined,
           cited_by_count: focalRaw.cited_by_count || 0,
           referenced_works_count: focalRaw.referenced_works_count || 0,
           abstract: '',
-          referenced_works: (focalRaw.referenced_works || []).map(
-            (id: string) => id.replace('https://openalex.org/', ''),
+          referenced_works: (focalRaw.referenced_works || []).map((id) =>
+            id.replace('https://openalex.org/', ''),
           ),
         };
         setNetworkFocal(focal);
