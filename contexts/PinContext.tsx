@@ -35,6 +35,7 @@ interface PinContextType {
     fromIndex: number,
     toIndex: number
   ) => void;
+  reorderGroups: (fromIndex: number, toIndex: number) => void;
   getUngroupedPapers: () => Paper[];
   getPapersInGroup: (groupId: string) => Paper[];
 }
@@ -260,6 +261,24 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const reorderGroups = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setGroups((prev) => {
+      if (
+        fromIndex < 0 ||
+        fromIndex >= prev.length ||
+        toIndex < 0 ||
+        toIndex > prev.length
+      ) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
   const getUngroupedPapers = (): Paper[] => {
     const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
     return pinnedPapers.filter((p) => !groupedIds.has(normalizeId(p.id)));
@@ -289,6 +308,7 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         deleteGroup,
         movePaperToGroup,
         reorderPapersInGroup,
+        reorderGroups,
         getUngroupedPapers,
         getPapersInGroup,
       }}

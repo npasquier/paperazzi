@@ -16,6 +16,7 @@ import {
   Edit2,
   Check,
   X,
+  GripVertical,
 } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
@@ -67,6 +68,7 @@ export default function PinSidebar({
     deleteGroup,
     movePaperToGroup,
     reorderPapersInGroup,
+    reorderGroups,
     getUngroupedPapers,
     getPapersInGroup,
   } = usePins();
@@ -107,6 +109,13 @@ export default function PinSidebar({
     groupId: string | null;
     index: number;
   } | null>(null);
+
+  // Group drag state (separate from paper drag so they don't interfere)
+  const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
+  const [draggingGroupIndex, setDraggingGroupIndex] = useState<number | null>(
+    null,
+  );
+  const [groupDropIndex, setGroupDropIndex] = useState<number | null>(null);
 
   const newGroupInputRef = useRef<HTMLInputElement>(null);
   const editGroupInputRef = useRef<HTMLInputElement>(null);
@@ -328,6 +337,9 @@ export default function PinSidebar({
     targetGroupId: string | null,
     targetIndex: number,
   ) => {
+    // A group reorder drag is in progress; don't react as if a paper is being
+    // dropped here.
+    if (draggingGroupId) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -356,9 +368,91 @@ export default function PinSidebar({
   };
 
   const handleDragOverGroup = (e: React.DragEvent, groupId: string) => {
+    // Don't compete with the group-reorder drag.
+    if (draggingGroupId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverGroupId(groupId);
+  };
+
+  // Group drag handlers
+  const handleGroupDragStart = (
+    e: React.DragEvent,
+    groupId: string,
+    index: number,
+  ) => {
+    // Don't start a group drag if the user is interacting with a button or
+    // input inside the header (rename, delete, expand, name input).
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, input')) {
+      e.preventDefault();
+      return;
+    }
+    setDraggingGroupId(groupId);
+    setDraggingGroupIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    // Tag the payload so any external drop targets can ignore it.
+    e.dataTransfer.setData('application/x-pin-group', groupId);
+  };
+
+  const handleGroupDragEnd = () => {
+    setDraggingGroupId(null);
+    setDraggingGroupIndex(null);
+    setGroupDropIndex(null);
+  };
+
+  // The entire group container is the drop target so the user has a generous
+  // hit area, not just the slim header strip. We split each container into a
+  // top half ("drop above") and a bottom half ("drop below").
+  //
+  // We track the drop position as a *visual gap* — gap N means "between the
+  // N-1th and Nth visible group" (gap 0 = above the first group, gap
+  // groups.length = below the last). This lines up cleanly with the indicator
+  // we render, since the dragged group is still visible (faded) in its
+  // original position during the drag.
+  const handleGroupDragOverContainer = (
+    e: React.DragEvent,
+    targetVisualIndex: number,
+  ) => {
+    if (draggingGroupId === null || draggingGroupIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const middle = rect.top + rect.height / 2;
+    const isBelow = e.clientY > middle;
+    const gap = isBelow ? targetVisualIndex + 1 : targetVisualIndex;
+
+    // Gaps immediately above or below the dragged group are no-ops — suppress
+    // the indicator there.
+    if (gap === draggingGroupIndex || gap === draggingGroupIndex + 1) {
+      setGroupDropIndex(null);
+    } else {
+      setGroupDropIndex(gap);
+    }
+  };
+
+  const handleGroupDrop = (e: React.DragEvent) => {
+    if (
+      draggingGroupId === null ||
+      draggingGroupIndex === null ||
+      groupDropIndex === null
+    ) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    // Convert visual gap → post-removal array index for reorderGroups.
+    const postRemovalIndex =
+      groupDropIndex > draggingGroupIndex
+        ? groupDropIndex - 1
+        : groupDropIndex;
+    if (postRemovalIndex !== draggingGroupIndex) {
+      reorderGroups(draggingGroupIndex, postRemovalIndex);
+    }
+    setDraggingGroupId(null);
+    setDraggingGroupIndex(null);
+    setGroupDropIndex(null);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -370,6 +464,9 @@ export default function PinSidebar({
   };
 
   const handleDropOnPaper = (e: React.DragEvent) => {
+    // A group reorder is in progress; let the event bubble up to the group
+    // container's onDrop instead of swallowing it here.
+    if (draggingGroupId) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -407,6 +504,9 @@ export default function PinSidebar({
   };
 
   const handleDropOnGroup = (e: React.DragEvent, groupId: string | null) => {
+    // A group reorder is in progress; let the event bubble up to the group
+    // container's onDrop instead of swallowing it here.
+    if (draggingGroupId) return;
     e.preventDefault();
     if (draggingPaperId) {
       movePaperToGroup(draggingPaperId, groupId);
@@ -492,30 +592,74 @@ export default function PinSidebar({
   };
 
   // Render group
-  const renderGroup = (groupId: string, groupName: string, papers: Paper[]) => {
+  const renderGroup = (
+    groupId: string,
+    groupName: string,
+    papers: Paper[],
+    groupIndex: number,
+    isLastGroup: boolean,
+  ) => {
     const isExpanded = expandedGroups.has(groupId);
     const isEditing = editingGroupId === groupId;
-    const isDragOver = dragOverGroupId === groupId && !dropIndicatorPosition;
+    const isDragOver =
+      dragOverGroupId === groupId && !dropIndicatorPosition && !draggingGroupId;
+    const isBeingDraggedAsGroup = draggingGroupId === groupId;
+    const isGroupDragInProgress = draggingGroupId !== null;
+    const showGroupIndicatorAbove =
+      isGroupDragInProgress && groupDropIndex === groupIndex;
+    // Only the last group is responsible for rendering the trailing indicator;
+    // every other "between groups" position is covered by the next group's
+    // "above" indicator.
+    const showGroupIndicatorBelow =
+      isGroupDragInProgress &&
+      isLastGroup &&
+      groupDropIndex === groupIndex + 1;
 
     return (
-      <div key={groupId} className='mb-4'>
+      <div
+        key={groupId}
+        className={`mb-4 transition-opacity ${
+          isBeingDraggedAsGroup ? 'opacity-30' : ''
+        }`}
+        onDragOver={(e) => {
+          if (draggingGroupId) handleGroupDragOverContainer(e, groupIndex);
+        }}
+        onDrop={(e) => {
+          if (draggingGroupId) handleGroupDrop(e);
+        }}
+      >
+        {showGroupIndicatorAbove && (
+          <div className='h-0.5 bg-[var(--border-strong)] mb-1.5 rounded-full' />
+        )}
+
         {/* Group Header */}
         <div
-          className={`group flex items-center gap-2 py-1 px-1.5 -mx-1.5 rounded-md transition ${
+          className={`group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md transition ${
             isDragOver ? 'surface-muted' : 'hover:bg-[var(--surface-muted)]'
-          }`}
+          } ${!isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          draggable={!isEditing}
+          onDragStart={(e) => handleGroupDragStart(e, groupId, groupIndex)}
+          onDragEnd={handleGroupDragEnd}
           onDragOver={(e) => handleDragOverGroup(e, groupId)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDropOnGroup(e, groupId)}
         >
+          <span
+            className='text-stone-300 group-hover:text-stone-500 transition flex-shrink-0'
+            aria-hidden='true'
+            title='Drag to reorder'
+          >
+            <GripVertical size={13} />
+          </span>
+
           <button
             onClick={() => toggleGroupExpanded(groupId)}
             className='p-0.5 text-stone-400 hover:text-stone-600 rounded transition flex-shrink-0'
           >
             {isExpanded ? (
-              <ChevronDown size={13} />
+              <ChevronDown size={14} />
             ) : (
-              <ChevronRight size={13} />
+              <ChevronRight size={14} />
             )}
           </button>
 
@@ -554,14 +698,14 @@ export default function PinSidebar({
           ) : (
             <>
               <span
-                className='inline-block w-1.5 h-1.5 rounded-full flex-shrink-0'
+                className='inline-block w-2 h-2 rounded-full flex-shrink-0 ring-1 ring-white/40'
                 style={{ backgroundColor: getGroupColor(groupId) }}
                 aria-hidden='true'
               />
-              <span className='flex-1 min-w-0 truncate text-[11px] font-medium text-stone-700'>
+              <span className='flex-1 min-w-0 truncate text-xs font-semibold capitalize tracking-wide text-stone-800'>
                 {groupName}
               </span>
-              <span className='text-[11px] text-stone-400'>
+              <span className='text-[11px] tabular-nums text-stone-400'>
                 {papers.length}
               </span>
               <div className='flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition'>
@@ -599,6 +743,10 @@ export default function PinSidebar({
               )
             )}
           </div>
+        )}
+
+        {showGroupIndicatorBelow && (
+          <div className='h-0.5 bg-[var(--border-strong)] mt-1.5 rounded-full' />
         )}
       </div>
     );
@@ -762,7 +910,13 @@ export default function PinSidebar({
           ) : (
             <div className='space-y-4'>
               {groups.map((group, index) =>
-                renderGroup(group.id, group.name, getPapersInGroup(group.id)),
+                renderGroup(
+                  group.id,
+                  group.name,
+                  getPapersInGroup(group.id),
+                  index,
+                  index === groups.length - 1,
+                ),
               )}
 
               {hasGroups && ungroupedPapers.length > 0 && (
