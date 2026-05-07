@@ -8,6 +8,7 @@ import CitationsNetwork from './ui/CitationsNetwork';
 import EmptyState, { PresetTileId } from './EmptyState';
 import { reportedAuthorKey } from '@/utils/storageKeys';
 import { cachedFetch } from '@/utils/searchCache';
+import { emit, on } from '@/utils/eventBus';
 import {
   X,
   Quote,
@@ -174,38 +175,32 @@ export default function SearchResults({
 
   // Citation click events
   useEffect(() => {
-    const handleCitingClick = (e: Event) => {
-      const paper = (e as CustomEvent).detail.paper;
-      const paperId = paper.id.replace('https://openalex.org/', '');
-      const params = new URLSearchParams();
-      params.set('citing', paperId);
-      params.set('sort', 'cited_by_count:desc');
-      params.set('page', '1');
-      router.push(`/search?${params.toString()}`);
-    };
-    const handleRefsClick = (e: Event) => {
-      const paper = (e as CustomEvent).detail.paper;
-      const paperId = paper.id.replace('https://openalex.org/', '');
-      const params = new URLSearchParams();
-      params.set('referencedBy', paperId);
-      params.set('sort', 'cited_by_count:desc');
-      params.set('page', '1');
-      router.push(`/search?${params.toString()}`);
-    };
-    const handleNetworkClick = (e: Event) => {
-      const paper = (e as CustomEvent).detail.paper;
-      const paperId = paper.id.replace('https://openalex.org/', '');
-      const params = new URLSearchParams();
-      params.set('network', paperId);
-      router.push(`/search?${params.toString()}`);
-    };
-    window.addEventListener('paper-citing-click', handleCitingClick);
-    window.addEventListener('paper-refs-click', handleRefsClick);
-    window.addEventListener('paper-network-click', handleNetworkClick);
+    const offs = [
+      on('paper-citing-click', ({ paper }) => {
+        const paperId = paper.id.replace('https://openalex.org/', '');
+        const params = new URLSearchParams();
+        params.set('citing', paperId);
+        params.set('sort', 'cited_by_count:desc');
+        params.set('page', '1');
+        router.push(`/search?${params.toString()}`);
+      }),
+      on('paper-refs-click', ({ paper }) => {
+        const paperId = paper.id.replace('https://openalex.org/', '');
+        const params = new URLSearchParams();
+        params.set('referencedBy', paperId);
+        params.set('sort', 'cited_by_count:desc');
+        params.set('page', '1');
+        router.push(`/search?${params.toString()}`);
+      }),
+      on('paper-network-click', ({ paper }) => {
+        const paperId = paper.id.replace('https://openalex.org/', '');
+        const params = new URLSearchParams();
+        params.set('network', paperId);
+        router.push(`/search?${params.toString()}`);
+      }),
+    ];
     return () => {
-      window.removeEventListener('paper-citing-click', handleCitingClick);
-      window.removeEventListener('paper-refs-click', handleRefsClick);
-      window.removeEventListener('paper-network-click', handleNetworkClick);
+      for (const off of offs) off();
     };
   }, [router]);
 
@@ -636,11 +631,7 @@ export default function SearchResults({
     if (!hasAuthorReported && !isAuthorReportedStored) {
       setHasAuthorReported(true);
       localStorage.setItem(authorReportedKey, 'true');
-      window.dispatchEvent(
-        new CustomEvent('paper-reported', {
-          detail: { authorId: authorReportedKey },
-        }),
-      );
+      emit('paper-reported', { authorId: authorReportedKey });
     } else {
       setHasAuthorReported(false);
       localStorage.removeItem(authorReportedKey);
@@ -760,11 +751,7 @@ export default function SearchResults({
                       (and PaperazziApp's listener clears transient filters). */}
                   <button
                     onClick={() => {
-                      window.dispatchEvent(
-                        new CustomEvent('paper-citing-click', {
-                          detail: { paper: networkFocal },
-                        }),
-                      );
+                      emit('paper-citing-click', { paper: networkFocal });
                     }}
                     className='hover:text-stone-700 hover:underline transition cursor-pointer'
                     title='Find papers that cite this paper'
@@ -777,11 +764,7 @@ export default function SearchResults({
                       <span>·</span>
                       <button
                         onClick={() => {
-                          window.dispatchEvent(
-                            new CustomEvent('paper-refs-click', {
-                              detail: { paper: networkFocal },
-                            }),
-                          );
+                          emit('paper-refs-click', { paper: networkFocal });
                         }}
                         className='hover:text-stone-700 hover:underline transition cursor-pointer'
                         title='Find papers cited by this paper'

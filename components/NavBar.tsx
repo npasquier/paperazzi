@@ -15,6 +15,7 @@ import {
   searchJournalShortcuts,
   abbrevForIssn,
 } from '@/data/journalAbbreviations';
+import { emit, on } from '@/utils/eventBus';
 
 // Trailing shortcut pattern: matches `@xxx` (author) or `#xxx` (journal) at
 // the end of the query, where xxx starts with a letter and is at least 2
@@ -86,19 +87,15 @@ function NavBarContent() {
   const [journalChips, setJournalChips] = useState<SelectedJournal[]>([]);
 
   useEffect(() => {
-    const onAuthors = (e: Event) => {
-      const ev = e as CustomEvent<{ authors: SelectedAuthor[] }>;
-      setChips(ev.detail?.authors || []);
-    };
-    const onJournals = (e: Event) => {
-      const ev = e as CustomEvent<{ journals: SelectedJournal[] }>;
-      setJournalChips(ev.detail?.journals || []);
-    };
-    window.addEventListener('paperazzi-authors-changed', onAuthors);
-    window.addEventListener('paperazzi-journals-changed', onJournals);
+    const offAuthors = on('paperazzi-authors-changed', ({ authors }) => {
+      setChips(authors || []);
+    });
+    const offJournals = on('paperazzi-journals-changed', ({ journals }) => {
+      setJournalChips(journals || []);
+    });
     return () => {
-      window.removeEventListener('paperazzi-authors-changed', onAuthors);
-      window.removeEventListener('paperazzi-journals-changed', onJournals);
+      offAuthors();
+      offJournals();
     };
   }, []);
 
@@ -126,14 +123,13 @@ function NavBarContent() {
   const semanticDisabled = semanticConflicts.length > 0;
 
   // Listen for econ-filter activeness from PaperazziApp.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const ev = e as CustomEvent<{ econActive: boolean }>;
-      setEconActive(!!ev.detail?.econActive);
-    };
-    window.addEventListener('semantic-conflict-econ', handler);
-    return () => window.removeEventListener('semantic-conflict-econ', handler);
-  }, []);
+  useEffect(
+    () =>
+      on('semantic-conflict-econ', ({ econActive }) => {
+        setEconActive(!!econActive);
+      }),
+    [],
+  );
 
   // Sync with URL when on search page
   useEffect(() => {
@@ -331,7 +327,7 @@ function NavBarContent() {
     setJournalChips([]);
     setMentionOpen(false);
     setMentionSuggestions([]);
-    window.dispatchEvent(new CustomEvent('paperazzi-reset-search'));
+    emit('paperazzi-reset-search');
     router.push('/search');
   };
 
@@ -365,23 +361,16 @@ function NavBarContent() {
       // and zero chips. (The toggle pill is already disabled when chips
       // exist, so this case in practice means the user toggled to
       // semantic on an empty bar.)
-      window.dispatchEvent(
-        new CustomEvent('navbar-search', {
-          detail: {
-            query: query.trim(),
-            semantic,
-            chipAuthors: semantic
-              ? []
-              : chips.map((c) => ({ id: c.id, name: c.name })),
-            chipJournals: semantic
-              ? []
-              : journalChips.map((j) => ({
-                  issn: j.issn,
-                  name: j.name,
-                })),
-          },
-        }),
-      );
+      emit('navbar-search', {
+        query: query.trim(),
+        semantic,
+        chipAuthors: semantic
+          ? []
+          : chips.map((c) => ({ id: c.id, name: c.name })),
+        chipJournals: semantic
+          ? []
+          : journalChips.map((j) => ({ issn: j.issn, name: j.name })),
+      });
     } else {
       // Off search page: build the URL ourselves. Resolve @ tokens via API
       // and # tokens via the static map, then assemble the params — unless
@@ -495,6 +484,18 @@ function NavBarContent() {
         {/* Brand */}
         <Link
           href='/search'
+          // Treat the brand as "go home and reset". Without this, Link
+          // navigates to /search but PaperazziApp's non-URL state
+          // (journalFilterMode, econFilter) survives — so the user lands
+          // on /search with stale filters from their previous session.
+          // Routing through clearAll fires `paperazzi-reset-search`,
+          // which the app already listens for to wipe those fields back
+          // to the initial off/disabled state. Same code path as the X
+          // button in the search bar.
+          onClick={(e) => {
+            e.preventDefault();
+            clearAll();
+          }}
           className='flex items-center gap-2 flex-shrink-0 text-accent-strong'
         >
           <svg
@@ -656,7 +657,7 @@ function NavBarContent() {
                       <X size={14} />
                     </button>
                   )}
-                  
+
                 </div>
 
                 <SearchSyntaxHelp

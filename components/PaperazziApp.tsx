@@ -30,6 +30,7 @@ import {
 } from '@/utils/queryMentions';
 import PinSidebar from './PinSidebar';
 import CelebrationOverlay from './ui/CelebrationOverlay';
+import { emit, on } from '@/utils/eventBus';
 
 function PaperazziAppContent() {
   const router = useRouter();
@@ -110,15 +111,10 @@ function PaperazziAppContent() {
   const [semantic, setSemantic] = useState(false);
 
   // Listen for paper-reported events to show celebration
-  useEffect(() => {
-    const handlePaperReported = () => {
-      setShowCelebration(true);
-    };
-
-    window.addEventListener('paper-reported', handlePaperReported);
-    return () =>
-      window.removeEventListener('paper-reported', handlePaperReported);
-  }, []);
+  useEffect(
+    () => on('paper-reported', () => setShowCelebration(true)),
+    [],
+  );
 
   // When the user opens a cite/refs/network view from any paper card (in the
   // results list OR the pinned sidebar), clear the persistent filters so they
@@ -141,38 +137,16 @@ function PaperazziAppContent() {
         journalFilterMode: 'off',
       }));
     };
-    window.addEventListener(
-      'paper-citing-click',
-      handleClearTransientFilters,
-    );
-    window.addEventListener('paper-refs-click', handleClearTransientFilters);
-    window.addEventListener(
-      'paper-network-click',
-      handleClearTransientFilters,
-    );
-    // Navbar's "clear search" button: same reset as a citation drill-down,
-    // since it's also "wipe everything that isn't in the URL".
-    window.addEventListener(
-      'paperazzi-reset-search',
-      handleClearTransientFilters,
-    );
+    // Navbar's "clear search" button hits the same reset as a citation
+    // drill-down — both mean "wipe everything that isn't in the URL".
+    const offs = [
+      on('paper-citing-click', handleClearTransientFilters),
+      on('paper-refs-click', handleClearTransientFilters),
+      on('paper-network-click', handleClearTransientFilters),
+      on('paperazzi-reset-search', handleClearTransientFilters),
+    ];
     return () => {
-      window.removeEventListener(
-        'paperazzi-reset-search',
-        handleClearTransientFilters,
-      );
-      window.removeEventListener(
-        'paper-citing-click',
-        handleClearTransientFilters,
-      );
-      window.removeEventListener(
-        'paper-refs-click',
-        handleClearTransientFilters,
-      );
-      window.removeEventListener(
-        'paper-network-click',
-        handleClearTransientFilters,
-      );
+      for (const off of offs) off();
     };
   }, []);
 
@@ -183,11 +157,7 @@ function PaperazziAppContent() {
     const econActive =
       filters.journalFilterMode === 'wide' &&
       filters.econFilter?.enabled === true;
-    window.dispatchEvent(
-      new CustomEvent('semantic-conflict-econ', {
-        detail: { econActive },
-      }),
-    );
+    emit('semantic-conflict-econ', { econActive });
   }, [filters.journalFilterMode, filters.econFilter]);
 
   // Sync state with URL parameters
@@ -263,26 +233,34 @@ function PaperazziAppContent() {
         referencesAll,
       };
 
-      // If the URL carries any `journals=` ISSN, the user clearly wants
-      // those journals to actually filter. The default mode is 'off',
-      // which would silently swallow the filter — so promote to
-      // 'specific'. Empty journals preserve the previous mode (so a user
-      // who deliberately set the panel to 'off' isn't reset on every
-      // navigation that doesn't touch journals). This is the single
-      // chokepoint that fixes both the navbar `#abbrev` chip path and
-      // direct URL navigation with a journals param.
-      const journalModeOverride =
-        journals.length > 0 ? 'specific' : undefined;
+      // Reconcile journalFilterMode with the URL's `journals=` param.
+      //   - URL has journals → promote to 'specific'. Fixes both the
+      //     navbar `#abbrev` chip path and direct deep-link navigation
+      //     with a journals param.
+      //   - URL has no journals AND prev mode was 'specific' → drop to
+      //     'off'. Catches the "user removed the last navbar chip" case;
+      //     specific-mode-with-zero-journals is dead state otherwise.
+      //   - URL has no journals AND prev mode was 'wide'/'off' → keep
+      //     prev. Preserves the wide-econ tile/preset path (which sets
+      //     mode='wide' via setFilters before pushing a journals-less
+      //     URL) and the user who deliberately chose 'off'.
+      const reconcileMode = (
+        prevMode: Filters['journalFilterMode'],
+      ): Filters['journalFilterMode'] => {
+        if (journals.length > 0) return 'specific';
+        if (prevMode === 'specific') return 'off';
+        return prevMode;
+      };
 
       setFilters((prev) => ({
         ...newFilters,
         econFilter: prev.econFilter,
-        journalFilterMode: journalModeOverride ?? prev.journalFilterMode,
+        journalFilterMode: reconcileMode(prev.journalFilterMode),
       }));
       setSearchFilters((prev) => ({
         ...newFilters,
         econFilter: prev.econFilter,
-        journalFilterMode: journalModeOverride ?? prev.journalFilterMode,
+        journalFilterMode: reconcileMode(prev.journalFilterMode),
       }));
       setSearchQuery(q);
       setPage(p);
@@ -292,18 +270,10 @@ function PaperazziAppContent() {
       // Broadcast the resolved author list (with display names) so the
       // navbar's chip facade can render the same authors that are actually
       // filtering the results — without having to refetch the names itself.
-      window.dispatchEvent(
-        new CustomEvent('paperazzi-authors-changed', {
-          detail: { authors },
-        }),
-      );
+      emit('paperazzi-authors-changed', { authors });
       // Same idea for journals — the navbar's #journal chips mirror the
       // current journal filter (including manual picks from the panel).
-      window.dispatchEvent(
-        new CustomEvent('paperazzi-journals-changed', {
-          detail: { journals },
-        }),
-      );
+      emit('paperazzi-journals-changed', { journals });
     };
 
     syncFromURL();
@@ -378,28 +348,29 @@ function PaperazziAppContent() {
 
   // Listen for navbar search events
   useEffect(() => {
-    const handleNavbarSearch = async (e: CustomEvent) => {
-      const rawQuery = (e.detail.query as string) || '';
-      // chipAuthors / chipJournals are the *complete* lists the navbar is
-      // currently showing as chips. Both mirror filters.{authors,journals}
-      // via paperazzi-{authors,journals}-changed, so they already include
-      // panel-added entries + any user picks from the autocomplete dropdowns
-      // and reflect any chips the user removed. We treat them as the
-      // authoritative filter for this search instead of merging on top of
-      // the existing filters.
-      const chipAuthors =
-        (e.detail.chipAuthors as Array<{ id: string; name?: string }>) || [];
-      const chipJournals =
-        (e.detail.chipJournals as Array<{ issn: string; name?: string }>) ||
-        [];
-
+    // chipAuthors / chipJournals (in the event payload) are the *complete*
+    // lists the navbar is currently showing as chips. Both mirror
+    // filters.{authors,journals} via paperazzi-{authors,journals}-changed,
+    // so they already include panel-added entries + any user picks from
+    // the autocomplete dropdowns and reflect any chips the user removed.
+    // We treat them as the authoritative filter for this search instead
+    // of merging on top of the existing filters.
+    const handleNavbarSearch = async ({
+      query: rawQuery,
+      semantic: isSemantic,
+      chipAuthors,
+      chipJournals,
+    }: {
+      query: string;
+      semantic: boolean;
+      chipAuthors: Array<{ id: string; name?: string }>;
+      chipJournals: Array<{ issn: string; name?: string }>;
+    }) => {
       // In semantic mode the @/# shortcuts are inert — OpenAlex's semantic
       // endpoint expects a bare concept query, so we skip extraction and
       // resolution and let the raw text through. NavBar already sends
       // empty chip arrays in this case; this guard is the server-side
       // mirror so the literal `@tirole` tokens remain part of the query.
-      const isSemantic =
-        e.detail.semantic ?? searchParams.get('semantic') === 'true';
       const { cleanQuery, mentions, journalAbbrevs } = isSemantic
         ? { cleanQuery: rawQuery, mentions: [], journalAbbrevs: [] }
         : extractMentions(rawQuery);
@@ -437,9 +408,8 @@ function PaperazziAppContent() {
       const params = buildURLParams({
         query: cleanQuery,
         page: 1,
-        // Honor an explicit semantic flag from the navbar (toggle pill).
-        // If undefined, buildURLParams falls back to the URL's current value.
-        semantic: e.detail.semantic,
+        // Honor the explicit semantic flag from the navbar (toggle pill).
+        semantic: isSemantic,
         // Chips are always authoritative — even when empty (the user may
         // have just removed all of them).
         authors: finalAuthors,
@@ -448,14 +418,12 @@ function PaperazziAppContent() {
       router.push(`/search?${params.toString()}`);
     };
 
-    // EventListener must be sync-returning; the async handler is fire-and-
+    // The bus dispatch is synchronous; the async handler is fire-and-
     // forget here (the inner router.push completes the navigation), so we
     // wrap it in a void thunk.
-    const listener = (e: Event) => {
-      void handleNavbarSearch(e as CustomEvent);
-    };
-    window.addEventListener('navbar-search', listener);
-    return () => window.removeEventListener('navbar-search', listener);
+    return on('navbar-search', (detail) => {
+      void handleNavbarSearch(detail);
+    });
   }, [filters, router, searchParams]);
 
   const handleSearch = (newPage = 1) => {
@@ -663,7 +631,19 @@ function PaperazziAppContent() {
         isOpen={isFilterOpen}
         onToggle={() => setIsFilterOpen((v) => !v)}
         onPresetLoad={(preset) => {
-          // Use the preset data directly to build URL params
+          // econFilter and journalFilterMode are NOT URL-synced, so the
+          // syncFromURL effect that runs after router.push can't restore
+          // them on its own — it can only fall back to `prev.*`. Set them
+          // here first so `prev.*` reflects the preset by the time the
+          // sync runs. Same pattern as handlePresetTile uses for the
+          // built-in tiles below. URL-synced fields are pushed via
+          // buildURLParams and overwritten by the sync; that's intended.
+          setFilters((prevState) => ({
+            ...prevState,
+            econFilter: preset.filters.econFilter ?? prevState.econFilter,
+            journalFilterMode:
+              preset.filters.journalFilterMode ?? prevState.journalFilterMode,
+          }));
           const params = buildURLParams({
             query: preset.query,
             journals: preset.filters.journals,

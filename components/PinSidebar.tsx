@@ -22,6 +22,7 @@ import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
+import { on } from '@/utils/eventBus';
 
 // Warm, library-friendly palette for pin groups. The hues stay distinct, but
 // they sit closer to the parchment/teal app theme than the old bright rainbow.
@@ -246,24 +247,15 @@ export default function PinSidebar({
   );
 
   useEffect(() => {
-    const handleCitingClick = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const paper = customEvent.detail.paper;
+    const offCiting = on('paper-citing-click', ({ paper }) => {
       handleSearchCiting(paper);
-    };
-
-    const handleRefsClick = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const paper = customEvent.detail.paper;
+    });
+    const offRefs = on('paper-refs-click', ({ paper }) => {
       handleSearchReferences(paper);
-    };
-
-    window.addEventListener('paper-citing-click', handleCitingClick);
-    window.addEventListener('paper-refs-click', handleRefsClick);
-
+    });
     return () => {
-      window.removeEventListener('paper-citing-click', handleCitingClick);
-      window.removeEventListener('paper-refs-click', handleRefsClick);
+      offCiting();
+      offRefs();
     };
   }, [handleSearchCiting, handleSearchReferences]);
 

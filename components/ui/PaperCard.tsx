@@ -16,6 +16,7 @@ import { Paper } from '@/types/interfaces';
 import PinButton from './PinButton';
 import { reportedPaperKey } from '@/utils/storageKeys';
 import PaperInfoModal from '@/components/PaperInfoModal';
+import { emit } from '@/utils/eventBus';
 
 interface PaperCardProps {
   paper: Paper;
@@ -143,12 +144,8 @@ export default function PaperCard({
       setHasReported(true);
       localStorage.setItem(reportedKey, 'true');
 
-      // Dispatch custom event for the parent to show celebration
-      window.dispatchEvent(
-        new CustomEvent('paper-reported', {
-          detail: { paperId: workId },
-        })
-      );
+      // Notify the parent to show celebration.
+      emit('paper-reported', { paperId: workId });
     } else {
       // Toggle off
       setHasReported(false);
@@ -260,10 +257,7 @@ export default function PaperCard({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (onClick) onClick();
-                  const event = new CustomEvent('paper-citing-click', {
-                    detail: { paper },
-                  });
-                  window.dispatchEvent(event);
+                  emit('paper-citing-click', { paper });
                 }}
                 className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
                 title='Find papers that cite this paper'
@@ -277,10 +271,7 @@ export default function PaperCard({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onClick) onClick();
-                      const event = new CustomEvent('paper-refs-click', {
-                        detail: { paper },
-                      });
-                      window.dispatchEvent(event);
+                      emit('paper-refs-click', { paper });
                     }}
                     className='hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
                     title='Find papers cited by this paper'
@@ -294,10 +285,7 @@ export default function PaperCard({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (onClick) onClick();
-                  const event = new CustomEvent('paper-network-click', {
-                    detail: { paper },
-                  });
-                  window.dispatchEvent(event);
+                  emit('paper-network-click', { paper });
                 }}
                 className='inline-flex items-center gap-0.5 hover:text-stone-700 hover:underline transition cursor-pointer flex-shrink-0'
                 title='View references + citing papers as a network'
@@ -381,10 +369,7 @@ export default function PaperCard({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const event = new CustomEvent('paper-citing-click', {
-                    detail: { paper },
-                  });
-                  window.dispatchEvent(event);
+                  emit('paper-citing-click', { paper });
                 }}
                 className='hover:text-stone-700 hover:underline transition cursor-pointer'
                 title='Find papers that cite this paper'
@@ -397,10 +382,7 @@ export default function PaperCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const event = new CustomEvent('paper-refs-click', {
-                        detail: { paper },
-                      });
-                      window.dispatchEvent(event);
+                      emit('paper-refs-click', { paper });
                     }}
                     className='hover:text-stone-700 hover:underline transition cursor-pointer'
                     title='Find papers cited by this paper'
@@ -413,10 +395,7 @@ export default function PaperCard({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const event = new CustomEvent('paper-network-click', {
-                    detail: { paper },
-                  });
-                  window.dispatchEvent(event);
+                  emit('paper-network-click', { paper });
                 }}
                 className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer'
                 title='View references + citing papers as a network'

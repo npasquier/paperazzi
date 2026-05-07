@@ -12,6 +12,13 @@ interface SearchSyntaxHelpProps {
    * is currently disabled. Caller computes this list (see NavBar).
    */
   conflicts?: string[];
+  /**
+   * Override the trigger button's className. By default the button is
+   * absolutely positioned at the right edge of its containing relative
+   * parent (matches the original NavBar layout). Pass a custom className
+   * (e.g. inline-flex utilities) to render the icon inline instead.
+   */
+  buttonClassName?: string;
 }
 
 /**
@@ -24,6 +31,7 @@ interface SearchSyntaxHelpProps {
 export default function SearchSyntaxHelp({
   semantic = false,
   conflicts = [],
+  buttonClassName,
 }: SearchSyntaxHelpProps) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; right: number } | null>(
@@ -78,7 +86,10 @@ export default function SearchSyntaxHelp({
         ref={buttonRef}
         type='button'
         onClick={handleToggle}
-        className='absolute right-2 top-1/2 -translate-y-1/2 text-app-soft hover:text-app transition p-1 rounded'
+        className={
+          buttonClassName ??
+          'absolute right-2 top-1/2 -translate-y-1/2 text-app-soft hover:text-app transition p-1 rounded'
+        }
         title='Search syntax'
         aria-label='Search syntax help'
         aria-expanded={open}
