@@ -436,37 +436,18 @@ function PaperazziAppContent() {
     router.push(`/search?${params.toString()}`);
   };
 
-  // Citation/reference click handlers in SearchResults auto-apply
-  // `sort=cited_by_count:desc` so the cite/refs view is useful by default.
-  // When the user dismisses that view, the auto-applied sort should also
-  // clear — otherwise it lingers as a "custom sort", which keeps semantic
-  // search disabled (and is a non-obvious side effect in general).
-  const handleClearCiting = () => {
-    const params = buildURLParams({ citing: undefined, page: 1 });
-    params.delete('citing');
-    params.delete('sort');
-    router.push(`/search?${params.toString()}`);
-  };
-
-  const handleClearCitingAll = () => {
-    const params = buildURLParams({ citingAll: undefined, page: 1 });
-    params.delete('citingAll');
-    params.delete('sort');
-    router.push(`/search?${params.toString()}`);
-  };
-
-  const handleClearReferencedBy = () => {
-    const params = buildURLParams({ referencedBy: undefined, page: 1 });
-    params.delete('referencedBy');
-    params.delete('sort');
-    router.push(`/search?${params.toString()}`);
-  };
-
-  const handleClearReferencesAll = () => {
-    const params = buildURLParams({ referencesAll: undefined, page: 1 });
-    params.delete('referencesAll');
-    params.delete('sort');
-    router.push(`/search?${params.toString()}`);
+  // Dismissing a transient view (citing / citingAll / referencedBy /
+  // referencesAll / network) is treated as "go home" — same effect as
+  // clicking the Paperazzi logo. The X next to a citation banner used
+  // to keep q/journals/authors/sort and only strip the citing param,
+  // but in practice users want a clean slate when they back out of a
+  // drill-down. `paperazzi-reset-search` clears non-URL state
+  // (econFilter, journalFilterMode) via the listener; router.push to
+  // bare /search lets syncFromURL wipe URL-synced filters and
+  // broadcasts empty author/journal lists so navbar chips clear too.
+  const handleResetAll = () => {
+    emit('paperazzi-reset-search');
+    router.push('/search');
   };
 
   const handleClearAuthor = () => {
@@ -688,13 +669,14 @@ function PaperazziAppContent() {
             citing={searchFilters.citing}
             citingAll={searchFilters.citingAll}
             referencedBy={searchFilters.referencedBy}
-            onClearCiting={handleClearCiting}
-            onClearCitingAll={handleClearCitingAll}
-            onClearReferencedBy={handleClearReferencedBy}
+            onClearCiting={handleResetAll}
+            onClearCitingAll={handleResetAll}
+            onClearReferencedBy={handleResetAll}
             referencesAll={searchFilters.referencesAll}
-            onClearReferencesAll={handleClearReferencesAll}
+            onClearReferencesAll={handleResetAll}
             onAuthorSearch={handleAuthorSearch}
             onClearAuthor={handleClearAuthor}
+            onExitNetwork={handleResetAll}
             econFilter={filters.econFilter}
             journalFilterMode={filters.journalFilterMode}
             networkId={networkId}

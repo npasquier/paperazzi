@@ -69,6 +69,12 @@ interface Props {
   onClearReferencesAll?: () => void;
   onAuthorSearch?: (authorName: string) => void;
   onClearAuthor?: () => void;
+  // Network exit (the X next to the "Network for: …" banner). Same
+  // behavior as the citing/refs banner X's — full reset to bare /search.
+  // Wired by PaperazziApp; we accept it as a prop instead of calling
+  // router.push directly so the reset side-effects (paperazzi-reset-search)
+  // live with the rest of the navigation logic.
+  onExitNetwork?: () => void;
   // Semantic search mode (OpenAlex `search.semantic=`). When true the API
   // returns ≤50 results sorted by similarity and pagination is suppressed.
   semantic?: boolean;
@@ -103,6 +109,7 @@ export default function SearchResults({
   onClearReferencesAll,
   onAuthorSearch,
   onClearAuthor,
+  onExitNetwork,
   semantic = false,
   sidebarsCollapsed = false,
   onToggleSidebars,
@@ -839,7 +846,7 @@ export default function SearchResults({
             </button>
           )}
           <button
-            onClick={() => router.push('/search')}
+            onClick={() => (onExitNetwork ? onExitNetwork() : router.push('/search'))}
             className='p-1 hover:bg-[var(--surface-muted)] rounded transition flex-shrink-0'
             title='Exit network view'
           >
