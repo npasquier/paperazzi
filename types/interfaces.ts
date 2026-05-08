@@ -23,6 +23,12 @@ export interface SelectedAuthor {
   institution?: string;
 }
 
+export interface PinGroup {
+  id: string;
+  name: string;
+  paperIds: string[];
+}
+
 // Add these to your existing interfaces.ts
 
 export interface Topic {

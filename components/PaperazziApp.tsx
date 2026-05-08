@@ -31,6 +31,7 @@ import {
 import PinSidebar from './PinSidebar';
 import CelebrationOverlay from './ui/CelebrationOverlay';
 import { emit, on } from '@/utils/eventBus';
+import CollectionImportDropzone from './CollectionImportDropzone';
 
 function PaperazziAppContent() {
   const router = useRouter();
@@ -588,6 +589,7 @@ function PaperazziAppContent() {
         show={showCelebration}
         onComplete={() => setShowCelebration(false)}
       />
+      <CollectionImportDropzone />
 
       {/* Loading overlay for author search */}
       {isSearchingAuthor && (

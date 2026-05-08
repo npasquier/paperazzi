@@ -5,6 +5,9 @@ import {
   ALL_FIXED_KEYS,
   STORAGE_KEYS,
   STORAGE_KEY_PREFIXES,
+  collectionPapersKey,
+  collectionGroupsKey,
+  isCollectionKey,
 } from '@/utils/storageKeys';
 
 // ── Shapes we read from localStorage (kept loose; we only show summaries) ──
@@ -17,17 +20,18 @@ interface JournalPresetSummary {
   id: string;
   name: string;
 }
-interface PinGroupSummary {
+interface CollectionSummary {
   id: string;
   name: string;
-  paperIds: string[];
+  pinnedCount: number;
+  groupCount: number;
+  isActive: boolean;
 }
 
 interface StorageData {
   filterPresets: FilterPresetSummary[];
   journalPresets: JournalPresetSummary[];
-  pinnedCount: number;
-  pinGroups: PinGroupSummary[];
+  collections: CollectionSummary[];
   reportedPapers: number;
   reportedAuthors: number;
   hasOnboarded: boolean;
@@ -53,13 +57,17 @@ function safeParse<T>(key: string, fallback: T): T {
   }
 }
 
+interface CollectionsIndexLite {
+  activeId: string;
+  collections: { id: string; name: string }[];
+}
+
 function readStorage(): StorageData {
   if (typeof window === 'undefined') {
     return {
       filterPresets: [],
       journalPresets: [],
-      pinnedCount: 0,
-      pinGroups: [],
+      collections: [],
       reportedPapers: 0,
       reportedAuthors: 0,
       hasOnboarded: false,
@@ -79,7 +87,48 @@ function readStorage(): StorageData {
       reportedPapers++;
   }
 
-  const pinnedRaw = safeParse<unknown[]>(STORAGE_KEYS.pinnedPapers, []);
+  // Pinned papers now live under per-collection keys. Read the index,
+  // then sum the counts for each collection. Falls back to the legacy
+  // single-bucket key if the migration hasn't run yet (first mount of
+  // a tab after upgrade — PinContext runs migration on its own mount).
+  const indexRaw = safeParse<CollectionsIndexLite | null>(
+    STORAGE_KEYS.collectionsIndex,
+    null,
+  );
+  const collections: CollectionSummary[] = indexRaw
+    ? indexRaw.collections.map((c) => {
+        const papers = safeParse<unknown[]>(collectionPapersKey(c.id), []);
+        const groups = safeParse<unknown[]>(collectionGroupsKey(c.id), []);
+        return {
+          id: c.id,
+          name: c.name,
+          pinnedCount: Array.isArray(papers) ? papers.length : 0,
+          groupCount: Array.isArray(groups) ? groups.length : 0,
+          isActive: c.id === indexRaw.activeId,
+        };
+      })
+    : (() => {
+        // Pre-migration view of the data: surface the legacy bucket as
+        // a single pseudo-collection so the modal still shows something
+        // useful between the version bump and the next PinContext mount.
+        const papers = safeParse<unknown[]>(STORAGE_KEYS.pinnedPapers, []);
+        const groups = safeParse<unknown[]>(STORAGE_KEYS.pinGroups, []);
+        if (
+          (Array.isArray(papers) ? papers.length : 0) === 0 &&
+          (Array.isArray(groups) ? groups.length : 0) === 0
+        ) {
+          return [];
+        }
+        return [
+          {
+            id: 'legacy',
+            name: 'Library',
+            pinnedCount: Array.isArray(papers) ? papers.length : 0,
+            groupCount: Array.isArray(groups) ? groups.length : 0,
+            isActive: true,
+          },
+        ];
+      })();
 
   return {
     filterPresets: safeParse<FilterPresetSummary[]>(
@@ -90,8 +139,7 @@ function readStorage(): StorageData {
       STORAGE_KEYS.journalPresets,
       [],
     ),
-    pinnedCount: Array.isArray(pinnedRaw) ? pinnedRaw.length : 0,
-    pinGroups: safeParse<PinGroupSummary[]>(STORAGE_KEYS.pinGroups, []),
+    collections,
     reportedPapers,
     reportedAuthors,
     hasOnboarded:
@@ -103,15 +151,17 @@ function readStorage(): StorageData {
 function eraseAll() {
   if (typeof window === 'undefined') return;
   for (const k of ALL_FIXED_KEYS) localStorage.removeItem(k);
-  // Wildcard keys — both `reported-author-<id>` and `reported-<workId>`
-  // share the `reported-` prefix, so a single check sweeps them both.
+  // Wildcard keys — sweep:
+  //   - `reported-…` (both paper and author flags share the prefix)
+  //   - `paperazzi:collection:<id>:papers` and `:groups` (per-collection
+  //     pin blobs; we don't know the ids without reading the index, so
+  //     a prefix sweep is the simplest path).
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k) continue;
-    if (k.startsWith(STORAGE_KEY_PREFIXES.reportedPaper)) {
-      toRemove.push(k);
-    }
+    if (k.startsWith(STORAGE_KEY_PREFIXES.reportedPaper)) toRemove.push(k);
+    else if (isCollectionKey(k)) toRemove.push(k);
   }
   for (const k of toRemove) localStorage.removeItem(k);
   // Reload so contexts (PinContext, FilterPanel) re-hydrate from clean state.
@@ -200,16 +250,34 @@ export default function StorageModal({ isOpen, onClose }: Props) {
             )}
           </section>
 
-          {/* Pinned */}
+          {/* Pinned — broken down by collection. */}
           <section>
-            <h4 className='text-stone-700 font-medium mb-1'>Pinned papers</h4>
-            <p className='text-stone-600'>
-              {data.pinnedCount} paper{data.pinnedCount === 1 ? '' : 's'}
-              {data.pinGroups.length > 0 &&
-                ` · ${data.pinGroups.length} group${
-                  data.pinGroups.length === 1 ? '' : 's'
-                }`}
-            </p>
+            <h4 className='text-stone-700 font-medium mb-1'>
+              Pinned papers ({data.collections.length} collection
+              {data.collections.length === 1 ? '' : 's'})
+            </h4>
+            {data.collections.length === 0 ? (
+              <p className='text-stone-400'>None</p>
+            ) : (
+              <ul className='text-stone-600 list-disc pl-4 space-y-0.5'>
+                {data.collections.map((c) => (
+                  <li key={c.id}>
+                    <span className='text-stone-700'>
+                      {c.name}
+                      {c.isActive && (
+                        <span className='text-stone-400'> (active)</span>
+                      )}
+                    </span>
+                    <span className='text-stone-500'>
+                      {' '}
+                      — {c.pinnedCount} paper{c.pinnedCount === 1 ? '' : 's'}
+                      {c.groupCount > 0 &&
+                        `, ${c.groupCount} group${c.groupCount === 1 ? '' : 's'}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {/* Reported flags + UI prefs */}

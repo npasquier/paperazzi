@@ -18,9 +18,17 @@ export const STORAGE_KEYS = {
   filterPresets: 'filterPresets',
   // Saved journal-filter presets (Wide / Specific selections).
   journalPresets: 'journal-filter-presets',
-  // Pin context — pinned paper records and group definitions.
+  // Legacy pin-context keys. Kept here only so the migration step in
+  // PinContext can find and clean them up; new code reads/writes the
+  // per-collection keys built by `collectionPapersKey` / `collectionGroupsKey`.
   pinnedPapers: 'pinned-papers',
   pinGroups: 'pin-groups',
+  // Pin collections (named libraries of pinned papers + groups). The
+  // index records every collection's metadata + which one is active;
+  // the actual papers / groups live in per-collection keys composed by
+  // the helpers below — that way edits only rewrite the active
+  // collection, not the whole world.
+  collectionsIndex: 'paperazzi:collections-index',
   // Right-side pin sidebar width (px), drag-resizable.
   pinSidebarWidth: 'pinSidebarWidth',
   // First-run onboarding overlay dismissal flag.
@@ -49,6 +57,8 @@ export const STORAGE_KEY_PREFIXES = {
    * misclassified as paper flags.
    */
   reportedAuthor: 'reported-author-',
+  /** Per-collection pin/group blobs. See `collectionPapersKey`. */
+  collection: 'paperazzi:collection:',
 } as const;
 
 /** Compose the storage key for a given paper's "reported" flag. */
@@ -59,6 +69,29 @@ export function reportedPaperKey(workId: string): string {
 /** Compose the storage key for a given author's "reported" flag. */
 export function reportedAuthorKey(authorId: string): string {
   return `${STORAGE_KEY_PREFIXES.reportedAuthor}${authorId}`;
+}
+
+/**
+ * Compose the storage key for a collection's pinned papers blob.
+ * Schema: `paperazzi:collection:<id>:papers`. The id is opaque to the
+ * key format — we just need it to be consistent between read and write.
+ */
+export function collectionPapersKey(collectionId: string): string {
+  return `${STORAGE_KEY_PREFIXES.collection}${collectionId}:papers`;
+}
+
+/** Compose the storage key for a collection's group definitions. */
+export function collectionGroupsKey(collectionId: string): string {
+  return `${STORAGE_KEY_PREFIXES.collection}${collectionId}:groups`;
+}
+
+/**
+ * Returns true iff `key` is one of the per-collection pin/group keys.
+ * Used by the StorageModal's "erase all" sweep so deleted users get
+ * a clean slate without us having to enumerate collections.
+ */
+export function isCollectionKey(key: string): boolean {
+  return key.startsWith(STORAGE_KEY_PREFIXES.collection);
 }
 
 /**
