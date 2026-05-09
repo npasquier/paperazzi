@@ -6,6 +6,11 @@ import {
   Pin,
   Database,
   Lightbulb,
+  Library,
+  StickyNote,
+  Tag,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 export default function HelpPage() {
@@ -248,7 +253,7 @@ export default function HelpPage() {
             <div className='pl-6 border-l-2 border-app space-y-4'>
               <p className='text-sm text-stone-700 leading-relaxed'>
                 Click the pin icon on any paper card to add it to your pinboard
-                (right sidebar). The cap is 30 pinned papers.
+                (right sidebar). The cap is 30 pinned papers per collection.
               </p>
               <p className='text-sm text-stone-700 leading-relaxed'>
                 Inside the sidebar, <strong>create groups</strong> to organize
@@ -269,6 +274,233 @@ export default function HelpPage() {
                 <em>network</em> shortcut still takes you straight to that
                 paper&apos;s citation map.
               </p>
+            </div>
+          </section>
+
+          {/* Collections */}
+          <section id='collections'>
+            <div className='flex items-center gap-2 mb-4'>
+              <Library size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Collections
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-app space-y-4'>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                A <strong>collection</strong> is a self-contained library of
+                pinned papers and groups — think of it as a separate workspace
+                for each project (job-market paper, lit review, course reading
+                list, …). Switching collections swaps every pin and group in
+                the sidebar at once; the inactive ones stay safely on disk.
+              </p>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                The <strong>collection switcher pill</strong> sits at the top of
+                the pin sidebar. Click it to see every collection you have, with
+                rename / delete buttons that appear on hover for any row (active
+                or not). Use <strong>New collection</strong> at the bottom of
+                the menu to start a fresh workspace. The cap is 20 collections.
+              </p>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                <strong>Move papers between collections</strong> by drag and
+                drop: start dragging a pinned paper, hover over the switcher
+                pill until the menu opens, then drop the paper onto a target
+                collection. The paper leaves the active workspace and reappears
+                in the target — handy when a paper turns out to belong to a
+                different project.
+              </p>
+              <p className='text-xs text-stone-500'>
+                Deleting a collection asks for confirmation in an in-app modal
+                (no native browser alert) and tells you how many pins are about
+                to be lost. The active collection is auto-replaced if you delete
+                the one you&apos;re currently viewing.
+              </p>
+            </div>
+          </section>
+
+          {/* Notes */}
+          <section id='notes'>
+            <div className='flex items-center gap-2 mb-4'>
+              <StickyNote size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Notes on pinned papers
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-app space-y-3'>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                Click any pinned paper card to open its detail modal. Below the
+                abstract you&apos;ll find a <strong>Note</strong> section — a
+                short personal annotation (up to 500 characters) for capturing
+                why a paper matters, key takeaways, or what to revisit.
+              </p>
+              <ul className='list-disc pl-5 space-y-1 text-sm text-stone-600 leading-relaxed'>
+                <li>
+                  <strong>Add</strong> a note via the <em>Add</em> button or
+                  by clicking the dashed placeholder.
+                </li>
+                <li>
+                  <strong>Save</strong> with the <em>Save</em> button or with{' '}
+                  <kbd className='px-1.5 py-0.5 surface-muted rounded text-[11px] font-mono'>
+                    Cmd/Ctrl + Enter
+                  </kbd>
+                  ; <strong>cancel</strong> with{' '}
+                  <kbd className='px-1.5 py-0.5 surface-muted rounded text-[11px] font-mono'>
+                    Esc
+                  </kbd>
+                  .
+                </li>
+                <li>
+                  <strong>Remove</strong> a note with the{' '}
+                  <em>Remove</em> button — the paper itself stays pinned.
+                </li>
+              </ul>
+              <p className='text-xs text-stone-500'>
+                Notes are scoped to the collection where the paper is pinned,
+                so the same paper in two collections can carry two different
+                notes. A small <em>note</em> indicator appears on the pinned
+                card so you can spot annotated papers at a glance — hover the
+                card&apos;s metadata line to see the note text in a tooltip.
+              </p>
+            </div>
+          </section>
+
+          {/* Keywords */}
+          <section id='keywords'>
+            <div className='flex items-center gap-2 mb-4'>
+              <Tag size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Keywords
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-app space-y-3'>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                Below the Note section, the <strong>Keywords</strong> editor
+                lets you tag a pinned paper with up to 6 short labels (24
+                characters each). Tags appear as small chips on the pinned card
+                in the sidebar, so you can scan tagged themes — e.g.{' '}
+                <em>theory</em>, <em>identification</em>, <em>RCT</em> — without
+                opening each paper.
+              </p>
+              <ul className='list-disc pl-5 space-y-1 text-sm text-stone-600 leading-relaxed'>
+                <li>
+                  Type a keyword and press{' '}
+                  <kbd className='px-1.5 py-0.5 surface-muted rounded text-[11px] font-mono'>
+                    Enter
+                  </kbd>{' '}
+                  or{' '}
+                  <kbd className='px-1.5 py-0.5 surface-muted rounded text-[11px] font-mono'>
+                    ,
+                  </kbd>{' '}
+                  to commit. Click the × on any chip to remove it.
+                </li>
+                <li>
+                  Pressing{' '}
+                  <kbd className='px-1.5 py-0.5 surface-muted rounded text-[11px] font-mono'>
+                    Backspace
+                  </kbd>{' '}
+                  in the empty input pops the last keyword — common shortcut in
+                  tag inputs, saves a click.
+                </li>
+                <li>
+                  Duplicates are caught automatically (case-insensitive). When
+                  you hit the 6-tag limit, the input hides until you remove one.
+                </li>
+              </ul>
+              <p className='text-xs text-stone-500'>
+                Keywords are user-authored and separate from any topic labels
+                OpenAlex assigns to a paper. Like notes, they live with the pin
+                in its collection and round-trip through export/import.
+              </p>
+            </div>
+          </section>
+
+          {/* Import / Export */}
+          <section id='share'>
+            <div className='flex items-center gap-2 mb-4'>
+              <Download size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Sharing & backing up: import / export
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-app space-y-5'>
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2 inline-flex items-center gap-1.5'>
+                  <Download size={14} className='text-stone-500' />
+                  Export
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed mb-2'>
+                  In the pin sidebar header, the <strong>Export</strong> button
+                  (next to <em>Clear all</em> and <em>New group</em>) opens a
+                  small menu with two options:
+                </p>
+                <ul className='list-disc pl-5 space-y-1 text-sm text-stone-600 leading-relaxed'>
+                  <li>
+                    <strong>This collection</strong> — downloads a{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      .paperazzi-collection.json
+                    </code>{' '}
+                    file containing one collection (papers, groups, notes,
+                    keywords). Designed for sharing one workspace with a
+                    collaborator.
+                  </li>
+                  <li>
+                    <strong>All collections</strong> — downloads a date-stamped{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      .paperazzi-library.json
+                    </code>{' '}
+                    file containing every collection on this device. Designed
+                    as a personal backup so you can move between browsers /
+                    machines without losing your libraries.
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2 inline-flex items-center gap-1.5'>
+                  <Upload size={14} className='text-stone-500' />
+                  Import
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed mb-2'>
+                  <strong>Drag and drop</strong> any Paperazzi export onto the
+                  page — anywhere on the page. A drop overlay appears while a
+                  file is hovering. There is no upload button: drag-and-drop is
+                  the only entry point.
+                </p>
+                <ul className='list-disc pl-5 space-y-1 text-sm text-stone-600 leading-relaxed'>
+                  <li>
+                    A single-collection file becomes a{' '}
+                    <strong>new collection</strong> in your workspace, named to
+                    avoid collisions (the importer suffixes &quot;
+                    <em>(imported)</em>&quot; if a name is already taken).
+                  </li>
+                  <li>
+                    A library file <strong>restores every collection</strong>{' '}
+                    it contains, in one go. Import is atomic: if your remaining
+                    slot count (20 max) can&apos;t fit the whole library,
+                    nothing is created and you&apos;re told how many slots to
+                    free first.
+                  </li>
+                </ul>
+                <p className='text-xs text-stone-500 mt-2'>
+                  Imports never touch your existing collections — they only add
+                  new ones, and switch you to the first imported collection so
+                  you can see the result immediately.
+                </p>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2'>
+                  What&apos;s in the file
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed'>
+                  Both formats are plain JSON, version-tagged, and contain the
+                  paper IDs, titles, authors, your groups, and your per-paper
+                  notes & keywords. They do <em>not</em> contain abstracts,
+                  citation counts, or other freshly-fetched OpenAlex metadata
+                  — those are pulled live when the import lands so the
+                  recipient sees up-to-date numbers. Files are safe to read,
+                  edit, and version-control.
+                </p>
+              </div>
             </div>
           </section>
 
