@@ -25,6 +25,19 @@ export const PIN_LIBRARY_TRANSFER_MIME =
   'application/vnd.paperazzi.library+json';
 export const PIN_LIBRARY_TRANSFER_SUFFIX = '.paperazzi-library.json';
 
+// "Full backup" exports — every Paperazzi-related localStorage key
+// dumped verbatim. Intended for the "save my whole setup, wipe my
+// browser, restore later" workflow, NOT for sharing (filter
+// presets, sidebar width, onboarding flag, reported flags etc. are
+// personal). Importing a full backup REPLACES every Paperazzi key
+// (clear-and-write), unlike the collection / library imports which
+// only ADD new collections.
+export const PIN_FULL_BACKUP_TRANSFER_FORMAT = 'paperazzi.full-backup';
+export const PIN_FULL_BACKUP_TRANSFER_VERSION = 1;
+export const PIN_FULL_BACKUP_TRANSFER_MIME =
+  'application/vnd.paperazzi.full-backup+json';
+export const PIN_FULL_BACKUP_TRANSFER_SUFFIX = '.paperazzi-backup.json';
+
 export interface PinCollectionTransferFile {
   format: typeof PIN_COLLECTION_TRANSFER_FORMAT;
   version: typeof PIN_COLLECTION_TRANSFER_VERSION;
@@ -49,6 +62,20 @@ export interface PinLibraryTransferFile {
   }>;
 }
 
+export interface PinFullBackupTransferFile {
+  format: typeof PIN_FULL_BACKUP_TRANSFER_FORMAT;
+  version: typeof PIN_FULL_BACKUP_TRANSFER_VERSION;
+  app: 'paperazzi';
+  exportedAt: string;
+  /**
+   * Every Paperazzi-related localStorage entry, verbatim. Keys are
+   * the exact storage keys; values are the raw stored strings (we
+   * don't try to re-parse them — round-tripping the string is
+   * always safe and avoids schema-shape coupling).
+   */
+  entries: Record<string, string>;
+}
+
 export interface ImportedPinCollection {
   name: string;
   papers: Paper[];
@@ -69,6 +96,7 @@ type ImportParseResult =
 export type ImportTransferResult =
   | { ok: true; kind: 'collection'; data: ImportedPinCollection }
   | { ok: true; kind: 'library'; data: ImportedPinCollection[] }
+  | { ok: true; kind: 'full-backup'; data: Record<string, string> }
   | { ok: false; error: string };
 
 function coerceString(value: unknown, fallback = ''): string {
@@ -286,6 +314,29 @@ export function buildLibraryTransferFilename(): string {
   return `paperazzi-library-${stamp}${PIN_LIBRARY_TRANSFER_SUFFIX}`;
 }
 
+export function buildFullBackupTransfer(
+  entries: Record<string, string>,
+): PinFullBackupTransferFile {
+  return {
+    format: PIN_FULL_BACKUP_TRANSFER_FORMAT,
+    version: PIN_FULL_BACKUP_TRANSFER_VERSION,
+    app: 'paperazzi',
+    exportedAt: new Date().toISOString(),
+    entries,
+  };
+}
+
+export function serializeFullBackupTransfer(
+  payload: PinFullBackupTransferFile,
+): string {
+  return JSON.stringify(payload, null, 2);
+}
+
+export function buildFullBackupTransferFilename(): string {
+  const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return `paperazzi-backup-${stamp}${PIN_FULL_BACKUP_TRANSFER_SUFFIX}`;
+}
+
 /**
  * Validate one raw collection record (the contents of `collection`
  * in a single-collection file, or each entry in a library file's
@@ -434,6 +485,50 @@ export function parseLibraryTransferText(raw: string): ImportTransferResult {
 }
 
 /**
+ * Parse a full-backup file — every Paperazzi-related localStorage
+ * entry serialised verbatim. Validates format/version and the
+ * shape of `entries` (string → string map) but does NOT inspect
+ * the values: each value is whatever the original storage cell
+ * contained, and we trust the round-trip.
+ */
+export function parseFullBackupTransferText(
+  raw: string,
+): ImportTransferResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: 'That file is not valid JSON.' };
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      ok: false,
+      error: 'That file does not look like a Paperazzi backup.',
+    };
+  }
+  const payload = parsed as Record<string, unknown>;
+  if (payload.format !== PIN_FULL_BACKUP_TRANSFER_FORMAT) {
+    return { ok: false, error: 'That file is not a Paperazzi backup.' };
+  }
+  if (payload.version !== PIN_FULL_BACKUP_TRANSFER_VERSION) {
+    return {
+      ok: false,
+      error: 'This Paperazzi backup uses an unsupported version.',
+    };
+  }
+  const rawEntries = payload.entries;
+  if (!rawEntries || typeof rawEntries !== 'object' || Array.isArray(rawEntries)) {
+    return { ok: false, error: 'That backup is missing its entries map.' };
+  }
+  const entries: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawEntries as Record<string, unknown>)) {
+    if (typeof k !== 'string' || typeof v !== 'string') continue;
+    entries[k] = v;
+  }
+  return { ok: true, kind: 'full-backup', data: entries };
+}
+
+/**
  * Unified entrypoint used by the global drag-and-drop dropzone. Peeks
  * at `format` to dispatch to the right parser so the dropzone doesn't
  * need to care which file the user dropped.
@@ -452,6 +547,9 @@ export function parseImportTransferText(raw: string): ImportTransferResult {
     };
   }
   const payload = parsed as Record<string, unknown>;
+  if (payload.format === PIN_FULL_BACKUP_TRANSFER_FORMAT) {
+    return parseFullBackupTransferText(raw);
+  }
   if (payload.format === PIN_LIBRARY_TRANSFER_FORMAT) {
     return parseLibraryTransferText(raw);
   }

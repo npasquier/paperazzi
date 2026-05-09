@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Library, Upload } from 'lucide-react';
+import { Library, Upload, AlertTriangle } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { readImportFile } from '@/utils/pinCollectionTransfer';
+import { restoreAllPaperazziStorage } from '@/utils/storageKeys';
 
 type Feedback =
   | {
@@ -21,6 +22,15 @@ export default function CollectionImportDropzone() {
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  // Holds a parsed full-backup waiting for user confirmation. Full
+  // backups REPLACE every Paperazzi-authored localStorage entry, so
+  // we always show a confirm dialog before applying — even if the
+  // user's just-erased browser is empty, the explicit consent loop
+  // matches user intent ("did I really mean to wipe-and-restore?").
+  const [pendingFullBackup, setPendingFullBackup] = useState<{
+    entries: Record<string, string>;
+    keyCount: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!feedback) return;
@@ -82,6 +92,17 @@ export default function CollectionImportDropzone() {
           setFeedback({
             kind: 'error',
             message: parsed.error,
+          });
+          return;
+        }
+
+        if (parsed.kind === 'full-backup') {
+          // Parked in confirm-modal state until the user clicks
+          // "Restore". The actual write + reload happens in
+          // `applyPendingFullBackup` below.
+          setPendingFullBackup({
+            entries: parsed.data,
+            keyCount: Object.keys(parsed.data).length,
           });
           return;
         }
@@ -160,6 +181,37 @@ export default function CollectionImportDropzone() {
     };
   }, [importCollection, importLibrary]);
 
+  // Escape closes the confirm dialog. Backdrop click is wired via
+  // the dialog markup itself.
+  useEffect(() => {
+    if (!pendingFullBackup) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPendingFullBackup(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [pendingFullBackup]);
+
+  // Commit the parked backup: wipe Paperazzi keys + write the
+  // snapshot, then reload so every context (PinContext, FilterPanel,
+  // sidebar, etc.) re-hydrates from the restored state. We don't try
+  // to update React state in-place because re-running every
+  // hydration path manually is brittle compared to a single reload.
+  const applyPendingFullBackup = () => {
+    if (!pendingFullBackup) return;
+    try {
+      restoreAllPaperazziStorage(pendingFullBackup.entries);
+      window.location.reload();
+    } catch (err) {
+      console.error('[CollectionImportDropzone] full-backup restore failed', err);
+      setFeedback({
+        kind: 'error',
+        message: "Couldn't restore that backup.",
+      });
+      setPendingFullBackup(null);
+    }
+  };
+
   return (
     <>
       {isDraggingFiles && (
@@ -172,9 +224,75 @@ export default function CollectionImportDropzone() {
               Drop a Paperazzi export to import
             </p>
             <p className='mt-2 text-sm text-stone-600'>
-              A single collection becomes a new workspace; a library file
-              restores every collection it contains.
+              A single collection becomes a new workspace, a library file
+              restores every collection it contains, and a full backup
+              restores every Paperazzi setting and pin in your browser.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Full-backup confirmation modal. The drop already happened
+          and we've parsed a valid backup; this dialog is the user's
+          final check before we wipe-and-restore every Paperazzi
+          localStorage key. Backdrop click + Escape both cancel; only
+          the explicit "Restore" button writes anything. */}
+      {pendingFullBackup && (
+        <div
+          className='fixed inset-0 z-[80] overlay-soft flex items-center justify-center'
+          onClick={() => setPendingFullBackup(null)}
+          role='dialog'
+          aria-modal='true'
+          aria-labelledby='paperazzi-full-backup-restore-title'
+        >
+          <div
+            className='surface-card rounded-lg border border-app p-5 max-w-md w-full mx-4 shadow-lg'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex items-start gap-3'>
+              <div className='flex-shrink-0 mt-0.5 text-warning'>
+                <AlertTriangle size={18} />
+              </div>
+              <div className='min-w-0 flex-1'>
+                <h3
+                  id='paperazzi-full-backup-restore-title'
+                  className='text-sm font-semibold text-stone-900'
+                >
+                  Restore Paperazzi backup?
+                </h3>
+                <p className='mt-1.5 text-xs text-stone-600 leading-relaxed'>
+                  This file contains a full snapshot of your Paperazzi data
+                  ({pendingFullBackup.keyCount} entr
+                  {pendingFullBackup.keyCount === 1 ? 'y' : 'ies'}). Restoring
+                  will{' '}
+                  <span className='font-medium text-stone-800'>
+                    replace your current pins, collections, saved searches,
+                    journal filters, and UI preferences
+                  </span>{' '}
+                  with the contents of the backup. The page will reload
+                  afterwards.
+                </p>
+                <p className='mt-2 text-[11px] text-stone-500'>
+                  Tip: export your current data first if you want a way back.
+                </p>
+              </div>
+            </div>
+
+            <div className='mt-4 flex justify-end gap-2'>
+              <button
+                onClick={() => setPendingFullBackup(null)}
+                className='px-3 py-1.5 text-xs button-ghost rounded transition'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={applyPendingFullBackup}
+                autoFocus
+                className='px-3 py-1.5 text-xs button-primary rounded transition'
+              >
+                Restore
+              </button>
+            </div>
           </div>
         </div>
       )}

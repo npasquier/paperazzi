@@ -306,31 +306,39 @@ function buildImportedCollectionName(
 // ── Provider ──────────────────────────────────────────────────────────
 
 export function PinProvider({ children }: { children: React.ReactNode }) {
-  // Index (collections + activeId). Hydrated synchronously from
-  // localStorage on first render so we don't render a "no collections"
-  // flash; bootstrap also runs the legacy-keys migration.
-  const [index, setIndex] = useState<CollectionsIndex>(() => {
-    if (typeof window === 'undefined') {
-      // SSR fallback — replaced on hydration.
-      return {
-        version: SCHEMA_VERSION,
-        activeId: 'pending',
-        collections: [
-          {
-            id: 'pending',
-            name: DEFAULT_COLLECTION_NAME,
-            createdAt: 0,
-            updatedAt: 0,
-          },
-        ],
-      };
-    }
-    return ensureBootstrapped();
-  });
+  // Index (collections + activeId). The lazy initialiser must return
+  // the SAME value on the server and on the client's first render —
+  // otherwise consumers like PinSidebar render "Library" on the server
+  // and "ROSA" (the user's actual collection name) on the client, and
+  // React's hydration matcher trips. So we always start from a
+  // "pending" placeholder; an effect below upgrades to the real index
+  // by reading localStorage post-mount.
+  const PENDING_INDEX: CollectionsIndex = {
+    version: SCHEMA_VERSION,
+    activeId: 'pending',
+    collections: [
+      {
+        id: 'pending',
+        name: DEFAULT_COLLECTION_NAME,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ],
+  };
+  const [index, setIndex] = useState<CollectionsIndex>(PENDING_INDEX);
 
   const [pinnedPapers, setPinnedPapers] = useState<Paper[]>([]);
   const [groups, setGroups] = useState<PinGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Hydrate the real index from localStorage after mount. This
+  // intentionally mirrors what the previous lazy initialiser used to
+  // do, but defers it past the first render so SSR + first client
+  // render produce identical HTML. Runs once.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIndex(ensureBootstrapped());
+  }, []);
 
   // ── Debounced-write machinery ─────────────────────────────────────
   // pendingRef captures the latest state we've been asked to persist
@@ -356,6 +364,10 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
   // back to the cached local copy so the user never opens an empty
   // sidebar after a flaky load.
   useEffect(() => {
+    // Pre-hydration placeholder — no real collection to load yet.
+    // The hydration effect above will fire setIndex(...) shortly,
+    // and this effect re-runs with the real activeId.
+    if (index.activeId === 'pending') return;
     let cancelled = false;
     const run = async () => {
       const activeId = index.activeId;

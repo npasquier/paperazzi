@@ -13,6 +13,7 @@ import {
   Plus,
   Tag,
   StickyNote,
+  Flag,
 } from 'lucide-react';
 import {
   MAX_PAPER_COMMENT_LENGTH,
@@ -24,6 +25,7 @@ import PinButton from './ui/PinButton';
 import { cleanAbstract } from '@/utils/abstract';
 import { usePins } from '@/contexts/PinContext';
 import { normalizeId } from '@/utils/normalizeId';
+import { PAPER_CORRECTION_FORM_URL } from '@/utils/correctionForms';
 
 interface PaperInfoModalProps {
   paper: Paper;
@@ -216,7 +218,26 @@ export default function PaperInfoModal({
         <div className='flex items-start justify-between p-4 border-b border-app'>
           <div className='flex-1 min-w-0 pr-4 select-text'>
             <h2 className='text-lg font-semibold text-stone-900 leading-snug cursor-text'>
-              {paper.title}
+              {paper.title ? (
+                paper.title
+              ) : (
+                // Missing-title fallback. Same intent as the card's
+                // inline placeholder — convert the empty state into
+                // a one-click contribution prompt rather than
+                // displaying a silent gap.
+                <span className='text-stone-400 italic font-normal text-base inline-flex items-baseline gap-2'>
+                  <span>Untitled</span>
+                  <a
+                    href={PAPER_CORRECTION_FORM_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-[12px] not-italic font-medium text-accent-strong underline underline-offset-2 hover:no-underline inline-flex items-center gap-1'
+                  >
+                    <Flag size={11} />
+                    help add it →
+                  </a>
+                </span>
+              )}
             </h2>
             <p className='text-sm text-stone-600 mt-1 cursor-text'>
               {paper.authors.slice(0, 5).join(', ')}
@@ -277,9 +298,27 @@ export default function PaperInfoModal({
                 Loading abstract...
               </div>
             ) : (
-              <p className='text-sm text-stone-400 italic'>
-                No abstract available
-              </p>
+              // Missing-data CTA: instead of a dead "Not available"
+              // line, convert the empty state into a contribution
+              // prompt. The user just noticed the gap — that's the
+              // best moment to convert frustration into action.
+              <div className='banner-info border border-app rounded-md px-3 py-2.5'>
+                <p className='text-sm text-stone-700 leading-snug'>
+                  No abstract on OpenAlex.{' '}
+                  <a
+                    href={PAPER_CORRECTION_FORM_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-strong font-medium underline underline-offset-2 hover:no-underline'
+                  >
+                    Help add one →
+                  </a>
+                </p>
+                <p className='text-[11px] text-stone-500 mt-1'>
+                  OpenAlex is open infrastructure — corrections from
+                  researchers like you make every search better.
+                </p>
+              </div>
             )}
           </div>
 
@@ -464,6 +503,22 @@ export default function PaperInfoModal({
               </section>
             </div>
           )}
+
+          {/* Always-visible footer line — every detail modal carries
+              the same low-key invitation to flag data issues. Sits at
+              the bottom so it doesn't compete with primary content,
+              but is reliably reachable from any paper view. */}
+          <div className='mt-6 pt-3 border-t border-app'>
+            <a
+              href={PAPER_CORRECTION_FORM_URL}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='inline-flex items-center gap-1.5 text-[11px] text-stone-500 hover:text-stone-800 transition'
+            >
+              <Flag size={11} />
+              Spot a data error? Report it to OpenAlex.
+            </a>
+          </div>
         </div>
       </div>
     </div>,

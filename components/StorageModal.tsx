@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { X, Database, AlertTriangle } from 'lucide-react';
+import { X, Database, AlertTriangle, Flag, Download } from 'lucide-react';
 import {
   ALL_FIXED_KEYS,
   STORAGE_KEYS,
@@ -8,7 +8,14 @@ import {
   collectionPapersKey,
   collectionGroupsKey,
   isCollectionKey,
+  snapshotAllPaperazziStorage,
 } from '@/utils/storageKeys';
+import {
+  buildFullBackupTransfer,
+  buildFullBackupTransferFilename,
+  serializeFullBackupTransfer,
+  PIN_FULL_BACKUP_TRANSFER_MIME,
+} from '@/utils/pinCollectionTransfer';
 
 // ── Shapes we read from localStorage (kept loose; we only show summaries) ──
 interface FilterPresetSummary {
@@ -148,6 +155,35 @@ function readStorage(): StorageData {
   };
 }
 
+/**
+ * Build a `.paperazzi-backup.json` from every Paperazzi-related
+ * localStorage entry and trigger a download. Re-importing the file
+ * via drag-and-drop wipes-and-restores the same keys, so the user
+ * can use this to "save my whole setup, wipe my browser, restore
+ * later" without losing pins / saved searches / preferences.
+ */
+function exportFullBackup(): { ok: true; keyCount: number } | { ok: false } {
+  if (typeof window === 'undefined') return { ok: false };
+  try {
+    const entries = snapshotAllPaperazziStorage();
+    const payload = buildFullBackupTransfer(entries);
+    const contents = serializeFullBackupTransfer(payload);
+    const blob = new Blob([contents], { type: PIN_FULL_BACKUP_TRANSFER_MIME });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = buildFullBackupTransferFilename();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+    return { ok: true, keyCount: Object.keys(entries).length };
+  } catch (err) {
+    console.error('[StorageModal] full-backup export failed', err);
+    return { ok: false };
+  }
+}
+
 function eraseAll() {
   if (typeof window === 'undefined') return;
   for (const k of ALL_FIXED_KEYS) localStorage.removeItem(k);
@@ -171,13 +207,37 @@ function eraseAll() {
 export default function StorageModal({ isOpen, onClose }: Props) {
   const [data, setData] = useState<StorageData | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // Tiny non-blocking flash shown after Export — confirms the file
+  // landed in the user's downloads folder without taking over the
+  // modal. Auto-clears after 3s.
+  const [exportFlash, setExportFlash] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setData(readStorage());
       setShowConfirm(false);
+      setExportFlash(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!exportFlash) return;
+    const t = window.setTimeout(() => setExportFlash(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [exportFlash]);
+
+  const handleExportFullBackup = () => {
+    const result = exportFullBackup();
+    if (result.ok) {
+      setExportFlash(
+        `Backup downloaded — ${result.keyCount} ${
+          result.keyCount === 1 ? 'entry' : 'entries'
+        } saved.`,
+      );
+    } else {
+      setExportFlash('Export failed — check the console for details.');
+    }
+  };
 
   if (!isOpen || !data) return null;
 
@@ -280,20 +340,52 @@ export default function StorageModal({ isOpen, onClose }: Props) {
             )}
           </section>
 
-          {/* Reported flags + UI prefs */}
+          {/* Contributions to OpenAlex.
+              Promoted out of the catch-all "Reported flags & UI
+              prefs" section so the thank-you sits in a meaningful
+              place: this modal is the single window into "what
+              Paperazzi knows about me", and contributions are the
+              one set of stored records that produces value beyond
+              the user's own session. Empty state is intentionally
+              gentle — a nudge, not a guilt trip. */}
+          <section>
+            <h4 className='text-stone-700 font-medium mb-1 inline-flex items-center gap-1.5'>
+              <Flag size={12} className='text-stone-500' />
+              Contributions to OpenAlex
+            </h4>
+            {data.reportedPapers + data.reportedAuthors > 0 ? (
+              <div className='banner-info border border-app rounded px-2.5 py-2 text-stone-700'>
+                Thank you — you&apos;ve flagged{' '}
+                <span className='font-medium text-stone-900'>
+                  {[
+                    data.reportedPapers > 0 &&
+                      `${data.reportedPapers} paper${
+                        data.reportedPapers === 1 ? '' : 's'
+                      }`,
+                    data.reportedAuthors > 0 &&
+                      `${data.reportedAuthors} author${
+                        data.reportedAuthors === 1 ? '' : 's'
+                      }`,
+                  ]
+                    .filter(Boolean)
+                    .join(' and ')}
+                </span>{' '}
+                for review. Every fix makes OpenAlex better for everyone.
+              </div>
+            ) : (
+              <p className='text-stone-500'>
+                You haven&apos;t reported any data errors yet — every fix
+                helps.
+              </p>
+            )}
+          </section>
+
+          {/* UI preferences */}
           <section>
             <h4 className='text-stone-700 font-medium mb-1'>
-              Reported flags &amp; UI preferences
+              UI preferences
             </h4>
             <ul className='text-stone-600 space-y-0.5'>
-              <li>
-                {data.reportedPapers} reported paper
-                {data.reportedPapers === 1 ? '' : 's'}
-              </li>
-              <li>
-                {data.reportedAuthors} reported author
-                {data.reportedAuthors === 1 ? '' : 's'}
-              </li>
               <li>Onboarding seen: {data.hasOnboarded ? 'yes' : 'no'}</li>
               {data.sidebarWidth && (
                 <li>Pin sidebar width: {data.sidebarWidth}px</li>
@@ -307,6 +399,38 @@ export default function StorageModal({ isOpen, onClose }: Props) {
           To erase individual items or a single category, use the matching
           panel in Paperazzi (Filters, Pinned papers). The button below erases{' '}
           <strong>everything</strong>.
+        </div>
+
+        {/* Backup-and-restore. Lives next to "Erase all" because the
+            three actions form a natural lifecycle: export → erase →
+            restore (drop the file back on the page). The button is
+            ghost-styled to keep it visually subordinate to the
+            destructive erase action, but the headline copy makes the
+            workflow explicit so users know they have a way back. */}
+        <div className='mt-3 surface-subtle border border-app rounded p-3'>
+          <p className='text-[11px] text-stone-600 leading-snug'>
+            <strong className='text-stone-800'>Save your setup.</strong>{' '}
+            Download a single file containing every Paperazzi pin, group,
+            collection, saved search, and preference. To restore later, drop
+            the file back onto any Paperazzi page.
+          </p>
+          <button
+            onClick={handleExportFullBackup}
+            className='mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs button-secondary rounded transition'
+            title='Download a full snapshot of every Paperazzi-stored item'
+          >
+            <Download size={12} />
+            Export all data
+          </button>
+          {exportFlash && (
+            <p
+              role='status'
+              aria-live='polite'
+              className='mt-2 text-[11px] text-stone-600'
+            >
+              {exportFlash}
+            </p>
+          )}
         </div>
 
         {/* Erase all */}

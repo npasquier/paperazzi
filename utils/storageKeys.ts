@@ -100,3 +100,83 @@ export function isCollectionKey(key: string): boolean {
  */
 export const ALL_FIXED_KEYS: readonly string[] =
   Object.values(STORAGE_KEYS);
+
+/**
+ * Returns true iff `key` is anything Paperazzi has authored —
+ * either a fixed key from the catalog above, or a wildcard key
+ * matching one of our prefixes (collection blobs, reported flags).
+ *
+ * Centralised so the full-backup export and the "Erase all" sweep
+ * can use the same predicate without keeping two lists in sync.
+ */
+export function isPaperazziStorageKey(key: string): boolean {
+  if ((ALL_FIXED_KEYS as readonly string[]).includes(key)) return true;
+  // The reportedAuthor prefix is a strict superset of reportedPaper —
+  // either match means "ours". Same for the collection prefix.
+  if (key.startsWith(STORAGE_KEY_PREFIXES.reportedPaper)) return true;
+  if (isCollectionKey(key)) return true;
+  return false;
+}
+
+/**
+ * Read every Paperazzi-related localStorage entry into a plain
+ * object. Values are returned verbatim (the raw stored string), so
+ * the result round-trips through JSON without us needing to know
+ * each value's schema.
+ *
+ * Safe to call on the server — returns `{}` when localStorage is
+ * unavailable.
+ */
+export function snapshotAllPaperazziStorage(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const out: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (!isPaperazziStorageKey(k)) continue;
+      const v = localStorage.getItem(k);
+      if (v !== null) out[k] = v;
+    }
+  } catch {
+    // localStorage may be disabled — return whatever we collected.
+  }
+  return out;
+}
+
+/**
+ * Replace every Paperazzi-authored localStorage entry with the
+ * given snapshot. Pre-existing Paperazzi keys are removed first so
+ * the post-restore state matches the snapshot exactly (no orphans
+ * from the previous session leaking in).
+ *
+ * Non-Paperazzi keys (e.g. cookies banners, third-party analytics)
+ * are left untouched — we only own our own namespace.
+ */
+export function restoreAllPaperazziStorage(
+  entries: Record<string, string>,
+): void {
+  if (typeof window === 'undefined') return;
+  // Step 1: clear our existing keys. Read keys first, then remove
+  // (mutating localStorage during iteration would shift the index).
+  const ourKeys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && isPaperazziStorageKey(k)) ourKeys.push(k);
+  }
+  for (const k of ourKeys) localStorage.removeItem(k);
+
+  // Step 2: write the snapshot. Skip keys we don't recognise — a
+  // hostile or stale backup shouldn't get to plant arbitrary keys
+  // in our namespace. We're permissive on values (any string).
+  for (const [k, v] of Object.entries(entries)) {
+    if (!isPaperazziStorageKey(k)) continue;
+    try {
+      localStorage.setItem(k, v);
+    } catch (err) {
+      // Quota exceeded mid-restore — log and continue so we still
+      // populate what we can.
+      console.error(`[storageKeys] failed to write ${k}`, err);
+    }
+  }
+}

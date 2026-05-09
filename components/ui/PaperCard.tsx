@@ -2,11 +2,10 @@
 import { useState } from 'react';
 import {
   ExternalLink,
-  Download,
   ChevronDown,
   Pin,
   BookOpen,
-  Info,
+  Flag,
   Copy,
   Check,
   CheckCircle,
@@ -17,6 +16,7 @@ import PinButton from './PinButton';
 import { reportedPaperKey } from '@/utils/storageKeys';
 import PaperInfoModal from '@/components/PaperInfoModal';
 import { emit } from '@/utils/eventBus';
+import { PAPER_CORRECTION_FORM_URL } from '@/utils/correctionForms';
 
 interface PaperCardProps {
   paper: Paper;
@@ -107,6 +107,19 @@ export default function PaperCard({
     }
   };
 
+  // Open the report panel from any "missing data" prompt — turns the
+  // empty state into a one-click contribution flow instead of asking
+  // the user to find the flag icon themselves. Always opens (never
+  // toggles closed) so a stray double-click doesn't undo the
+  // intent. Closes any open abstract section so the report panel
+  // doesn't compete for attention.
+  const openReportPanel = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsInfoExpanded(true);
+    setIsAbstractExpanded(false);
+  };
+
   const handleAuthorClick = (e: React.MouseEvent, authorName: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -130,9 +143,7 @@ export default function PaperCard({
   const openOpenAlexForm = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const formUrl =
-      'https://docs.google.com/forms/d/e/1FAIpQLScUcNZdqOBFxVJ0oihjeHFilm9IqqWKQY4WDmmqgxUNGr3R1g/viewform';
-    window.open(formUrl, '_blank');
+    window.open(PAPER_CORRECTION_FORM_URL, '_blank');
   };
 
   const handleReportedToggle = (e: React.MouseEvent) => {
@@ -373,53 +384,98 @@ export default function PaperCard({
         <div className='flex items-start justify-between gap-4'>
           <div className='flex-1 min-w-0'>
             <h3 className='font-semibold text-stone-900 text-base leading-snug mb-1'>
-              {paper.title || (
-                <span className='text-stone-400 italic'>Untitled</span>
+              {paper.title ? (
+                paper.title
+              ) : (
+                // Missing-title state doubles as a contribution CTA:
+                // the user just registered "this paper has no title",
+                // so handing them the report panel inline is the
+                // fastest path from frustration to fix.
+                <button
+                  type='button'
+                  onClick={openReportPanel}
+                  className='inline-flex items-baseline gap-2 text-stone-400 italic font-normal hover:text-stone-600 transition'
+                  title='No title on OpenAlex — help add one'
+                >
+                  <span>Untitled</span>
+                  <span className='inline-flex items-center gap-1 text-[11px] not-italic font-medium text-stone-500 hover:text-stone-800 underline underline-offset-2 hover:no-underline'>
+                    <Flag size={10} />
+                    flag to add it
+                  </span>
+                </button>
               )}
             </h3>
             {renderAuthors(5)}
 
-            <div className='text-xs text-stone-500 flex items-center gap-2 flex-wrap'>
-              <span>{displayValue(paper.journal_name)}</span>
-              <span>•</span>
-              <span>{paper.publication_year || '—'}</span>
-              <span>•</span>
+            {/* Metadata line. We deliberately do NOT use flex-wrap
+                here: when the right-side action buttons (Scholar /
+                DOI / PDF) take a lot of horizontal space, wrapping
+                pushes affordances like `abstract` onto a second
+                line, which is jarring and inconsistent across cards.
+                Instead the row is single-line + overflow-hidden, and
+                only the journal name is allowed to shrink (it gets
+                `truncate min-w-0`). Every other element keeps its
+                natural width via `flex-shrink-0`, so the toggles
+                always show inline at the end of the line. The full
+                journal name remains accessible via the title tooltip
+                when truncated. */}
+            <div className='text-xs text-stone-500 flex items-center gap-2 overflow-hidden whitespace-nowrap min-w-0'>
+              <span
+                className='truncate min-w-0'
+                title={
+                  paper.journal_name &&
+                  paper.journal_name !== 'Unknown' &&
+                  paper.journal_name.trim() !== ''
+                    ? paper.journal_name
+                    : undefined
+                }
+              >
+                {displayValue(paper.journal_name)}
+              </span>
+              <span className='flex-shrink-0'>•</span>
+              <span className='flex-shrink-0'>{paper.publication_year || '—'}</span>
+              <span className='flex-shrink-0'>•</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   emit('paper-citing-click', { paper });
                 }}
-                className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                className='flex-shrink-0 hover:text-stone-700 hover:underline transition cursor-pointer'
                 title='Find papers that cite this paper'
               >
                 {paper.cited_by_count ?? 0} citations
               </button>
               {paper.referenced_works_count !== undefined && (
                 <>
-                  <span>•</span>
+                  <span className='flex-shrink-0'>•</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       emit('paper-refs-click', { paper });
                     }}
-                    className='hover:text-stone-700 hover:underline transition cursor-pointer'
+                    className='flex-shrink-0 hover:text-stone-700 hover:underline transition cursor-pointer'
                     title='Find papers cited by this paper'
                   >
                     {paper.referenced_works_count} refs
                   </button>
                 </>
               )}
-              <span>•</span>
+              <span className='flex-shrink-0'>•</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   emit('paper-network-click', { paper });
                 }}
-                className='inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer'
+                className='flex-shrink-0 inline-flex items-center gap-1 hover:text-stone-700 hover:underline transition cursor-pointer'
                 title='View references + citing papers as a network'
               >
                 <NetworkIcon size={11} /> see network
               </button>
+              {/* Abstract toggle moved to the action row on the
+                  right (alongside Scholar / DOI), so it has a first-
+                  class button slot rather than a metadata-line link.
+                  Keeps the metadata line short and reliably one-line
+                  for every card layout. */}
             </div>
           </div>
 
@@ -429,7 +485,7 @@ export default function PaperCard({
 
               <button
                 onClick={openGoogleScholar}
-                className='inline-flex items-center gap-1 px-2.5 py-1 banner-info rounded-lg text-accent-strong transition text-xs font-medium whitespace-nowrap'
+                className='inline-flex items-center gap-1 px-2.5 py-1 button-secondary rounded-lg transition text-xs font-medium whitespace-nowrap'
               >
                 <BookOpen size={12} /> Scholar
               </button>
@@ -448,15 +504,53 @@ export default function PaperCard({
                 </a>
               )}
 
-              {paper.pdf_url && (
-                <a
-                  href={paper.pdf_url}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='inline-flex items-center gap-1 px-2.5 py-1 button-secondary rounded-lg transition text-xs font-medium whitespace-nowrap'
+              {/* Abstract toggle — sits in the action row alongside
+                  Scholar / DOI as a first-class affordance. The
+                  rotating chevron telegraphs the dropdown behaviour;
+                  "open" state uses the banner-info accent so the
+                  user can quickly see which card has its abstract
+                  expanded.
+                  We dropped the dedicated PDF button: it was rarely
+                  populated by OpenAlex and visually redundant with
+                  DOI + Scholar (both of which surface PDFs through
+                  the publisher / Scholar's own attachments). */}
+              {hasAbstract ? (
+                // Abstract gets the accent (banner-info) treatment in
+                // BOTH states — it's the only in-app action on the
+                // card that opens content right here, so it deserves
+                // the visual weight every time. Open vs closed is
+                // signalled by the chevron rotation alone, so the
+                // button doesn't visually jump on toggle.
+                <button
+                  onClick={toggleAbstract}
+                  aria-expanded={isAbstractExpanded}
+                  title={
+                    isAbstractExpanded ? 'Hide abstract' : 'Show abstract'
+                  }
+                  className='inline-flex items-center gap-1 px-2.5 py-1 banner-info rounded-lg text-accent-strong transition text-xs font-medium whitespace-nowrap'
                 >
-                  <Download size={12} /> PDF
-                </a>
+                  <ChevronDown
+                    size={12}
+                    className={`transition-transform ${
+                      isAbstractExpanded ? 'rotate-180' : ''
+                    }`}
+                  />
+                  Abstract
+                </button>
+              ) : (
+                // No abstract on OpenAlex → keep the same button slot
+                // but turn it into a contribution prompt. Subdued
+                // styling (italic, lighter text) signals "missing"
+                // while the flag icon links the affordance to the
+                // existing report flow.
+                <button
+                  onClick={openReportPanel}
+                  title='No abstract on OpenAlex — help add one'
+                  className='inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition text-xs font-medium whitespace-nowrap button-secondary text-stone-500 italic'
+                >
+                  <Flag size={12} />
+                  Add abstract
+                </button>
               )}
             </div>
           )}
@@ -479,17 +573,25 @@ export default function PaperCard({
         </div>
       )}
 
-      {/* Info Section */}
+      {/* Info / report panel — expanded when the user clicks the
+          flag icon. Open-ended copy: not just "report errors" but
+          why it matters, since OpenAlex is the open infrastructure
+          we all depend on. */}
       <div
         className={`
           overflow-hidden transition-all duration-300 ease-in-out
-          ${isInfoExpanded ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'}
+          ${isInfoExpanded ? 'max-h-56 opacity-100' : 'max-h-0 opacity-0'}
         `}
       >
         <div className='px-3 pb-3 pt-0 border-t border-app'>
           <div className='mt-3 space-y-2'>
-            <p className='text-xs text-stone-500'>
-              Report errors or missing data to OpenAlex
+            <p className='text-xs text-stone-600 leading-snug'>
+              <span className='font-medium text-stone-800'>
+                Spot a problem with this paper?
+              </span>{' '}
+              Wrong author, missing PDF, garbled title, off citation count?
+              OpenAlex is open and improves with corrections from researchers
+              like you.
             </p>
             {/* Compact inline Work ID with copy */}
             <div className='flex items-center gap-2 text-xs'>
@@ -538,39 +640,36 @@ export default function PaperCard({
         </div>
       </div>
 
-      {/* Toggle buttons - positioned in bottom right, Info on LEFT of chevron */}
-      <div className='absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-        {/* Info toggle - on the LEFT */}
+      {/* Bottom-right corner: report flag only.
+          The abstract toggle moved inline into the metadata line —
+          there it's always visible alongside `cites`, `refs`, and
+          `see network`, so users learn an abstract is available
+          without first hovering the card. That leaves this corner
+          to the report flag alone, which avoids visual competition
+          and gives the contribution affordance a calmer home. */}
+      <div className='absolute bottom-2 right-2'>
         <button
           onClick={toggleInfo}
-          className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
+          className={`group/report p-1 inline-flex items-center gap-1 rounded transition ${
+            isInfoExpanded
+              ? 'text-stone-700 bg-[var(--surface-muted)]'
+              : 'text-stone-400 hover:text-stone-700 hover:bg-[var(--surface-muted)]'
+          }`}
           aria-expanded={isInfoExpanded}
-          aria-label='Report error or missing data'
-          title='Report error or missing data'
+          aria-label='Report a data error to OpenAlex'
+          title='Spot a data error? Help OpenAlex fix it.'
         >
-          <Info
-            size={16}
-            className={`transition-colors ${isInfoExpanded ? 'text-stone-600' : ''}`}
-          />
-        </button>
-
-        {/* Abstract toggle - on the RIGHT, only show if abstract exists */}
-        {hasAbstract && (
-          <button
-            onClick={toggleAbstract}
-            className='p-1 text-stone-400 hover:text-stone-600 hover:bg-[var(--surface-muted)] rounded transition'
-            aria-expanded={isAbstractExpanded}
-            aria-label={isAbstractExpanded ? 'Hide abstract' : 'Show abstract'}
-            title={isAbstractExpanded ? 'Hide abstract' : 'Show abstract'}
+          <Flag size={14} />
+          <span
+            className={`text-[10px] font-medium leading-none transition-all ${
+              isInfoExpanded
+                ? 'opacity-100 max-w-[3rem]'
+                : 'opacity-0 group-hover/report:opacity-100 max-w-0 group-hover/report:max-w-[3rem] overflow-hidden'
+            }`}
           >
-            <ChevronDown
-              size={16}
-              className={`transition-transform duration-300 ${
-                isAbstractExpanded ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-        )}
+            Report
+          </span>
+        </button>
       </div>
     </div>
   );

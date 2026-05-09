@@ -11,7 +11,13 @@ import {
   Tag,
   Download,
   Upload,
+  Flag,
 } from 'lucide-react';
+import {
+  PAPER_CORRECTION_FORM_URL,
+  AUTHOR_CORRECTION_FORM_URL,
+  OPENALEX_FIX_ERRORS_URL,
+} from '@/utils/correctionForms';
 
 export default function HelpPage() {
   return (
@@ -501,6 +507,127 @@ export default function HelpPage() {
                   edit, and version-control.
                 </p>
               </div>
+            </div>
+          </section>
+
+          {/* Contributing back to OpenAlex */}
+          <section id='contribute'>
+            <div className='flex items-center gap-2 mb-4'>
+              <Flag size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Help improve the data (OpenAlex)
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-app space-y-4'>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                Paperazzi runs on{' '}
+                <a
+                  href='https://openalex.org/'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
+                >
+                  OpenAlex
+                </a>
+                , an open, non-profit catalog of scholarly works. Like every
+                large database, it has rough edges — missing PDFs, garbled
+                titles, misattributed authors, off citation counts. Reporting
+                them takes seconds and benefits every researcher who uses
+                OpenAlex (which is rapidly becoming most of them).
+              </p>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2 inline-flex items-center gap-1.5'>
+                  <Flag size={14} className='text-stone-500' />
+                  How to report a paper error
+                </h3>
+                <ol className='space-y-2 text-sm text-stone-700 leading-relaxed list-decimal pl-5'>
+                  <li>
+                    On any paper card, click the small{' '}
+                    <strong>flag icon</strong> in the bottom-right corner.
+                    A short panel slides open with the paper&apos;s OpenAlex ID
+                    and a copy button.
+                  </li>
+                  <li>
+                    Click <strong>Submit correction</strong>. A short Google
+                    Form opens in a new tab — paste the ID, describe what&apos;s
+                    wrong, submit. Reports are forwarded to OpenAlex.
+                  </li>
+                  <li>
+                    Optional: click <strong>Mark as reported</strong> so you
+                    won&apos;t flag the same paper twice. The flag stays in
+                    your browser and shows up next time you see that paper.
+                  </li>
+                </ol>
+                <div className='mt-3 flex flex-wrap gap-3 text-sm'>
+                  <a
+                    href={PAPER_CORRECTION_FORM_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='inline-flex items-center gap-1.5 text-stone-700 hover:text-stone-900 underline underline-offset-2'
+                  >
+                    <Flag size={12} />
+                    Paper correction form →
+                  </a>
+                  <a
+                    href={AUTHOR_CORRECTION_FORM_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='inline-flex items-center gap-1.5 text-stone-700 hover:text-stone-900 underline underline-offset-2'
+                  >
+                    <Flag size={12} />
+                    Author correction form →
+                  </a>
+                </div>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2'>
+                  What&apos;s worth reporting
+                </h3>
+                <ul className='list-disc pl-5 space-y-1 text-sm text-stone-600 leading-relaxed'>
+                  <li>
+                    Wrong or duplicate <strong>authors</strong>, missing
+                    affiliations, broken ORCID links.
+                  </li>
+                  <li>
+                    Garbled or truncated <strong>titles</strong> (HTML
+                    artefacts, encoding issues).
+                  </li>
+                  <li>
+                    Missing or incorrect <strong>journal</strong>, year, ISSN,
+                    or DOI.
+                  </li>
+                  <li>
+                    Missing <strong>abstract</strong> or PDF link when one
+                    exists publicly.
+                  </li>
+                  <li>
+                    Off <strong>citation counts</strong> or wrong reference
+                    list.
+                  </li>
+                  <li>
+                    The whole paper is missing from OpenAlex — they&apos;re
+                    actively expanding coverage.
+                  </li>
+                </ul>
+              </div>
+
+              <p className='text-xs text-stone-500'>
+                For the full background and OpenAlex&apos;s preferred
+                workflow,{' '}
+                <a
+                  href={OPENALEX_FIX_ERRORS_URL}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-stone-700 hover:text-stone-900 underline underline-offset-2'
+                >
+                  see their docs
+                </a>
+                . Contributing to OpenAlex helps build open infrastructure for
+                academic research — and reduces our collective reliance on
+                closed-source databases.
+              </p>
             </div>
           </section>
 

@@ -402,6 +402,12 @@ export default function AboutPage() {
               <p className='text-sm text-stone-500 mt-4'>
                 Contributing to OpenAlex helps build open infrastructure for
                 academic research — reducing reliance on dominant platforms.
+                Your personal report count lives in the{' '}
+                <span className='inline-flex items-center gap-1 text-stone-700'>
+                  <Database size={12} className='text-stone-500' />
+                  stored data
+                </span>{' '}
+                view, accessible from the navbar database icon.
               </p>
             </div>
           </section>

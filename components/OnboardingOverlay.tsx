@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Filter, Pin, Search } from 'lucide-react';
+import { Filter, Pin, Search, Flag } from 'lucide-react';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 export default function OnboardingOverlay() {
@@ -70,10 +70,30 @@ export default function OnboardingOverlay() {
             </span>
           </div>
           <p className='text-xs text-stone-500'>
-            Save papers and explore their links
+            Save papers, group them, and add notes / keywords
           </p>
         </div>
         <div className='w-8 h-0.5 bg-[var(--border-strong)] mr-4 mt-2 ml-auto' />
+      </div>
+
+      {/* Bottom hint - Report bad data. Frames OpenAlex contribution
+          as a first-class part of the workflow, not a hidden power
+          user feature. Anchored at the bottom-centre so it's
+          unmistakable but doesn't crowd the three primary hints. */}
+      <div className='absolute bottom-28 left-1/2 -translate-x-1/2 pointer-events-auto'>
+        <div className='surface-card border border-app rounded-lg shadow-lg p-4 max-w-[280px] text-center'>
+          <div className='flex items-center justify-center gap-2 mb-2'>
+            <Flag size={16} className='text-stone-600' />
+            <span className='font-medium text-stone-900 text-sm'>
+              Spot bad data?
+            </span>
+          </div>
+          <p className='text-xs text-stone-500 leading-relaxed'>
+            Click the small flag on any paper to report errors to OpenAlex —
+            the open dataset everyone uses gets better when researchers
+            contribute back.
+          </p>
+        </div>
       </div>
 
       {/* Dismiss button */}

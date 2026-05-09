@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Sparkles, X, ArrowRight } from 'lucide-react';
+import { Search, Database, Sparkles, X, Info, Flag } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import SearchSyntaxHelp from './SearchSyntaxHelp';
@@ -830,12 +830,27 @@ function NavBarContent() {
           <Database size={18} />
         </button>
 
+        {/* Improve OpenAlex — small persistent CTA so contributing
+            data corrections is reachable from any page, not just the
+            paper card or the Help / About pages. Routes to the
+            dedicated Help section anchor. */}
+        <Link
+          href='/help#contribute'
+          className='hidden md:inline-flex items-center gap-1 text-sm text-app-muted hover:text-app transition flex-shrink-0'
+          title='Contribute data corrections to OpenAlex'
+        >
+          <Flag size={18} />
+          
+        </Link>
+
         {/* Help link - always visible */}
         <Link
           href='/help'
           className='text-sm text-app-muted hover:text-app transition flex-shrink-0'
+          title='View help documentation'
+
         >
-          Help
+          <Info size={18} />
         </Link>
 
         {/* About link - always visible */}

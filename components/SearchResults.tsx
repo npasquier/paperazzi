@@ -9,6 +9,7 @@ import EmptyState, { PresetTileId } from './EmptyState';
 import { reportedAuthorKey } from '@/utils/storageKeys';
 import { cachedFetch } from '@/utils/searchCache';
 import { emit, on } from '@/utils/eventBus';
+import { AUTHOR_CORRECTION_FORM_URL } from '@/utils/correctionForms';
 import {
   X,
   Quote,
@@ -620,10 +621,7 @@ export default function SearchResults({
     } catch {}
   };
   const openAuthorCorrectionForm = () => {
-    window.open(
-      'https://docs.google.com/forms/d/e/1FAIpQLSeHpt3yWbWoB5MK1K6wVWThI5fglZzk-GPniaih0JT_rCMdYA/viewform',
-      '_blank',
-    );
+    window.open(AUTHOR_CORRECTION_FORM_URL, '_blank');
   };
   const authorReportedKey = authorInfo
     ? reportedAuthorKey(
