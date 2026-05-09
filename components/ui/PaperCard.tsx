@@ -293,6 +293,24 @@ export default function PaperCard({
                 <NetworkIcon size={9} /> network
               </button>
             </div>
+
+            {/* Keyword chips. Rendered on a second line so long titles
+                don't compete for horizontal space. Hidden when the
+                paper has no user keywords — keeps untagged cards
+                visually identical to before this feature shipped. */}
+            {paper.keywords && paper.keywords.length > 0 && (
+              <div className='mt-1 flex flex-wrap gap-1'>
+                {paper.keywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className='inline-block px-1.5 py-px rounded text-[9px] leading-tight surface-muted text-stone-600 border border-app/60 truncate max-w-[14ch]'
+                    title={kw}
+                  >
+                    {kw}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

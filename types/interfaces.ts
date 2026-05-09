@@ -105,4 +105,18 @@ export interface Paper {
   // OpenAlex IDs of works this paper cites — needed to draw network edges
   // client-side without extra API calls.
   referenced_works?: string[];
+  // User-authored, per-collection annotations. These are written by the
+  // user (not OpenAlex) and only mean anything for pinned papers — but
+  // they live on the Paper itself so they round-trip through every code
+  // path (search results → pin → modal → export) without a parallel
+  // store. Search-result Papers will simply have undefined here.
+  comment?: string;
+  keywords?: string[];
 }
+
+// Hard caps on user-authored fields. Kept here (next to MAX_PINS) so
+// the same numbers are quoted by storage, UI, and import normalisation
+// without drifting.
+export const MAX_PAPER_COMMENT_LENGTH = 500;
+export const MAX_PAPER_KEYWORDS = 6;
+export const MAX_PAPER_KEYWORD_LENGTH = 24;

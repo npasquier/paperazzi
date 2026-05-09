@@ -1,11 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, ExternalLink, BookOpen } from 'lucide-react';
-import { Paper } from '@/types/interfaces';
+import {
+  X,
+  Loader2,
+  ExternalLink,
+  BookOpen,
+  Edit2,
+  Check,
+  Trash2,
+  Plus,
+  Tag,
+  StickyNote,
+} from 'lucide-react';
+import {
+  MAX_PAPER_COMMENT_LENGTH,
+  MAX_PAPER_KEYWORD_LENGTH,
+  MAX_PAPER_KEYWORDS,
+  Paper,
+} from '@/types/interfaces';
 import PinButton from './ui/PinButton';
 import { cleanAbstract } from '@/utils/abstract';
+import { usePins } from '@/contexts/PinContext';
+import { normalizeId } from '@/utils/normalizeId';
 
 interface PaperInfoModalProps {
   paper: Paper;
@@ -24,6 +42,94 @@ export default function PaperInfoModal({
 }: PaperInfoModalProps) {
   const [abstract, setAbstract] = useState<string>('');
   const [isLoadingAbstract, setIsLoadingAbstract] = useState(false);
+
+  // Notes + keywords are only meaningful for pinned papers — the
+  // modal is also opened from the citations-network view, where the
+  // paper isn't pinned and we hide the annotation UI entirely.
+  const { pinnedPapers, isPinned, updatePaperComment, updatePaperKeywords } =
+    usePins();
+  const isPaperPinned = isPinned(paper.id);
+  // Always read the live pinned record (it has the latest comment +
+  // keywords) when available, falling back to the prop. This matters
+  // because some callers — the citations network in particular — pass
+  // a stale Paper that doesn't reflect the user's edits.
+  const pinnedPaper = useMemo(
+    () =>
+      pinnedPapers.find(
+        (p) => normalizeId(p.id) === normalizeId(paper.id),
+      ),
+    [pinnedPapers, paper.id],
+  );
+  const livePaper = pinnedPaper ?? paper;
+
+  // Note editor — view / edit modes. We keep a draft string while
+  // editing so an unsaved change can be discarded with Cancel.
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset state when the modal closes so opening it again on a
+      // different paper doesn't leak the previous draft.
+      setIsEditingNote(false);
+      setNoteDraft('');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isEditingNote) noteTextareaRef.current?.focus();
+  }, [isEditingNote]);
+
+  const startEditingNote = () => {
+    setNoteDraft(livePaper.comment ?? '');
+    setIsEditingNote(true);
+  };
+
+  const saveNote = () => {
+    updatePaperComment(paper.id, noteDraft);
+    setIsEditingNote(false);
+  };
+
+  const cancelEditNote = () => {
+    setIsEditingNote(false);
+    setNoteDraft('');
+  };
+
+  const removeNote = () => {
+    updatePaperComment(paper.id, '');
+    setIsEditingNote(false);
+    setNoteDraft('');
+  };
+
+  // Keyword editor — chips with a remove × and an inline input.
+  // Submission on Enter or comma. We don't keep a separate "edit
+  // mode" toggle because inline editing is cheap; the only state is
+  // the in-progress keyword draft.
+  const [keywordDraft, setKeywordDraft] = useState('');
+  const keywords = livePaper.keywords ?? [];
+  const keywordCapReached = keywords.length >= MAX_PAPER_KEYWORDS;
+
+  const commitKeywordDraft = () => {
+    const next = keywordDraft.trim();
+    if (!next) return;
+    if (
+      keywords.some((k) => k.toLowerCase() === next.toLowerCase()) ||
+      keywordCapReached
+    ) {
+      setKeywordDraft('');
+      return;
+    }
+    updatePaperKeywords(paper.id, [...keywords, next]);
+    setKeywordDraft('');
+  };
+
+  const removeKeyword = (target: string) => {
+    updatePaperKeywords(
+      paper.id,
+      keywords.filter((k) => k !== target),
+    );
+  };
 
   useEffect(() => {
     setAbstract(cleanAbstract(paper.abstract || ''));
@@ -176,6 +282,188 @@ export default function PaperInfoModal({
               </p>
             )}
           </div>
+
+          {/* Annotations — notes + keywords. Only rendered for pinned
+              papers because that's where the data lives; for an
+              unpinned paper the editor would have nowhere to write. */}
+          {isPaperPinned && (
+            <div className='mt-5 pt-4 border-t border-app space-y-4'>
+              {/* Note */}
+              <section>
+                <div className='flex items-center justify-between mb-2'>
+                  <h3 className='text-sm font-semibold text-stone-900 inline-flex items-center gap-1.5'>
+                    <StickyNote size={14} className='text-stone-500' />
+                    Note
+                  </h3>
+                  {!isEditingNote && (
+                    <div className='flex items-center gap-1'>
+                      <button
+                        onClick={startEditingNote}
+                        className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 transition'
+                        title={livePaper.comment ? 'Edit note' : 'Add note'}
+                      >
+                        <Edit2 size={12} />
+                        {livePaper.comment ? 'Edit' : 'Add'}
+                      </button>
+                      {livePaper.comment && (
+                        <button
+                          onClick={removeNote}
+                          className='inline-flex items-center gap-1 text-xs text-stone-400 hover:text-danger transition ml-2'
+                          title='Remove note'
+                        >
+                          <Trash2 size={12} />
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {isEditingNote ? (
+                  <div>
+                    <textarea
+                      ref={noteTextareaRef}
+                      value={noteDraft}
+                      onChange={(e) =>
+                        setNoteDraft(
+                          e.target.value.slice(0, MAX_PAPER_COMMENT_LENGTH),
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        // Cmd/Ctrl + Enter saves; Escape cancels.
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault();
+                          saveNote();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEditNote();
+                        }
+                      }}
+                      placeholder='Why this paper matters to you, what to revisit, key takeaways...'
+                      rows={3}
+                      maxLength={MAX_PAPER_COMMENT_LENGTH}
+                      className='w-full px-2.5 py-2 text-sm border border-app rounded-md bg-transparent focus-accent resize-y leading-relaxed'
+                    />
+                    <div className='mt-1.5 flex items-center justify-between gap-2'>
+                      <span className='text-[11px] text-stone-400 tabular-nums'>
+                        {noteDraft.length}/{MAX_PAPER_COMMENT_LENGTH}
+                      </span>
+                      <div className='flex items-center gap-1.5'>
+                        <button
+                          onClick={cancelEditNote}
+                          className='px-2.5 py-1 text-xs button-ghost rounded transition'
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveNote}
+                          className='inline-flex items-center gap-1 px-2.5 py-1 text-xs button-secondary rounded transition'
+                        >
+                          <Check size={12} />
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : livePaper.comment ? (
+                  <p className='text-sm text-stone-700 leading-relaxed whitespace-pre-wrap surface-subtle border border-app rounded-md px-3 py-2'>
+                    {livePaper.comment}
+                  </p>
+                ) : (
+                  <button
+                    onClick={startEditingNote}
+                    className='w-full text-left text-xs text-stone-400 italic hover:text-stone-600 transition px-3 py-2 border border-dashed border-app rounded-md'
+                  >
+                    Add a personal note for this paper...
+                  </button>
+                )}
+              </section>
+
+              {/* Keywords */}
+              <section>
+                <div className='flex items-center justify-between mb-2'>
+                  <h3 className='text-sm font-semibold text-stone-900 inline-flex items-center gap-1.5'>
+                    <Tag size={14} className='text-stone-500' />
+                    Keywords
+                    <span className='text-[11px] font-normal text-stone-400'>
+                      ({keywords.length}/{MAX_PAPER_KEYWORDS})
+                    </span>
+                  </h3>
+                </div>
+
+                <div className='flex flex-wrap items-center gap-1.5'>
+                  {keywords.map((kw) => (
+                    <span
+                      key={kw}
+                      className='group inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] surface-muted text-stone-700 border border-app'
+                    >
+                      <span className='truncate max-w-[14ch]'>{kw}</span>
+                      <button
+                        onClick={() => removeKeyword(kw)}
+                        className='text-stone-400 hover:text-danger transition'
+                        aria-label={`Remove keyword ${kw}`}
+                        title='Remove'
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+
+                  {!keywordCapReached && (
+                    <div className='inline-flex items-center gap-1'>
+                      <input
+                        type='text'
+                        value={keywordDraft}
+                        onChange={(e) =>
+                          setKeywordDraft(
+                            e.target.value.slice(0, MAX_PAPER_KEYWORD_LENGTH),
+                          )
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ',') {
+                            e.preventDefault();
+                            commitKeywordDraft();
+                          } else if (
+                            e.key === 'Backspace' &&
+                            keywordDraft === '' &&
+                            keywords.length > 0
+                          ) {
+                            // Quick deletion: backspace on empty input
+                            // pops the last keyword. Common pattern in
+                            // tag inputs; saves a click on the ×.
+                            e.preventDefault();
+                            removeKeyword(keywords[keywords.length - 1]);
+                          }
+                        }}
+                        onBlur={commitKeywordDraft}
+                        placeholder={
+                          keywords.length === 0
+                            ? 'Add a keyword and press Enter'
+                            : 'Add another...'
+                        }
+                        maxLength={MAX_PAPER_KEYWORD_LENGTH}
+                        className='px-2 py-0.5 text-[11px] border border-dashed border-app rounded-full bg-transparent focus-accent min-w-[8rem]'
+                      />
+                      {keywordDraft.trim() && (
+                        <button
+                          onClick={commitKeywordDraft}
+                          className='p-0.5 text-stone-500 hover:text-stone-800 rounded transition'
+                          title='Add keyword'
+                        >
+                          <Plus size={12} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {keywordCapReached && (
+                  <p className='mt-1 text-[11px] text-stone-400'>
+                    Keyword limit reached. Remove one to add another.
+                  </p>
+                )}
+              </section>
+            </div>
+          )}
         </div>
       </div>
     </div>,

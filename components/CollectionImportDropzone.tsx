@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Library, Upload } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
-import { readCollectionImportFile } from '@/utils/pinCollectionTransfer';
+import { readImportFile } from '@/utils/pinCollectionTransfer';
 
 type Feedback =
   | {
@@ -17,7 +17,7 @@ function dragEventHasFiles(event: DragEvent): boolean {
 }
 
 export default function CollectionImportDropzone() {
-  const { importCollection } = usePins();
+  const { importCollection, importLibrary } = usePins();
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -74,7 +74,10 @@ export default function CollectionImportDropzone() {
       }
 
       try {
-        const parsed = await readCollectionImportFile(file);
+        // The unified parser dispatches on the file's `format` field
+        // and tells us whether the user dropped a single collection
+        // or a full library backup.
+        const parsed = await readImportFile(file);
         if (!parsed.ok) {
           setFeedback({
             kind: 'error',
@@ -83,6 +86,39 @@ export default function CollectionImportDropzone() {
           return;
         }
 
+        if (parsed.kind === 'library') {
+          const result = importLibrary(parsed.data);
+          if (result.status === 'empty') {
+            setFeedback({
+              kind: 'error',
+              message: 'That library export is empty.',
+            });
+            return;
+          }
+          if (result.status === 'cap-exceeded') {
+            setFeedback({
+              kind: 'error',
+              message:
+                result.available === 0
+                  ? `That library has ${result.required} collections, but you have no slots left. Delete some collections first.`
+                  : `That library has ${result.required} collections, but only ${result.available} slot${
+                      result.available === 1 ? '' : 's'
+                    } remain. Delete some collections first.`,
+            });
+            return;
+          }
+          const collectionLabel =
+            result.importedCollectionCount === 1 ? 'collection' : 'collections';
+          const paperLabel =
+            result.importedPaperCount === 1 ? 'paper' : 'papers';
+          setFeedback({
+            kind: 'success',
+            message: `Imported library: ${result.importedCollectionCount} ${collectionLabel} (${result.importedPaperCount} ${paperLabel}).`,
+          });
+          return;
+        }
+
+        // Single-collection drop.
         const result = importCollection(parsed.data);
         if (result.status === 'cap-reached') {
           setFeedback({
@@ -104,7 +140,7 @@ export default function CollectionImportDropzone() {
         console.error('[CollectionImportDropzone] import failed', err);
         setFeedback({
           kind: 'error',
-          message: "Couldn't import that collection.",
+          message: "Couldn't import that file.",
         });
       }
     };
@@ -122,7 +158,7 @@ export default function CollectionImportDropzone() {
       window.removeEventListener('drop', onDrop);
       window.removeEventListener('blur', resetDragState);
     };
-  }, [importCollection]);
+  }, [importCollection, importLibrary]);
 
   return (
     <>
@@ -133,11 +169,11 @@ export default function CollectionImportDropzone() {
               <Upload size={24} />
             </div>
             <p className='text-base font-semibold text-stone-800'>
-              Drop shared collection to import
+              Drop a Paperazzi export to import
             </p>
             <p className='mt-2 text-sm text-stone-600'>
-              Paperazzi will create a new collection with its pinned papers
-              and groups.
+              A single collection becomes a new workspace; a library file
+              restores every collection it contains.
             </p>
           </div>
         </div>

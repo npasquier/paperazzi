@@ -8,15 +8,25 @@ import {
   useRef,
   useCallback,
 } from 'react';
-import { MAX_PINS, Paper, PinGroup } from '@/types/interfaces';
+import {
+  MAX_PAPER_COMMENT_LENGTH,
+  MAX_PAPER_KEYWORD_LENGTH,
+  MAX_PAPER_KEYWORDS,
+  MAX_PINS,
+  Paper,
+  PinGroup,
+} from '@/types/interfaces';
 import buildAbstract from '@/utils/abstract';
 import cleanHtml from '@/utils/cleanHtml';
 import { normalizeId } from '@/utils/normalizeId';
 import {
   buildCollectionTransfer,
   buildCollectionTransferFilename,
+  buildLibraryTransfer,
+  buildLibraryTransferFilename,
   ImportedPinCollection,
   serializeCollectionTransfer,
+  serializeLibraryTransfer,
 } from '@/utils/pinCollectionTransfer';
 import {
   STORAGE_KEYS,
@@ -63,6 +73,12 @@ interface ExportCollectionResult {
   contents: string;
 }
 
+interface ExportLibraryResult {
+  filename: string;
+  contents: string;
+  collectionCount: number;
+}
+
 type ImportCollectionResult =
   | {
       status: 'ok';
@@ -72,6 +88,21 @@ type ImportCollectionResult =
       importedGroupCount: number;
     }
   | { status: 'cap-reached' };
+
+type ImportLibraryResult =
+  | {
+      status: 'ok';
+      // First imported collection becomes active so the user lands
+      // somewhere meaningful after the import completes.
+      activeCollectionId: string;
+      importedCollectionCount: number;
+      importedPaperCount: number;
+    }
+  // Caller asked us to import N collections but only M slots remain.
+  // We bail rather than partial-import so a backup-restore is always
+  // all-or-nothing.
+  | { status: 'cap-exceeded'; available: number; required: number }
+  | { status: 'empty' };
 
 interface PinContextType {
   // Active-collection state (everything below operates on the active one).
@@ -95,6 +126,13 @@ interface PinContextType {
   reorderGroups: (fromIndex: number, toIndex: number) => void;
   getUngroupedPapers: () => Paper[];
   getPapersInGroup: (groupId: string) => Paper[];
+
+  // Per-paper user annotations (only meaningful for pinned papers).
+  // Both setters operate on the active collection; passing an empty
+  // string / array clears the field. Inputs are clamped to the caps in
+  // interfaces.ts so callers don't have to.
+  updatePaperComment: (paperId: string, comment: string) => void;
+  updatePaperKeywords: (paperId: string, keywords: string[]) => void;
 
   // Collection management.
   collections: Collection[];
@@ -120,9 +158,23 @@ interface PinContextType {
   /** True when adding more collections would exceed MAX_COLLECTIONS. */
   collectionsAtCap: boolean;
   exportActiveCollection: () => ExportCollectionResult | null;
+  /**
+   * Bundle every collection on disk into a single backup file. Pulls
+   * the active collection from in-memory state (so unsaved edits are
+   * captured) and reads the rest from localStorage. Returns null if
+   * the user somehow has zero collections.
+   */
+  exportAllCollections: () => ExportLibraryResult | null;
   importCollection: (
     collection: ImportedPinCollection,
   ) => ImportCollectionResult;
+  /**
+   * Bulk-import a library export. Atomic: if the library wouldn't
+   * fit in the remaining MAX_COLLECTIONS budget, nothing is created.
+   * Otherwise every collection is added and the first one becomes
+   * active.
+   */
+  importLibrary: (collections: ImportedPinCollection[]) => ImportLibraryResult;
 }
 
 const PinContext = createContext<PinContextType | null>(null);
@@ -349,19 +401,39 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
             referenced_works_count?: number;
             abstract_inverted_index?: Record<string, number[]> | null;
           }
-          const fresh: Paper[] = (data.results as OpenAlexWork[]).map((w) => ({
-            id: normalizeId(w.id),
-            title: cleanHtml(w.title),
-            authors:
-              w.authorships?.map((a) => a.author.display_name) ?? [],
-            publication_year: w.publication_year,
-            journal_name: w.primary_location?.source?.display_name || 'Unknown',
-            doi: w.doi,
-            pdf_url: w.primary_location?.pdf_url,
-            cited_by_count: w.cited_by_count,
-            referenced_works_count: w.referenced_works_count || 0,
-            abstract: buildAbstract(w.abstract_inverted_index),
-          }));
+          // Index the cached papers so we can carry user-authored
+          // fields (comment, keywords) forward — OpenAlex doesn't
+          // know about them and would otherwise wipe them on refresh.
+          const cachedById = new Map<string, Paper>();
+          for (const cachedPaper of cached.papers) {
+            cachedById.set(normalizeId(cachedPaper.id), cachedPaper);
+          }
+
+          const fresh: Paper[] = (data.results as OpenAlexWork[]).map((w) => {
+            const id = normalizeId(w.id);
+            const cachedPaper = cachedById.get(id);
+            return {
+              id,
+              title: cleanHtml(w.title),
+              authors:
+                w.authorships?.map((a) => a.author.display_name) ?? [],
+              publication_year: w.publication_year,
+              journal_name:
+                w.primary_location?.source?.display_name || 'Unknown',
+              doi: w.doi,
+              pdf_url: w.primary_location?.pdf_url,
+              cited_by_count: w.cited_by_count,
+              referenced_works_count: w.referenced_works_count || 0,
+              abstract: buildAbstract(w.abstract_inverted_index),
+              // Locally-authored fields survive the refresh.
+              ...(cachedPaper?.comment !== undefined && {
+                comment: cachedPaper.comment,
+              }),
+              ...(cachedPaper?.keywords !== undefined && {
+                keywords: cachedPaper.keywords,
+              }),
+            };
+          });
           // Preserve the user's manual order — OpenAlex doesn't
           // honor the request order, so we re-sort by the cached id list.
           const ordered = ids
@@ -692,6 +764,66 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
       .filter((p): p is Paper => !!p);
   };
 
+  const updatePaperComment = (paperId: string, comment: string) => {
+    const normalized = normalizeId(paperId);
+    const trimmed = comment.trim().slice(0, MAX_PAPER_COMMENT_LENGTH);
+    setPinnedPapers((prev) =>
+      prev.map((p) => {
+        if (normalizeId(p.id) !== normalized) return p;
+        // Empty input deletes the field rather than persisting "" —
+        // keeps storage tidy and avoids "exists but empty" branches in
+        // consumers. JSON.stringify drops `undefined` values, so a
+        // shallow copy with the key cleared serialises identically to
+        // a destructured rest.
+        if (!trimmed) {
+          if (p.comment === undefined) return p;
+          const next = { ...p };
+          delete next.comment;
+          return next;
+        }
+        if (p.comment === trimmed) return p;
+        return { ...p, comment: trimmed };
+      }),
+    );
+  };
+
+  const updatePaperKeywords = (paperId: string, keywords: string[]) => {
+    const normalized = normalizeId(paperId);
+    // Trim, clamp length, drop empties, dedupe (case-insensitive,
+    // preserving the first-seen casing), then cap the list. Same
+    // shape as the import normaliser so the two paths agree.
+    const seen = new Set<string>();
+    const cleaned: string[] = [];
+    for (const raw of keywords) {
+      const k = raw.trim().slice(0, MAX_PAPER_KEYWORD_LENGTH);
+      if (!k) continue;
+      const key = k.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cleaned.push(k);
+      if (cleaned.length >= MAX_PAPER_KEYWORDS) break;
+    }
+
+    setPinnedPapers((prev) =>
+      prev.map((p) => {
+        if (normalizeId(p.id) !== normalized) return p;
+        if (cleaned.length === 0) {
+          if (p.keywords === undefined) return p;
+          const next = { ...p };
+          delete next.keywords;
+          return next;
+        }
+        // Skip the rewrite if the new list is identical — saves a
+        // localStorage churn on rapid edits.
+        const same =
+          p.keywords?.length === cleaned.length &&
+          p.keywords.every((k, i) => k === cleaned[i]);
+        if (same) return p;
+        return { ...p, keywords: cleaned };
+      }),
+    );
+  };
+
   // ── Collection management ─────────────────────────────────────────
 
   const switchCollection = useCallback(
@@ -933,6 +1065,42 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     };
   }, [index.collections, index.activeId]);
 
+  const exportAllCollections = useCallback((): ExportLibraryResult | null => {
+    if (index.collections.length === 0) return null;
+
+    // Flush any pending writes so the snapshot we read back from
+    // localStorage matches what the user sees on screen for every
+    // collection — including the active one, which may have unsaved
+    // edits in memory.
+    flushPending();
+
+    const bundles = index.collections.map((collection) => {
+      // Active collection: prefer in-memory state (most up-to-date,
+      // even ahead of localStorage in the rare case the flush above
+      // raced a state update). Inactive: read from disk.
+      if (collection.id === index.activeId) {
+        return {
+          name: collection.name,
+          papers: pinnedRef.current,
+          groups: groupsRef.current,
+        };
+      }
+      const loaded = loadCollection(collection.id);
+      return {
+        name: collection.name,
+        papers: loaded.papers,
+        groups: loaded.groups,
+      };
+    });
+
+    const payload = buildLibraryTransfer(bundles);
+    return {
+      filename: buildLibraryTransferFilename(),
+      contents: serializeLibraryTransfer(payload),
+      collectionCount: bundles.length,
+    };
+  }, [index.collections, index.activeId, flushPending]);
+
   const importCollection = useCallback(
     (collection: ImportedPinCollection): ImportCollectionResult => {
       if (index.collections.length >= MAX_COLLECTIONS) {
@@ -989,6 +1157,106 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     [index, flushPending],
   );
 
+  const importLibrary = useCallback(
+    (incoming: ImportedPinCollection[]): ImportLibraryResult => {
+      if (incoming.length === 0) return { status: 'empty' };
+
+      const available = MAX_COLLECTIONS - index.collections.length;
+      if (incoming.length > available) {
+        return {
+          status: 'cap-exceeded',
+          available,
+          required: incoming.length,
+        };
+      }
+
+      // Persist any in-flight edits to the currently-active collection
+      // before we redirect activeId — same precaution importCollection
+      // takes.
+      flushPending();
+
+      // Build collection records in one pass, deduping each name
+      // against the running list (existing + already-imported) so two
+      // entries called "Library" don't end up with the same display
+      // name. We assign timestamp-based ids; spacing them by the loop
+      // index keeps the ids unique even within a single millisecond.
+      const baseTime = Date.now();
+      const accumulating: Collection[] = [...index.collections];
+      const newRecords: Collection[] = [];
+      const writes: Array<{
+        id: string;
+        papers: Paper[];
+        groups: PinGroup[];
+      }> = [];
+
+      for (let i = 0; i < incoming.length; i++) {
+        const collection = incoming[i];
+        const id = `c-${baseTime}-${i}`;
+        const name = buildImportedCollectionName(collection.name, accumulating);
+
+        const papers = collection.papers.map((paper) => ({
+          ...paper,
+          id: normalizeId(paper.id),
+          title: cleanHtml(paper.title),
+        }));
+        const groups = collection.groups.map((group) => ({
+          ...group,
+          name: group.name.trim() || 'Untitled group',
+          paperIds: group.paperIds.map((paperId) => normalizeId(paperId)),
+        }));
+
+        const record: Collection = {
+          id,
+          name,
+          createdAt: baseTime,
+          updatedAt: baseTime,
+        };
+        accumulating.push(record);
+        newRecords.push(record);
+        writes.push({ id, papers, groups });
+      }
+
+      // Commit per-collection blobs first, then the index — that way a
+      // partial failure (e.g. quota exceeded mid-write) leaves the
+      // index pointing at fully-written collections rather than
+      // ghost ids.
+      for (const w of writes) {
+        writeJSON(collectionPapersKey(w.id), w.papers);
+        writeJSON(collectionGroupsKey(w.id), w.groups);
+      }
+
+      const firstNew = newRecords[0];
+      const next: CollectionsIndex = {
+        ...index,
+        activeId: firstNew.id,
+        collections: [...index.collections, ...newRecords],
+      };
+
+      persistIndex(next);
+      setIndex(next);
+
+      // Switch the in-memory state to the first imported collection
+      // so the user lands somewhere meaningful.
+      const firstWrite = writes[0];
+      setPinnedPapers(firstWrite.papers);
+      setGroups(firstWrite.groups);
+      setIsLoading(false);
+
+      const importedPaperCount = writes.reduce(
+        (sum, w) => sum + w.papers.length,
+        0,
+      );
+
+      return {
+        status: 'ok',
+        activeCollectionId: firstNew.id,
+        importedCollectionCount: newRecords.length,
+        importedPaperCount,
+      };
+    },
+    [index, flushPending],
+  );
+
   return (
     <PinContext.Provider
       value={{
@@ -1008,6 +1276,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         reorderGroups,
         getUngroupedPapers,
         getPapersInGroup,
+        updatePaperComment,
+        updatePaperKeywords,
         collections: index.collections,
         activeCollectionId: index.activeId,
         switchCollection,
@@ -1017,7 +1287,9 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         movePaperToCollection,
         collectionsAtCap: index.collections.length >= MAX_COLLECTIONS,
         exportActiveCollection,
+        exportAllCollections,
         importCollection,
+        importLibrary,
       }}
     >
       {children}

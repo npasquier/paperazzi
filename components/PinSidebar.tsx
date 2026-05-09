@@ -19,16 +19,16 @@ import {
   GripVertical,
   Plus,
   Download,
-  Upload,
+  AlertTriangle,
 } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
-import { STORAGE_KEYS } from '@/utils/storageKeys';
+import { STORAGE_KEYS, collectionPapersKey } from '@/utils/storageKeys';
 import { on } from '@/utils/eventBus';
 import {
   PIN_COLLECTION_TRANSFER_MIME,
-  readCollectionImportFile,
+  PIN_LIBRARY_TRANSFER_MIME,
 } from '@/utils/pinCollectionTransfer';
 
 // Warm, library-friendly palette for pin groups. The hues stay distinct, but
@@ -88,7 +88,7 @@ export default function PinSidebar({
     movePaperToCollection,
     collectionsAtCap,
     exportActiveCollection,
-    importCollection,
+    exportAllCollections,
   } = usePins();
 
   // Collection switcher (small popover at top of header). Three sub-states:
@@ -118,8 +118,23 @@ export default function PinSidebar({
   const collectionMenuButtonRef = useRef<HTMLButtonElement>(null);
   const newCollectionInputRef = useRef<HTMLInputElement>(null);
   const renameCollectionInputRef = useRef<HTMLInputElement>(null);
-  const importCollectionInputRef = useRef<HTMLInputElement>(null);
-  const [isImportingCollection, setIsImportingCollection] = useState(false);
+  // Tiny popover anchored to the export button — lets the user pick
+  // between exporting just the active collection (for sharing) or the
+  // whole library (for personal backup).
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportMenuButtonRef = useRef<HTMLButtonElement>(null);
+  // Confirmation modal for collection deletion. Replaces the native
+  // window.confirm() — same semantics (cancel / confirm), but rendered
+  // in-app so it matches the rest of the UI and can show richer
+  // context (count of pins about to be lost). null when no delete is
+  // pending.
+  const [collectionPendingDelete, setCollectionPendingDelete] = useState<{
+    id: string;
+    name: string;
+    pinCount: number;
+    isActive: boolean;
+  } | null>(null);
 
   const activeCollection = collections.find((c) => c.id === activeCollectionId);
 
@@ -161,6 +176,34 @@ export default function PinSidebar({
     };
   }, [collectionMenuOpen]);
 
+  // Close the export popover on outside click / Escape — same pattern
+  // as the collection switcher, just scoped to the smaller menu so the
+  // two popovers can coexist without leaking events into each other.
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        exportMenuRef.current &&
+        t &&
+        !exportMenuRef.current.contains(t) &&
+        exportMenuButtonRef.current &&
+        !exportMenuButtonRef.current.contains(t)
+      ) {
+        setExportMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExportMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [exportMenuOpen]);
+
   // Auto-focus the inline inputs when they appear.
   useEffect(() => {
     if (creatingCollection) newCollectionInputRef.current?.focus();
@@ -193,67 +236,109 @@ export default function PinSidebar({
     setEditingCollectionName('');
   };
 
+  // Counting pins for the about-to-delete collection: the active one
+  // is in memory, every other one needs a localStorage peek. Returns 0
+  // on any parse error — a missing count is better than blocking a
+  // delete the user already asked for.
+  const countPinsInCollection = (id: string): number => {
+    if (id === activeCollectionId) return pinnedPapers.length;
+    try {
+      const raw = localStorage.getItem(collectionPapersKey(id));
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      return 0;
+    }
+  };
+
   const handleDeleteCollection = (id: string, name: string) => {
-    // Confirm before nuking — collections can hold up to 30 pins each.
-    const ok = window.confirm(
-      `Delete collection "${name}"? This will remove ${
-        id === activeCollectionId ? 'the active' : 'this'
-      } library and all its pins. This can't be undone.`,
-    );
-    if (!ok) return;
+    // Open the in-app confirmation modal instead of window.confirm —
+    // matches the rest of the UI and gives us room to show the pin
+    // count that's about to be lost.
+    setCollectionPendingDelete({
+      id,
+      name,
+      pinCount: countPinsInCollection(id),
+      isActive: id === activeCollectionId,
+    });
+  };
+
+  const confirmDeleteCollection = () => {
+    if (!collectionPendingDelete) return;
+    const { id, name } = collectionPendingDelete;
     deleteCollection(id);
+    setCollectionPendingDelete(null);
+    setMoveFeedback(`Deleted "${name}"`);
+  };
+
+  // Escape closes the delete-confirmation modal. Click-outside is
+  // handled inline by the backdrop's onClick.
+  useEffect(() => {
+    if (!collectionPendingDelete) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCollectionPendingDelete(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [collectionPendingDelete]);
+
+  // Tiny helper — every export path shares this download trigger so
+  // the file/blob/click dance lives in one place.
+  const triggerDownload = (
+    contents: string,
+    filename: string,
+    mime: string,
+  ) => {
+    const blob = new Blob([contents], { type: mime });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
   };
 
   const handleExportCollection = () => {
     const exported = exportActiveCollection();
     if (!exported) {
       setMoveFeedback("Couldn't export that collection");
+      setExportMenuOpen(false);
       return;
     }
 
-    const blob = new Blob([exported.contents], {
-      type: PIN_COLLECTION_TRANSFER_MIME,
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = exported.filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+    triggerDownload(
+      exported.contents,
+      exported.filename,
+      PIN_COLLECTION_TRANSFER_MIME,
+    );
 
-    setCollectionMenuOpen(false);
+    setExportMenuOpen(false);
     setMoveFeedback(`Exported "${exported.name}"`);
   };
 
-  const handleImportCollectionFile = async (file: File) => {
-    setIsImportingCollection(true);
-    try {
-      const parsed = await readCollectionImportFile(file);
-      if (!parsed.ok) {
-        setMoveFeedback(parsed.error);
-        return;
-      }
-
-      const result = importCollection(parsed.data);
-      if (result.status === 'cap-reached') {
-        setMoveFeedback('Delete a collection before importing another one');
-        return;
-      }
-
-      setCollectionMenuOpen(false);
-      setCreatingCollection(false);
-      setNewCollectionName('');
-      setEditingCollectionId(null);
-      setEditingCollectionName('');
-      setMoveFeedback(`Imported "${result.name}"`);
-    } catch (err) {
-      console.error('[PinSidebar] import failed', err);
-      setMoveFeedback("Couldn't import that collection");
-    } finally {
-      setIsImportingCollection(false);
+  const handleExportAllCollections = () => {
+    const exported = exportAllCollections();
+    if (!exported) {
+      setMoveFeedback("Couldn't export your library");
+      setExportMenuOpen(false);
+      return;
     }
+
+    triggerDownload(
+      exported.contents,
+      exported.filename,
+      PIN_LIBRARY_TRANSFER_MIME,
+    );
+
+    setExportMenuOpen(false);
+    setMoveFeedback(
+      exported.collectionCount === 1
+        ? 'Exported your library (1 collection)'
+        : `Exported your library (${exported.collectionCount} collections)`,
+    );
   };
 
   // Resize state
@@ -1006,19 +1091,6 @@ export default function PinSidebar({
 
   return (
     <>
-      <input
-        ref={importCollectionInputRef}
-        type='file'
-        accept={`${PIN_COLLECTION_TRANSFER_MIME},application/json,.json`}
-        className='hidden'
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (!file) return;
-          await handleImportCollectionFile(file);
-        }}
-      />
-
       {/* Resizable Sidebar */}
       <aside
         className='surface-panel border-l border-app flex flex-col h-full overflow-hidden relative'
@@ -1036,6 +1108,34 @@ export default function PinSidebar({
 
         {/* Header */}
         <div className='px-4 pt-4 pb-3 border-b border-app flex-shrink-0 space-y-3'>
+          {/* "Pinned papers" sits at the top of the sidebar so the
+              section title is the first thing the user sees — feels
+              more natural than leading with the collection switcher.
+              The collection name lives in the pill just below, so the
+              user reads "Pinned papers / in <Collection>" top-down. */}
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <div className='flex items-center gap-2'>
+                <Pin size={13} className='text-stone-400' />
+                <span className='text-sm font-medium text-stone-700'>
+                  Pinned papers
+                </span>
+                {pinnedPapers.length > 0 && (
+                  <span className='text-xs text-stone-400'>
+                    ({pinnedPapers.length}/{MAX_PINS})
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onToggle}
+              className='p-1 text-stone-400 hover:text-stone-600 rounded transition'
+              title='Close'
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+
           {/* Collection switcher — shows the active library name as a
               clickable pill that opens a small menu. The menu lets the
               user pick another collection, create a new one, rename the
@@ -1184,35 +1284,35 @@ export default function PinSidebar({
                             >
                               {c.name}
                             </button>
-                            {/* Rename / delete only on the active row to
-                                keep the list visually calm; switching
-                                first then editing is one extra click but
-                                avoids accidental edits on hover. */}
-                            {isActive && (
-                              <>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingCollectionId(c.id);
-                                    setEditingCollectionName(c.name);
-                                  }}
-                                  className='p-1 text-stone-400 hover:text-stone-700 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition'
-                                  title='Rename collection'
-                                >
-                                  <Edit2 size={11} />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteCollection(c.id, c.name);
-                                  }}
-                                  className='p-1 text-stone-400 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition'
-                                  title='Delete collection'
-                                >
-                                  <Trash2 size={11} />
-                                </button>
-                              </>
-                            )}
+                            {/* Rename / delete are available on every
+                                row, not just the active one — there's
+                                no good reason to force the user to
+                                switch into a collection just to rename
+                                or remove it. e.stopPropagation on each
+                                button keeps the row's "switch on
+                                click" behaviour from firing
+                                underneath. */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingCollectionId(c.id);
+                                setEditingCollectionName(c.name);
+                              }}
+                              className='p-1 text-stone-400 hover:text-stone-700 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition'
+                              title='Rename collection'
+                            >
+                              <Edit2 size={11} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCollection(c.id, c.name);
+                              }}
+                              className='p-1 text-stone-400 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition'
+                              title='Delete collection'
+                            >
+                              <Trash2 size={11} />
+                            </button>
                           </div>
                         )}
                       </li>
@@ -1220,7 +1320,11 @@ export default function PinSidebar({
                   })}
                 </ul>
 
-                {/* Create-new row, sticky at the bottom of the menu. */}
+                {/* Create-new row, sticky at the bottom of the menu.
+                    Import lives globally (drag-and-drop a collection
+                    file anywhere on the page) and export sits in the
+                    sidebar header now, so this is the only secondary
+                    action that still belongs inside the menu. */}
                 <div className='border-t border-app px-2 py-1.5'>
                   {creatingCollection ? (
                     <div className='flex items-center gap-1'>
@@ -1273,35 +1377,6 @@ export default function PinSidebar({
                     </button>
                   )}
                 </div>
-
-                <div className='border-t border-app px-2 py-1.5 grid grid-cols-2 gap-1.5'>
-                  <button
-                    onClick={() => importCollectionInputRef.current?.click()}
-                    disabled={collectionsAtCap || isImportingCollection}
-                    className='inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-[11px] button-ghost disabled:opacity-50 disabled:cursor-not-allowed transition'
-                    title={
-                      collectionsAtCap
-                        ? 'Maximum collections reached'
-                        : 'Import a shared collection file'
-                    }
-                  >
-                    {isImportingCollection ? (
-                      <Loader2 size={12} className='animate-spin' />
-                    ) : (
-                      <Upload size={12} />
-                    )}
-                    Import file
-                  </button>
-
-                  <button
-                    onClick={handleExportCollection}
-                    className='inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-[11px] button-ghost transition'
-                    title='Export this collection to a shareable file'
-                  >
-                    <Download size={12} />
-                    Export file
-                  </button>
-                </div>
               </div>
             )}
           </div>
@@ -1320,47 +1395,88 @@ export default function PinSidebar({
             </div>
           )}
 
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <div className='flex items-center gap-2'>
-                <Pin size={13} className='text-stone-400' />
-                <span className='text-sm font-medium text-stone-700'>
-                  Pinned papers
-                </span>
-                {pinnedPapers.length > 0 && (
-                  <span className='text-xs text-stone-400'>
-                    ({pinnedPapers.length}/{MAX_PINS})
-                  </span>
-                )}
-              </div>
+          {/* Top action row. "Export" sits alongside Clear all and
+              New group rather than buried in the collection menu —
+              users export far more often than they switch collections,
+              so it deserves the visible spot. The popover offers two
+              destinations: just this collection (shareable) or the
+              whole library (personal backup). */}
+          <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
+            {pinnedPapers.length > 0 && (
+              <>
+                <button
+                  onClick={clearPins}
+                  className='text-stone-400 hover:text-stone-600 transition'
+                >
+                  Clear all
+                </button>
+                <button
+                  onClick={() => setShowNewGroupInput(true)}
+                  className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition'
+                  title='New group'
+                >
+                  <FolderPlus size={12} />
+                  New group
+                </button>
+              </>
+            )}
+            <div className='relative'>
+              <button
+                ref={exportMenuButtonRef}
+                onClick={() => setExportMenuOpen((v) => !v)}
+                disabled={collections.length === 0}
+                className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition disabled:text-stone-300 disabled:cursor-not-allowed'
+                title='Export collection or full library'
+                aria-haspopup='menu'
+                aria-expanded={exportMenuOpen}
+              >
+                <Download size={12} />
+                Export
+                <ChevronDown
+                  size={11}
+                  className={`transition-transform ${
+                    exportMenuOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {exportMenuOpen && (
+                <div
+                  ref={exportMenuRef}
+                  role='menu'
+                  aria-label='Export'
+                  className='absolute right-0 top-full mt-1 surface-panel border border-app rounded-md shadow-lg z-50 overflow-hidden min-w-[12rem]'
+                >
+                  <button
+                    onClick={handleExportCollection}
+                    disabled={pinnedPapers.length === 0}
+                    className='w-full text-left px-3 py-2 text-[11px] text-stone-700 hover:bg-[var(--surface-muted)] disabled:text-stone-300 disabled:cursor-not-allowed transition flex items-center gap-2'
+                    title={
+                      pinnedPapers.length === 0
+                        ? 'This collection is empty'
+                        : 'Export this collection to a shareable file'
+                    }
+                  >
+                    <Download size={12} className='flex-shrink-0' />
+                    <span className='flex-1 truncate'>
+                      {activeCollection?.name
+                        ? `This collection (${activeCollection.name})`
+                        : 'This collection'}
+                    </span>
+                  </button>
+                  <button
+                    onClick={handleExportAllCollections}
+                    className='w-full text-left px-3 py-2 text-[11px] text-stone-700 hover:bg-[var(--surface-muted)] transition flex items-center gap-2 border-t border-app'
+                    title='Export every collection as a single backup file'
+                  >
+                    <Library size={12} className='flex-shrink-0' />
+                    <span className='flex-1'>
+                      All collections ({collections.length})
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
-            <button
-              onClick={onToggle}
-              className='p-1 text-stone-400 hover:text-stone-600 rounded transition'
-              title='Close'
-            >
-              <ChevronRight size={14} />
-            </button>
           </div>
-
-          {pinnedPapers.length > 0 && (
-            <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
-              <button
-                onClick={clearPins}
-                className='text-stone-400 hover:text-stone-600 transition'
-              >
-                Clear all
-              </button>
-              <button
-                onClick={() => setShowNewGroupInput(true)}
-                className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition'
-                title='New group'
-              >
-                <FolderPlus size={12} />
-                New group
-              </button>
-            </div>
-          )}
 
           {selectionMode && pinnedPapers.length >= 2 && (
             <div className='flex items-center gap-3 text-[11px] text-stone-500'>
@@ -1512,6 +1628,82 @@ export default function PinSidebar({
           </div>
         )}
       </aside>
+
+      {/* Delete-collection confirmation modal. Rendered as a sibling
+          of the sidebar (not inside the menu) so it sits on top of
+          everything via z-index, and so it survives the menu closing
+          underneath it. Backdrop click + Escape both cancel; only
+          the explicit "Delete collection" button removes anything. */}
+      {collectionPendingDelete && (
+        <div
+          className='fixed inset-0 overlay-soft flex items-center justify-center z-[60]'
+          onClick={() => setCollectionPendingDelete(null)}
+          role='dialog'
+          aria-modal='true'
+          aria-labelledby='collection-delete-title'
+        >
+          <div
+            className='surface-card rounded-lg border border-app p-5 max-w-sm w-full mx-4 shadow-lg'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex items-start gap-3'>
+              <div className='flex-shrink-0 mt-0.5 text-danger'>
+                <AlertTriangle size={18} />
+              </div>
+              <div className='min-w-0 flex-1'>
+                <h3
+                  id='collection-delete-title'
+                  className='text-sm font-semibold text-stone-900'
+                >
+                  Delete collection?
+                </h3>
+                <p className='mt-1.5 text-xs text-stone-600'>
+                  &ldquo;
+                  <span className='font-medium text-stone-800'>
+                    {collectionPendingDelete.name}
+                  </span>
+                  &rdquo; will be removed
+                  {collectionPendingDelete.pinCount > 0 ? (
+                    <>
+                      {' '}along with its{' '}
+                      <span className='font-medium text-stone-800'>
+                        {collectionPendingDelete.pinCount}
+                      </span>{' '}
+                      pinned{' '}
+                      {collectionPendingDelete.pinCount === 1
+                        ? 'paper'
+                        : 'papers'}
+                    </>
+                  ) : null}
+                  . This can&rsquo;t be undone.
+                </p>
+                {collectionPendingDelete.isActive && (
+                  <p className='mt-2 text-[11px] text-stone-500'>
+                    This is your active collection — Paperazzi will switch
+                    you to another one afterwards.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className='mt-4 flex justify-end gap-2'>
+              <button
+                onClick={() => setCollectionPendingDelete(null)}
+                className='px-3 py-1.5 text-xs button-ghost rounded transition'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteCollection}
+                autoFocus
+                className='px-3 py-1.5 text-xs button-danger rounded transition'
+              >
+                Delete collection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
