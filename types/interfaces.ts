@@ -5,14 +5,79 @@ export interface Journal {
   name: string;
   issn: string;
   domain: string;
-  category: number;
+  /**
+   * Ranking tier — a free-form string key chosen by whichever RankingScheme
+   * is active. The built-in CNRS scheme uses '1' | '2' | '3' | '4'; an
+   * imported scheme might use 'Q1' | 'Q2' | 'A*' | 'A' | etc. Compared by
+   * exact string equality, so keys must round-trip identically.
+   */
+  tier: string;
 }
 
 export interface SelectedJournal {
   issn: string;
   name?: string;
   domain?: string;
-  category?: number;
+  tier?: string;
+}
+
+// ─── Ranking scheme ─────────────────────────────────────────────────
+//
+// A self-contained classification: the tier vocabulary, the domain
+// vocabulary, the journals, and any built-in preset shortcuts the
+// scheme wants to ship. The active scheme is either the baseline
+// (built-in CNRS) or a user-customised version stored in localStorage.
+//
+// The shape doubles as the import/export wire format — `version` is the
+// schema version, bump it when the shape changes (with a migration).
+
+/** A single tier in a ranking — e.g. {key: '1', label: 'Cat 1'} or {key: 'Q1'}. */
+export interface RankingTier {
+  /** Stable identifier — the value stored on each journal's `tier` field. */
+  key: string;
+  /** Optional human label; UI falls back to `key` when missing. */
+  label?: string;
+}
+
+/** A subject area / domain — e.g. {key: 'GEN', label: 'General'}. */
+export interface RankingDomain {
+  key: string;
+  label?: string;
+}
+
+/**
+ * Optional built-in shortcut preset shipped with a scheme. The CNRS
+ * baseline ships 'all' and 'top5gen'; imported schemes can ship their
+ * own equivalents (e.g. 'q1med' for medicine).
+ */
+export interface RankingPreset {
+  id: string;
+  name: string;
+  /** Tier whitelist; empty/omitted = no filter on tier. */
+  tiers?: string[];
+  /** Domain whitelist; empty/omitted = no filter on domain. */
+  domains?: string[];
+  /** Explicit ISSN whitelist; overrides tiers+domains when set. */
+  issns?: string[];
+}
+
+export interface RankingScheme {
+  /** Schema version. Increment when the wire format changes. */
+  version: 1;
+  /** Stable id — 'cnrs' for the baseline; user-chosen otherwise. */
+  id: string;
+  /** Display name — appears in the UI and on import. */
+  name: string;
+  /** Free-form description — origin, year, notes. */
+  description?: string;
+  /** Tier keys, in display order (top to bottom of ranking). */
+  tiers: RankingTier[];
+  /** Subject-area domains, in display order. */
+  domains: RankingDomain[];
+  /** Journal entries — every tier/domain reference must use a key from above. */
+  journals: Journal[];
+  /** Optional shortcut presets. */
+  presets?: RankingPreset[];
 }
 
 export interface SelectedAuthor {
@@ -70,10 +135,17 @@ export interface Filters {
   referencesAll?: string[];
   econFilter?: {
     enabled: boolean;
-    categories: number[]; // [1,2,3,4] — empty = all
-    domains: string[]; // ['GEN','OrgInd',...] — empty = all
-    presetId?: string | null; // id of an active built-in or saved preset, if any
-    issns?: string[]; // explicit ISSN whitelist (used for ISSN-based presets like Top 5)
+    /**
+     * Tier whitelist — keys from the active RankingScheme.tiers (e.g. ['1','2']
+     * for CNRS or ['Q1'] for a JCR-style scheme). Empty = no tier filter.
+     */
+    tiers: string[];
+    /** Domain whitelist — keys from the active RankingScheme.domains. Empty = no domain filter. */
+    domains: string[];
+    /** Id of an active built-in or saved preset, if any. */
+    presetId?: string | null;
+    /** Explicit ISSN whitelist (used for ISSN-based presets like Top 5). */
+    issns?: string[];
   };
   // Which journal-filter source feeds the API. Both subsections retain their
   // state when inactive; only the active one is sent to /api/search.

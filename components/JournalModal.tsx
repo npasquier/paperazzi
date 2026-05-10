@@ -1,9 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Modal from 'react-modal';
 import Select from 'react-select';
-import { loadJournals } from '@/utils/loadJournals';
-import domains from '../data/domains';
+import { useActiveRanking } from '@/utils/activeRanking';
 import { Journal, SelectedJournal } from '../types/interfaces';
 
 interface Props {
@@ -20,7 +19,7 @@ export default function JournalModal({
   onClose,
 }: Props) {
   const [domainFilter, setDomainFilter] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [tierFilter, setTierFilter] = useState<string | null>(null);
   const MAX_JOURNALS = 50;
 
   // Local state for pending selections (not yet applied)
@@ -37,32 +36,29 @@ export default function JournalModal({
   const isAtLimit = pendingJournals.length === MAX_JOURNALS;
   const canApply = pendingJournals.length <= MAX_JOURNALS;
 
-  // Lazy-load the full journal dataset (~5k entries). The fetch is shared
-  // across all callers via the loader's promise cache, so opening this
-  // modal more than once costs at most one network/parse pass total.
-  const [journals, setJournals] = useState<readonly Journal[]>([]);
-  useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
-    loadJournals().then((list) => {
-      if (!cancelled) setJournals(list);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen]);
+  // Read journals + tier/domain catalogue from the active ranking scheme
+  // — handles both the built-in CNRS baseline and any imported scheme
+  // (medicine, JCR, etc.) without per-call branching.
+  const activeRanking = useActiveRanking();
+  const journals: readonly Journal[] = activeRanking?.journals ?? [];
+  const schemeDomains = activeRanking?.domains ?? [];
+  const schemeTiers = activeRanking?.tiers ?? [];
 
-  // Filter journals according to domain and category
+  // Filter journals according to domain and tier
   const filteredJournals = journals.filter(
     (j) =>
       (!domainFilter || j.domain === domainFilter) &&
-      (!categoryFilter || j.category === categoryFilter)
+      (!tierFilter || j.tier === tierFilter)
   );
 
-  const options = filteredJournals.map((j) => ({
-    value: j.issn,
-    label: `${j.name} [${j.domain}, Rank ${j.category}]`,
-  }));
+  const options = filteredJournals.map((j) => {
+    const tierLabel =
+      schemeTiers.find((t) => t.key === j.tier)?.label || j.tier;
+    return {
+      value: j.issn,
+      label: `${j.name} [${j.domain}, ${tierLabel}]`,
+    };
+  });
 
   // Select all filtered journals
   const handleSelectAllFiltered = () => {
@@ -74,7 +70,7 @@ export default function JournalModal({
           issn: j.issn,
           name: j.name,
           domain: j.domain,
-          category: j.category,
+          tier: j.tier,
         })),
     ];
     setPendingJournals(merged);
@@ -98,7 +94,7 @@ export default function JournalModal({
       onApply(pendingJournals);
       onClose();
       setDomainFilter('');
-      setCategoryFilter(null);
+      setTierFilter(null);
     }
   };
 
@@ -106,7 +102,7 @@ export default function JournalModal({
     setPendingJournals(selectedJournals); // Reset to original
     onClose();
     setDomainFilter('');
-    setCategoryFilter(null);
+    setTierFilter(null);
   };
 
   if (!isOpen) return null;
@@ -169,7 +165,9 @@ export default function JournalModal({
                         {journal.name}
                       </div>
                       <div className='text-xs text-stone-500 mt-0.5'>
-                        {journal.domain} • Rank {journal.category}
+                        {journal.domain} •{' '}
+                        {schemeTiers.find((t) => t.key === journal.tier)
+                          ?.label || journal.tier}
                       </div>
                     </div>
                     <button
@@ -210,19 +208,22 @@ export default function JournalModal({
         <div className='w-3/5 flex flex-col'>
           <h3 className='font-medium text-stone-900 mb-2'>Add Journals</h3>
 
-          {/* Domain & Category filters */}
+          {/* Domain & Tier filters — options derived from the active
+              RankingScheme so an imported scheme contributes its own
+              vocabulary (e.g. medical specialties + Q1..Q4). */}
           <div className='flex gap-2 mb-3'>
             <Select
-              options={domains.map((d) => ({
-                value: d.value,
-                label: d.translation || d.value,
+              options={schemeDomains.map((d) => ({
+                value: d.key,
+                label: d.label || d.key,
               }))}
               value={
                 domainFilter
                   ? {
                       value: domainFilter,
-                      label: domains.find((d) => d.value === domainFilter)
-                        ?.translation,
+                      label:
+                        schemeDomains.find((d) => d.key === domainFilter)
+                          ?.label || domainFilter,
                     }
                   : null
               }
@@ -242,18 +243,23 @@ export default function JournalModal({
               }}
             />
             <Select
-              options={[1, 2, 3, 4].map((c) => ({
-                value: c,
-                label: `Rank ${c}`,
+              options={schemeTiers.map((t) => ({
+                value: t.key,
+                label: t.label || t.key,
               }))}
               value={
-                categoryFilter
-                  ? { value: categoryFilter, label: `Rank ${categoryFilter}` }
+                tierFilter
+                  ? {
+                      value: tierFilter,
+                      label:
+                        schemeTiers.find((t) => t.key === tierFilter)?.label ||
+                        tierFilter,
+                    }
                   : null
               }
-              onChange={(opt) => setCategoryFilter(opt?.value || null)}
+              onChange={(opt) => setTierFilter(opt?.value || null)}
               isClearable
-              placeholder='Filter by rank...'
+              placeholder='Filter by tier...'
               className='flex-1'
               menuPortalTarget={document.body}
               styles={{
@@ -293,7 +299,7 @@ export default function JournalModal({
                     issn: j.issn,
                     name: j.name,
                     domain: j.domain,
-                    category: j.category,
+                    tier: j.tier,
                   }));
                 handleAddJournals(newJournals);
               }

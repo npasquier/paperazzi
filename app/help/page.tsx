@@ -7,6 +7,7 @@ import {
   Database,
   Lightbulb,
   Library,
+  ListOrdered,
   StickyNote,
   Tag,
   Download,
@@ -191,6 +192,205 @@ export default function HelpPage() {
                 Both live in your browser&apos;s localStorage. Inspect or erase
                 them via the database icon in the navbar.
               </p>
+            </div>
+          </section>
+
+          {/* Rankings & journal classifications */}
+          <section id='rankings'>
+            <div className='flex items-center gap-2 mb-4'>
+              <ListOrdered size={18} className='text-stone-400' />
+              <h2 className='text-sm font-semibold text-stone-900 uppercase tracking-wide'>
+                Rankings & journal classifications
+              </h2>
+            </div>
+            <div className='pl-6 border-l-2 border-app space-y-5'>
+              <div>
+                <p className='text-sm text-stone-700 leading-relaxed'>
+                  The Wide journal filter (tier pills + domain pills) and the
+                  manual journal picker both read from the active{' '}
+                  <strong>ranking scheme</strong> — the catalogue that says
+                  which journals exist, what tier each is in, and which domain
+                  it belongs to. Out of the box Paperazzi ships with the{' '}
+                  <strong>CNRS Économie</strong> classification (tiers 1–4,
+                  domains GEN / OrgInd / …). You can edit it, replace it with a
+                  different ranking (HCERES, CNU, JCR, a medical ranking, …),
+                  or reset back to the default at any time. Manage all of this
+                  on the <strong>/rankings</strong> page (
+                  <ListOrdered
+                    size={12}
+                    className='inline-block -mt-0.5 text-stone-500'
+                  />{' '}
+                  icon in the navbar).
+                </p>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2'>
+                  Editing the built-in ranking
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed'>
+                  The baseline CNRS scheme is read-only. Click{' '}
+                  <strong>Fork to edit</strong> at the top of the page to
+                  create a personal copy in your browser — that copy becomes
+                  the active scheme. From there you can rename tiers (key +
+                  optional label), add or rename domains, and edit per-journal
+                  tier/domain assignments. Renaming a tier or domain cascades
+                  to every journal that uses it. Deleting a non-empty tier or
+                  domain prompts a confirmation and wipes its journals along
+                  with it. <strong>Reset to default</strong> discards your
+                  copy and brings back the built-in baseline.
+                </p>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2 inline-flex items-center gap-1.5'>
+                  <Upload size={14} className='text-stone-500' />
+                  Importing your own ranking (HCERES, CNU, …)
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed mb-2'>
+                  Drag a ranking JSON file onto the dropzone at the top of the
+                  /rankings page. The importer validates the file, shows a
+                  confirmation modal with a summary (number of journals,
+                  tiers, domains), and on accept replaces the active scheme.
+                  Reset is always available to go back to the built-in CNRS.
+                </p>
+                <p className='text-sm text-stone-700 leading-relaxed'>
+                  Every ranking is <strong>self-contained</strong>: the JSON
+                  declares its own tiers, domains, and journals. There is no
+                  cross-ranking inheritance — if your file uses CNRS-style
+                  domains (GEN, OrgInd, …), they have to appear in the file
+                  itself. A small (~5 MB) file size cap protects against
+                  pasted accidents.
+                </p>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2'>
+                  JSON shape
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed mb-3'>
+                  A ranking scheme is a plain JSON object with the fields
+                  below. Required fields are marked <strong>·</strong> .
+                </p>
+                <pre className='surface-muted border border-app rounded-lg p-3 text-[11px] leading-relaxed overflow-x-auto font-mono'>
+{`{
+  "version": 1,                       · schema version, always 1 for now
+  "id": "hceres-2021",                · stable id (free-form string)
+  "name": "HCERES 2021",              · display name shown in the navbar/editor
+  "description": "Optional notes",
+  "tiers": [                          · list of tier definitions
+    { "key": "A",  "label": "Cat A" },
+    { "key": "B",  "label": "Cat B" },
+    { "key": "C",  "label": "Cat C" }
+  ],
+  "domains": [                        · list of subject-area definitions
+    { "key": "GEN",    "label": "General" },
+    { "key": "Macro",  "label": "Macroeconomics" }
+  ],
+  "journals": [                       · the entries themselves
+    {
+      "issn":   "0002-8282",          · used everywhere as primary key
+      "name":   "American Economic Review",
+      "tier":   "A",                  · must match one of tiers[].key
+      "domain": "GEN"                 · must match one of domains[].key
+    }
+  ],
+  "presets": [                        · optional shortcut buttons (Top 5, …)
+    { "id": "all",    "name": "All" },
+    { "id": "a-only", "name": "A only", "tiers": ["A"] },
+    {
+      "id": "top5",
+      "name": "Top 5",
+      "issns": ["0002-8282", "0012-9682", "..."]
+    }
+  ]
+}`}
+                </pre>
+                <ul className='list-disc pl-5 space-y-1 text-sm text-stone-600 leading-relaxed mt-3'>
+                  <li>
+                    <strong>Tier keys</strong> are arbitrary strings —{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;1&quot;
+                    </code>{' '}
+                    /{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;2&quot;
+                    </code>{' '}
+                    for CNRS,{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;A&quot;
+                    </code>{' '}
+                    /{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;B&quot;
+                    </code>{' '}
+                    /{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;C&quot;
+                    </code>{' '}
+                    for HCERES / CNU,{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;Q1&quot;
+                    </code>{' '}
+                    /{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      &quot;Q2&quot;
+                    </code>{' '}
+                    for quartile-style rankings. They get displayed as-is on
+                    the filter pills.
+                  </li>
+                  <li>
+                    <strong>Labels are optional</strong> on tiers and domains;
+                    the editor falls back to the key when no label is given.
+                  </li>
+                  <li>
+                    <strong>Every journal&apos;s</strong>{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      tier
+                    </code>{' '}
+                    and{' '}
+                    <code className='px-1 surface-muted rounded text-[11px] font-mono'>
+                      domain
+                    </code>{' '}
+                    must reference a key declared above. The importer accepts
+                    journals with unknown keys, but the filter UI will show
+                    them as <em>(unknown)</em> until you fix the scheme.
+                  </li>
+                  <li>
+                    <strong>Presets</strong> are optional shortcuts that show
+                    up as buttons in the Wide filter. Each is either a
+                    tier/domain combo or an explicit ISSN whitelist (used for
+                    things like &quot;Top 5&quot;).
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className='text-sm font-medium text-stone-900 mb-2 inline-flex items-center gap-1.5'>
+                  <Download size={14} className='text-stone-500' />
+                  Exporting
+                </h3>
+                <p className='text-sm text-stone-700 leading-relaxed'>
+                  Click <strong>Export</strong> on the /rankings header to
+                  download the active scheme as JSON. Useful as a backup, as
+                  a template to share with a colleague, or as a starting
+                  point for editing in a text editor before re-importing.
+                </p>
+              </div>
+
+              <div>
+                <p className='text-xs text-stone-500 leading-relaxed'>
+                  Everything ranking-related lives in your browser&apos;s
+                  localStorage — nothing is sent to a server. Switching
+                  browsers or devices means starting from the built-in CNRS
+                  again, unless you export your customised scheme and import
+                  it on the other device. The search backend stays
+                  ranking-agnostic: your client resolves tier/domain
+                  selections to ISSNs locally and only sends the ISSN list to
+                  the API, so a customised or imported scheme takes effect
+                  immediately.
+                </p>
+              </div>
             </div>
           </section>
 

@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Sparkles, X, Info, Flag } from 'lucide-react';
+import { Search, Database, Sparkles, X, Info, Flag, ListOrdered } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
+import ContributeModal from './ContributeModal';
 import SearchSyntaxHelp from './SearchSyntaxHelp';
 import {
   extractMentions,
@@ -57,6 +58,10 @@ function NavBarContent() {
   const [econActive, setEconActive] = useState(false);
   // Storage viewer modal
   const [showStorage, setShowStorage] = useState(false);
+  // Contribute-to-OpenAlex call-to-action modal (triggered by the Flag
+  // icon). A modal is more engaging than a deep link to /help#contribute:
+  // the user gets one click from "I noticed an error" to filling the form.
+  const [showContribute, setShowContribute] = useState(false);
 
   // ── @author / #journal autocomplete ─────────────────────────────────
   // Suggestions for the trailing @partial or #partial token. Open only
@@ -832,15 +837,30 @@ function NavBarContent() {
 
         {/* Improve OpenAlex — small persistent CTA so contributing
             data corrections is reachable from any page, not just the
-            paper card or the Help / About pages. Routes to the
-            dedicated Help section anchor. */}
-        <Link
-          href='/help#contribute'
+            paper card or the Help / About pages. Opens the contribute
+            modal (one-click pitch + correction-form buttons) rather
+            than scrolling the user through the Help page. */}
+        <button
+          type='button'
+          onClick={() => setShowContribute(true)}
           className='hidden md:inline-flex items-center gap-1 text-sm text-app-muted hover:text-app transition flex-shrink-0'
           title='Contribute data corrections to OpenAlex'
+          aria-label='Contribute data corrections to OpenAlex'
         >
           <Flag size={18} />
-          
+        </button>
+
+        {/* Rankings editor — single source of truth for the journal
+            classification. Users can fork the built-in CNRS scheme,
+            edit tiers/domains/journals, or import a JSON for a different
+            field (medicine, JCR, etc.). */}
+        <Link
+          href='/rankings'
+          className='text-app-soft hover:text-app transition flex-shrink-0 p-1'
+          title='Manage the journal ranking scheme'
+          aria-label='Manage the journal ranking scheme'
+        >
+          <ListOrdered size={18} />
         </Link>
 
         {/* Help link - always visible */}
@@ -865,6 +885,10 @@ function NavBarContent() {
       <StorageModal
         isOpen={showStorage}
         onClose={() => setShowStorage(false)}
+      />
+      <ContributeModal
+        isOpen={showContribute}
+        onClose={() => setShowContribute(false)}
       />
     </nav>
   );

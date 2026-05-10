@@ -15,11 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { makeKeyPicker } from './lib/keys';
-import {
-  ISSN_BATCH_SIZE,
-  batchISSNs,
-  getEconISSNs,
-} from './lib/searches';
+import { ISSN_BATCH_SIZE, batchISSNs } from './lib/searches';
 import { handleReferencedBy } from './handlers/referencedBy';
 import { handleReferencesAll } from './handlers/referencesAll';
 import { handleCitingAll } from './handlers/citingAll';
@@ -74,17 +70,11 @@ export async function GET(req: NextRequest) {
   // path.
   const semantic = searchParams.get('semantic') === 'true';
 
-  // Econ filter
+  // Econ filter — the wide-mode whitelist of allowed ISSNs. The client is
+  // responsible for resolving whatever it has (tiers + domains, an
+  // ISSN-based preset like Top 5, etc.) into this final ISSN list using
+  // the user's active RankingScheme. The server stays scheme-agnostic.
   const econEnabled = searchParams.get('econEnabled') === 'true';
-  const econCat = (searchParams.get('econCat') || '')
-    .split(',')
-    .filter(Boolean)
-    .map(Number);
-  const econDom = (searchParams.get('econDom') || '')
-    .split(',')
-    .filter(Boolean);
-  // Explicit ISSN whitelist (used by ISSN-based presets like Top 5).
-  // When provided, overrides econCat/econDom server-side.
   const econIssns = (searchParams.get('econIssns') || '')
     .split(',')
     .filter(Boolean);
@@ -102,18 +92,18 @@ export async function GET(req: NextRequest) {
   // Decide whether the wide econ filter applies for this request.
   // Manual journals (filterParams.journals) override the wide filter when
   // non-empty, so we only build issnBatches when there are no manual
-  // journals.
+  // journals AND the client sent an ISSN whitelist.
   let issnBatches: string[][] | null = null;
-  if (econEnabled && filterParams.journals.length === 0) {
-    const issns =
-      econIssns.length > 0 ? econIssns : getEconISSNs(econCat, econDom);
-    if (issns.length > 0) {
-      // Small ISSN sets fit in a single OpenAlex filter — skip the
-      // batched count/walk machinery and let the caller use the regular
-      // filter path.
-      issnBatches =
-        issns.length <= ISSN_BATCH_SIZE ? [issns] : batchISSNs(issns);
-    }
+  if (
+    econEnabled &&
+    filterParams.journals.length === 0 &&
+    econIssns.length > 0
+  ) {
+    // Small ISSN sets fit in a single OpenAlex filter — skip the
+    // batched count/walk machinery and let the caller use the regular
+    // filter path.
+    issnBatches =
+      econIssns.length <= ISSN_BATCH_SIZE ? [econIssns] : batchISSNs(econIssns);
   }
 
   const ctx: SearchContext = {

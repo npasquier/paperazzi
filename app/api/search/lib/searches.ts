@@ -15,8 +15,12 @@
 //
 // Both are pure async functions — they don't read process.env or any
 // module-level state. The `getKey` picker is threaded in.
+//
+// NB: this module no longer imports the journal dataset. Tier/domain
+// resolution moved client-side (see `utils/activeRanking.ts`) so users
+// who customise the ranking get their custom scheme applied — the server
+// only ever receives a fully-resolved ISSN list via `econIssns`.
 
-import econJournalList from '@/data/journals';
 import type {
   OpenAlexWork,
   OpenAlexResultsPage,
@@ -24,13 +28,6 @@ import type {
 import { fetchOpenAlex } from './fetch';
 import type { KeyPicker } from './keys';
 import { buildFilters, buildSort, normalizeId, toFullId } from './format';
-
-interface JournalRow {
-  name: string;
-  issn: string;
-  domain: string;
-  category: number;
-}
 
 // ────────────────────────────────────────────────────────────────────
 // ISSN batching
@@ -45,21 +42,6 @@ export function batchISSNs(issns: string[]): string[][] {
     batches.push(issns.slice(i, i + ISSN_BATCH_SIZE));
   }
   return batches;
-}
-
-/** Build the ECON-whitelist ISSN list from category/domain selections. */
-export function getEconISSNs(
-  categories: number[],
-  domains: string[],
-): string[] {
-  let filtered = econJournalList as JournalRow[];
-  if (categories.length > 0) {
-    filtered = filtered.filter((j) => categories.includes(j.category));
-  }
-  if (domains.length > 0) {
-    filtered = filtered.filter((j) => domains.includes(j.domain));
-  }
-  return filtered.map((j) => j.issn);
 }
 
 // ────────────────────────────────────────────────────────────────────

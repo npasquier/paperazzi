@@ -18,7 +18,7 @@ const JournalModal = dynamic(() => import('./JournalModal'), {
   ssr: false,
 });
 import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
-import { ECON_PRESETS } from '@/data/econDomains';
+import { loadActiveRanking } from '@/utils/activeRanking';
 import mapIssnsToJournals from '@/utils/issnToJournals';
 import { usePersistedBoolean } from '@/utils/usePersistedBoolean';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
@@ -75,7 +75,7 @@ function PaperazziAppContent() {
     referencesAll: undefined,
     econFilter: {
       enabled: false,
-      categories: [],
+      tiers: [],
       domains: [],
       presetId: null,
     },
@@ -98,7 +98,7 @@ function PaperazziAppContent() {
     referencesAll: undefined,
     econFilter: {
       enabled: false,
-      categories: [],
+      tiers: [],
       domains: [],
       presetId: null,
     },
@@ -130,7 +130,7 @@ function PaperazziAppContent() {
         ...prev,
         econFilter: {
           enabled: false,
-          categories: [],
+          tiers: [],
           domains: [],
           presetId: null,
           issns: undefined,
@@ -477,7 +477,7 @@ function PaperazziAppContent() {
     }
   };
 
-  const handlePresetTile = (preset: PresetTileId) => {
+  const handlePresetTile = async (preset: PresetTileId) => {
     if (preset === 'demo-network') {
       // Famous econ paper — Acemoglu, Johnson & Robinson (2001),
       // "The Colonial Origins of Comparative Development" in AER.
@@ -487,16 +487,22 @@ function PaperazziAppContent() {
     }
 
     if (preset === 'climate-top5') {
-      const top5 = ECON_PRESETS.find((p) => p.id === 'top5gen');
+      // Look up the Top 5 preset from the user's active ranking scheme —
+      // the built-in CNRS scheme ships with `top5gen`, but a user who's
+      // imported a different ranking (e.g. medicine) might not have it.
+      // Fall back to a bare wide-filter activation in that case so the
+      // tile still does *something* meaningful.
+      const scheme = await loadActiveRanking();
+      const top5 = scheme.presets?.find((p) => p.id === 'top5gen');
       setFilters((prev) => ({
         ...prev,
         journals: [],
         journalFilterMode: 'wide',
         econFilter: {
           enabled: true,
-          categories: top5 ? [...top5.categories] : [],
-          domains: top5 ? [...top5.domains] : [],
-          presetId: 'top5gen',
+          tiers: top5?.tiers ? [...top5.tiers] : [],
+          domains: top5?.domains ? [...top5.domains] : [],
+          presetId: top5 ? 'top5gen' : null,
           issns: top5?.issns ? [...top5.issns] : undefined,
         },
       }));
@@ -517,7 +523,7 @@ function PaperazziAppContent() {
         econFilter: {
           ...(prev.econFilter || {
             enabled: false,
-            categories: [],
+            tiers: [],
             domains: [],
             presetId: null,
           }),

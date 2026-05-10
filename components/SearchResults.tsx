@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
@@ -10,6 +10,10 @@ import { reportedAuthorKey } from '@/utils/storageKeys';
 import { cachedFetch } from '@/utils/searchCache';
 import { emit, on } from '@/utils/eventBus';
 import { AUTHOR_CORRECTION_FORM_URL } from '@/utils/correctionForms';
+import {
+  resolveIssns,
+  useActiveRanking,
+} from '@/utils/activeRanking';
 import {
   X,
   Quote,
@@ -49,7 +53,7 @@ interface Props {
   referencesAll?: string[];
   econFilter?: {
     enabled: boolean;
-    categories: number[];
+    tiers: string[];
     domains: string[];
     presetId?: string | null;
     issns?: string[];
@@ -156,6 +160,30 @@ export default function SearchResults({
   const [hasAuthorReported, setHasAuthorReported] = useState(false);
 
   const isEconActive = econFilter?.enabled ?? false;
+
+  // Resolve the wide-mode econ filter against the user's active ranking
+  // scheme, on the client. The server stays scheme-agnostic — it only
+  // ever sees the final `econIssns` list. When the user has an explicit
+  // ISSN whitelist (e.g. Top 5 preset), we use that directly. Otherwise
+  // we expand (tiers, domains) → ISSNs against the active scheme.
+  //
+  // Returns `null` while the scheme is still loading on first paint, OR
+  // when the wide filter isn't engaged. The fetch effect treats `null`
+  // as "don't push wide-mode params" (vs. an empty array, which means
+  // "scheme matches no journals — short-circuit").
+  const activeRanking = useActiveRanking();
+  const econResolvedIssns: string[] | null = useMemo(() => {
+    if (!econFilter?.enabled) return null;
+    if (econFilter.issns && econFilter.issns.length > 0) {
+      return [...econFilter.issns];
+    }
+    if (!activeRanking) return null;
+    return resolveIssns(
+      activeRanking,
+      econFilter.tiers,
+      econFilter.domains,
+    );
+  }, [activeRanking, econFilter]);
 
   // Progressive loading messages
   useEffect(() => {
@@ -425,15 +453,18 @@ export default function SearchResults({
         if (referencesAll?.length)
           params.set('referencesAll', referencesAll.join(','));
 
-        // Econ filter params (only when wide mode is active)
-        if (journalFilterMode === 'wide' && econFilter?.enabled) {
+        // Econ filter params (only when wide mode is active). The server
+        // is scheme-agnostic — we resolve tiers/domains to ISSNs locally
+        // using the active RankingScheme and send only `econIssns`. The
+        // resolution is memoised in `econResolvedIssns` above.
+        if (
+          journalFilterMode === 'wide' &&
+          econFilter?.enabled &&
+          econResolvedIssns !== null
+        ) {
           params.set('econEnabled', 'true');
-          if (econFilter.categories.length)
-            params.set('econCat', econFilter.categories.join(','));
-          if (econFilter.domains.length)
-            params.set('econDom', econFilter.domains.join(','));
-          if (econFilter.issns?.length)
-            params.set('econIssns', econFilter.issns.join(','));
+          if (econResolvedIssns.length > 0)
+            params.set('econIssns', econResolvedIssns.join(','));
         }
 
         // Semantic mode — server uses search.semantic= and caps at 50 results.
@@ -484,6 +515,7 @@ export default function SearchResults({
     referencedBy,
     referencesAll,
     econFilter,
+    econResolvedIssns,
     journalFilterMode,
     networkId,
     semantic,
@@ -518,14 +550,14 @@ export default function SearchResults({
       if (journalFilterMode === 'specific' && journals.length) {
         p.set('journals', journals.map((j) => j.issn).join(','));
       }
-      if (journalFilterMode === 'wide' && econFilter?.enabled) {
+      if (
+        journalFilterMode === 'wide' &&
+        econFilter?.enabled &&
+        econResolvedIssns !== null
+      ) {
         p.set('econEnabled', 'true');
-        if (econFilter.categories.length)
-          p.set('econCat', econFilter.categories.join(','));
-        if (econFilter.domains.length)
-          p.set('econDom', econFilter.domains.join(','));
-        if (econFilter.issns?.length)
-          p.set('econIssns', econFilter.issns.join(','));
+        if (econResolvedIssns.length > 0)
+          p.set('econIssns', econResolvedIssns.join(','));
       }
       return p;
     };
@@ -607,7 +639,7 @@ export default function SearchResults({
     return () => {
       aborted = true;
     };
-  }, [networkId, journalFilterMode, econFilter, journals]);
+  }, [networkId, journalFilterMode, econFilter, econResolvedIssns, journals]);
 
   // Author helpers
   const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
@@ -798,15 +830,15 @@ export default function SearchResults({
                     else if (econFilter.issns?.length) {
                       label = `whitelist of ${econFilter.issns.length} journals`;
                     } else {
-                      const cats = econFilter.categories.length
-                        ? `cats ${econFilter.categories.join(',')}`
-                        : 'all cats';
+                      const tiers = econFilter.tiers.length
+                        ? `tiers ${econFilter.tiers.join(',')}`
+                        : 'all tiers';
                       const doms = econFilter.domains.length
                         ? `${econFilter.domains.length} domain${
                             econFilter.domains.length === 1 ? '' : 's'
                           }`
                         : 'all domains';
-                      label = `${cats} · ${doms}`;
+                      label = `${tiers} · ${doms}`;
                     }
                     return (
                       <p className='text-[11px] text-warning mt-1.5'>

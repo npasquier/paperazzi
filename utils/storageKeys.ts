@@ -18,6 +18,9 @@ export const STORAGE_KEYS = {
   filterPresets: 'filterPresets',
   // Saved journal-filter presets (Wide / Specific selections).
   journalPresets: 'journal-filter-presets',
+  // User-customised RankingScheme. Absent → use the built-in CNRS baseline.
+  // Holds the entire scheme as JSON (tiers, domains, journals, presets).
+  rankingScheme: 'paperazzi:rankingScheme',
   // Legacy pin-context keys. Kept here only so the migration step in
   // PinContext can find and clean them up; new code reads/writes the
   // per-collection keys built by `collectionPapersKey` / `collectionGroupsKey`.

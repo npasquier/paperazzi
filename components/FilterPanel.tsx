@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Filters, JournalFilterPreset } from '../types/interfaces';
 import {
   ChevronLeft,
@@ -12,12 +12,11 @@ import {
   Bookmark,
 } from 'lucide-react';
 
+import { countIssns, useActiveRanking } from '@/utils/activeRanking';
 import {
-  ECON_DOMAINS,
-  ECON_CATEGORIES,
-  ECON_PRESETS,
-} from '@/data/econDomains';
-import { countEconJournals } from '@/utils/loadJournals';
+  migrateFilters,
+  migrateJournalFilterPreset,
+} from '@/utils/migrateFilters';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
 
 export interface FilterPreset {
@@ -64,13 +63,33 @@ export default function FilterPanel({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['journals']),
   );
-  // Load presets from localStorage on mount
+  // Load presets from localStorage on mount. Both reads go through
+  // `migrate*` helpers so legacy entries (Journal.category: number,
+  // econFilter.categories: number[]) are coerced to the new tier-string
+  // shape — saved presets survive the schema migration.
   const [presets, setPresets] = useState<FilterPreset[]>(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return [];
+    try {
       const saved = localStorage.getItem(STORAGE_KEYS.filterPresets);
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed: unknown = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+      return (parsed as unknown[])
+        .map((p): FilterPreset | null => {
+          if (!p || typeof p !== 'object') return null;
+          const o = p as Record<string, unknown>;
+          if (typeof o.id !== 'string' || typeof o.name !== 'string') return null;
+          return {
+            id: o.id,
+            name: o.name,
+            query: typeof o.query === 'string' ? o.query : '',
+            filters: migrateFilters(o.filters),
+          };
+        })
+        .filter((p): p is FilterPreset => p !== null);
+    } catch {
+      return [];
     }
-    return [];
   });
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [presetName, setPresetName] = useState('');
@@ -79,11 +98,18 @@ export default function FilterPanel({
   // ── Saved journal filters (Wide + Manual snapshot) ───────────────────
   const [journalPresets, setJournalPresets] = useState<JournalFilterPreset[]>(
     () => {
-      if (typeof window !== 'undefined') {
+      if (typeof window === 'undefined') return [];
+      try {
         const saved = localStorage.getItem(STORAGE_KEYS.journalPresets);
-        return saved ? JSON.parse(saved) : [];
+        if (!saved) return [];
+        const parsed: unknown = JSON.parse(saved);
+        if (!Array.isArray(parsed)) return [];
+        return (parsed as unknown[])
+          .map((p) => migrateJournalFilterPreset(p))
+          .filter((p): p is JournalFilterPreset => p !== null);
+      } catch {
+        return [];
       }
-      return [];
     },
   );
   const [showSaveJournalModal, setShowSaveJournalModal] = useState(false);
@@ -92,28 +118,24 @@ export default function FilterPanel({
     string | null
   >(null);
 
-  // Live count of journals matching the current econ filter — backed by
-  // an async data fetch (`utils/loadJournals`) so the 5k-line journal
-  // dataset doesn't ship in the initial bundle. Recomputes whenever the
-  // econFilter object changes; cancellation guard keeps stale results
-  // from clobbering a fresher computation when the user toggles filter
-  // pills quickly. Declared up here (above any early returns) so it
-  // satisfies React's rules-of-hooks ordering.
-  const [econJournalCount, setEconJournalCount] = useState(0);
-  useEffect(() => {
+  // Active ranking scheme — drives the tier/domain pill rows + journal
+  // count. Hook returns null on first paint (the dataset chunk-loads),
+  // then re-renders once it resolves. Tiers/domains/presets are read
+  // straight from the scheme so an imported scheme (medicine, JCR, etc.)
+  // automatically replaces the CNRS pills.
+  const activeRanking = useActiveRanking();
+  const schemeTiers = activeRanking?.tiers ?? [];
+  const schemeDomains = activeRanking?.domains ?? [];
+  const schemePresets = activeRanking?.presets ?? [];
+
+  // Live count of journals matching the current econ filter — derived
+  // synchronously from the active scheme. No data fetch involved here:
+  // the scheme is already in memory by the time this component rerenders.
+  const econJournalCount = useMemo(() => {
     const econ = filters.econFilter;
-    if (!econ?.enabled) {
-      setEconJournalCount(0);
-      return;
-    }
-    let cancelled = false;
-    countEconJournals(econ.categories, econ.domains).then((n) => {
-      if (!cancelled) setEconJournalCount(n);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [filters.econFilter]);
+    if (!econ?.enabled || !activeRanking) return 0;
+    return countIssns(activeRanking, econ.tiers, econ.domains);
+  }, [activeRanking, filters.econFilter]);
 
   const updateJournalPresets = (next: JournalFilterPreset[]) => {
     setJournalPresets(next);
@@ -130,7 +152,7 @@ export default function FilterPanel({
     if (journalPresets.length >= MAX_PRESETS) return;
     const econ = filters.econFilter || {
       enabled: false,
-      categories: [],
+      tiers: [],
       domains: [],
     };
     const newPreset: JournalFilterPreset = {
@@ -172,10 +194,10 @@ export default function FilterPanel({
     }
     const econNow = filters.econFilter || {
       enabled: false,
-      categories: [],
+      tiers: [],
       domains: [],
     };
-    const arrEq = (a: readonly (string | number)[], b: readonly (string | number)[]) =>
+    const arrEq = (a: readonly string[], b: readonly string[]) =>
       a.length === b.length && a.every((v, i) => v === b[i]);
     const issnsNow = new Set(filters.journals.map((j) => j.issn));
     const issnsP = new Set(preset.journals.map((j) => j.issn));
@@ -184,7 +206,7 @@ export default function FilterPanel({
       [...issnsNow].every((x) => issnsP.has(x));
     const econMatch =
       econNow.enabled === preset.econFilter.enabled &&
-      arrEq(econNow.categories, preset.econFilter.categories) &&
+      arrEq(econNow.tiers, preset.econFilter.tiers) &&
       arrEq(econNow.domains, preset.econFilter.domains) &&
       (econNow.presetId || null) === (preset.econFilter.presetId || null);
     const modeMatch =
@@ -341,12 +363,12 @@ export default function FilterPanel({
 
   // Compute `enabled` from the rest of the wide-filter state. Wide filter is
   // active iff any of: a preset is selected, an ISSN whitelist is set, or
-  // any category/domain is picked.
+  // any tier/domain is picked.
   type EconState = NonNullable<Filters['econFilter']>;
   const reconcileEcon = (e: Partial<EconState>): EconState => {
     const merged: EconState = {
       enabled: false,
-      categories: [],
+      tiers: [],
       domains: [],
       presetId: null,
       issns: undefined,
@@ -354,9 +376,9 @@ export default function FilterPanel({
     };
     const hasPreset = !!merged.presetId;
     const hasIssns = !!merged.issns?.length;
-    const hasCats = merged.categories.length > 0;
+    const hasTiers = merged.tiers.length > 0;
     const hasDoms = merged.domains.length > 0;
-    merged.enabled = hasPreset || hasIssns || hasCats || hasDoms;
+    merged.enabled = hasPreset || hasIssns || hasTiers || hasDoms;
     return merged;
   };
 
@@ -446,9 +468,9 @@ export default function FilterPanel({
                 {filters.econFilter?.enabled
                   ? filters.econFilter?.presetId
                     ? `preset "${filters.econFilter.presetId}"`
-                    : `cats=${
-                        filters.econFilter?.categories.length
-                          ? filters.econFilter.categories.join(',')
+                    : `tiers=${
+                        filters.econFilter?.tiers.length
+                          ? filters.econFilter.tiers.join(',')
                           : 'all'
                       } · doms=${
                         filters.econFilter?.domains.length
@@ -736,9 +758,11 @@ export default function FilterPanel({
                         Wide filter
                       </p>
 
-                      {/* Preset pills */}
+                      {/* Preset pills — sourced from the active ranking
+                          scheme so an imported scheme can ship its own
+                          shortcuts (e.g. "Q1 only" for a JCR-style ranking). */}
                       <div className='flex flex-wrap gap-1 mb-2'>
-                        {ECON_PRESETS.map((preset) => {
+                        {schemePresets.map((preset) => {
                           const isActive = econ.presetId === preset.id;
                           return (
                             <button
@@ -750,8 +774,12 @@ export default function FilterPanel({
                                     isActive
                                       ? {} // deselect → empty state
                                       : {
-                                          categories: [...preset.categories],
-                                          domains: [...preset.domains],
+                                          tiers: preset.tiers
+                                            ? [...preset.tiers]
+                                            : [],
+                                          domains: preset.domains
+                                            ? [...preset.domains]
+                                            : [],
                                           presetId: preset.id,
                                           issns: preset.issns
                                             ? [...preset.issns]
@@ -779,49 +807,55 @@ export default function FilterPanel({
                       {hasIssnWhitelist && (
                         <p className='text-[10px] text-app-soft mb-2'>
                           Using whitelist of {econ.issns!.length} journals —
-                          category & domain rows have no effect.
+                          tier & domain rows have no effect.
                         </p>
                       )}
 
-                      {/* Category row — dimmed + unhighlighted under whitelist */}
+                      {/* Tier row — keys come from the active scheme.
+                          Selecting every tier collapses to "all" (empty),
+                          mirroring the previous behaviour for CNRS 1..4. */}
                       <div
                         className={`mb-2 ${
                           hasIssnWhitelist ? 'opacity-50' : ''
                         }`}
                       >
-                        <p className='text-[11px] text-app-soft mb-1'>
-                          Category
-                        </p>
+                        <p className='text-[11px] text-app-soft mb-1'>Tier</p>
                         <div className='flex gap-1'>
-                          {ECON_CATEGORIES.map((cat) => {
+                          {schemeTiers.map((tier) => {
                             // Only highlight when the wide filter is actually
                             // engaged — default WIDE state (nothing selected)
                             // shows no buttons highlighted.
                             const isSelected =
                               econ.enabled &&
                               !hasIssnWhitelist &&
-                              (econ.categories.length === 0 ||
-                                econ.categories.includes(cat));
+                              (econ.tiers.length === 0 ||
+                                econ.tiers.includes(tier.key));
                             return (
                               <button
-                                key={cat}
+                                key={tier.key}
+                                title={tier.label || undefined}
                                 onClick={() => {
                                   setFilters((prev) => {
                                     const current =
-                                      prev.econFilter?.categories || [];
-                                    let next: number[];
+                                      prev.econFilter?.tiers || [];
+                                    let next: string[];
                                     if (current.length === 0) {
-                                      next = [cat];
-                                    } else if (current.includes(cat)) {
-                                      next = current.filter((c) => c !== cat);
+                                      next = [tier.key];
+                                    } else if (current.includes(tier.key)) {
+                                      next = current.filter(
+                                        (c) => c !== tier.key,
+                                      );
                                     } else {
-                                      next = [...current, cat];
+                                      next = [...current, tier.key];
                                     }
-                                    if (next.length === 4) next = [];
+                                    // "All tiers selected" collapses to empty
+                                    // (= no tier filter).
+                                    if (next.length === schemeTiers.length)
+                                      next = [];
                                     return {
                                       ...prev,
                                       econFilter: reconcileEcon({
-                                        categories: next,
+                                        tiers: next,
                                         domains: prev.econFilter?.domains || [],
                                         // manual edit clears any active preset
                                         presetId: null,
@@ -838,7 +872,10 @@ export default function FilterPanel({
                                     : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
                                 }`}
                               >
-                                {cat}
+                                {/* Compact pills: show the stable key
+                                    (e.g. "1", "Q1") with the human label
+                                    surfaced as a tooltip on hover. */}
+                                {tier.key}
                               </button>
                             );
                           })}
@@ -847,7 +884,7 @@ export default function FilterPanel({
                               setFilters((prev) => ({
                                 ...prev,
                                 econFilter: reconcileEcon({
-                                  categories: [],
+                                  tiers: [],
                                   domains: prev.econFilter?.domains || [],
                                   presetId: null,
                                   issns: undefined,
@@ -858,7 +895,7 @@ export default function FilterPanel({
                             }}
                             className={`px-2 py-0.5 text-[11px] rounded transition ${
                               !hasIssnWhitelist &&
-                              econ.categories.length === 0 &&
+                              econ.tiers.length === 0 &&
                               econ.enabled
                                 ? 'button-primary'
                                 : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
@@ -875,7 +912,7 @@ export default function FilterPanel({
                           Domain
                         </p>
                         <div className='flex flex-wrap gap-1 max-h-24 overflow-y-auto'>
-                          {ECON_DOMAINS.map(({ key, label }) => {
+                          {schemeDomains.map(({ key, label }) => {
                             const isSelected =
                               econ.enabled &&
                               !hasIssnWhitelist &&
@@ -884,6 +921,7 @@ export default function FilterPanel({
                             return (
                               <button
                                 key={key}
+                                title={label || undefined}
                                 onClick={() => {
                                   setFilters((prev) => {
                                     const current =
@@ -896,13 +934,12 @@ export default function FilterPanel({
                                     } else {
                                       next = [...current, key];
                                     }
-                                    if (next.length === ECON_DOMAINS.length)
+                                    if (next.length === schemeDomains.length)
                                       next = [];
                                     return {
                                       ...prev,
                                       econFilter: reconcileEcon({
-                                        categories:
-                                          prev.econFilter?.categories || [],
+                                        tiers: prev.econFilter?.tiers || [],
                                         domains: next,
                                         presetId: null,
                                         issns: undefined,
@@ -918,7 +955,10 @@ export default function FilterPanel({
                                     : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
                                 }`}
                               >
-                                {label}
+                                {/* Pill shows the stable key (e.g. "GEN",
+                                    "AgrEnEnv"); tooltip carries the full
+                                    human label. */}
+                                {key}
                               </button>
                             );
                           })}
@@ -929,8 +969,7 @@ export default function FilterPanel({
                               setFilters((prev) => ({
                                 ...prev,
                                 econFilter: reconcileEcon({
-                                  categories:
-                                    prev.econFilter?.categories || [],
+                                  tiers: prev.econFilter?.tiers || [],
                                   domains: [],
                                   presetId: null,
                                   issns: undefined,
