@@ -383,72 +383,105 @@ interface ImportPanelProps {
 }
 
 function ImportPanel({ onFile, importError, clearError }: ImportPanelProps) {
+  // Default open so first-time visitors see the three workflows.
+  // Once the user knows the lay of the land they can collapse the
+  // whole panel via the chevron in the header — the dropzone is
+  // hidden too, since the user has presumably already imported once.
+  // An import error force-opens the panel so the message is visible.
+  const [open, setOpen] = useState(true);
+  const expanded = open || importError !== null;
+
   return (
     <div className='surface-card border border-app rounded-lg p-4 space-y-4'>
-      <div>
-        <h2 className='text-sm font-semibold text-stone-900'>
-          Set up your ranking
-        </h2>
-        <p className='text-xs text-app-muted mt-1'>
-          Three ways to land on the right list — pick whichever fits how you
-          already keep track of journals.
-        </p>
-      </div>
+      <button
+        type='button'
+        onClick={() => setOpen((o) => !o)}
+        className='w-full flex items-start justify-between gap-3 text-left'
+        aria-expanded={expanded}
+        aria-controls='import-panel-body'
+      >
+        <div>
+          <h2 className='text-sm font-semibold text-stone-900'>
+            Set up your ranking
+          </h2>
+          <p className='text-xs text-app-muted mt-1'>
+            Three ways to land on the right list — pick whichever fits how you
+            already keep track of journals.
+          </p>
+        </div>
+        <span
+          className='flex-shrink-0 text-app-soft hover:text-app transition mt-0.5'
+          aria-hidden='true'
+        >
+          {expanded ? (
+            <ChevronDown size={16} />
+          ) : (
+            <ChevronRight size={16} />
+          )}
+        </span>
+      </button>
 
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
-        <WorkflowCard
-          number={1}
-          title='Edit the current ranking'
-          body={
-            <>
-              Click <strong>Fork to edit</strong> above to start customising
-              the built-in CNRS scheme — rename tiers, add domains, edit
-              per-journal assignments in the tabs below. <em>Reset to
-              default</em> always brings the baseline back.
-            </>
-          }
-        />
-        <WorkflowCard
-          number={2}
-          title='Use a community ranking'
-          body={
-            <>
-              Grab a ready-made JSON (HCERES, CNU, …) from the examples
-              repository, then drop it on the dropzone below.
-            </>
-          }
-          link={{
-            href: 'https://github.com/npasquier/rankings',
-            label: 'Open the examples on GitHub',
-          }}
-        />
-        <WorkflowCard
-          number={3}
-          title='Build one from a published list'
-          body={
-            <>
-              Most discipline-specific rankings circulate as PDFs. Convert
-              one to the JSON shape below (the editor accepts it), drop the
-              file here, and you&apos;re done.
-            </>
-          }
-          link={{
-            href: 'https://www.robertholcman.net/index.php/classements-de-revues/',
-            label: 'Examples of published rankings',
-          }}
-        />
-      </div>
+      {expanded && (
+        <div id='import-panel-body' className='space-y-4'>
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+            <WorkflowCard
+              number={1}
+              title='Edit the current ranking'
+              body={
+                <>
+                  Click <strong>Fork to edit</strong> above to start
+                  customising the built-in CNRS scheme — rename tiers, add
+                  domains, edit per-journal assignments in the tabs below.{' '}
+                  <em>Reset to default</em> always brings the baseline back.
+                </>
+              }
+            />
+            <WorkflowCard
+              number={2}
+              title='Use a community ranking'
+              body={
+                <>
+                  Grab a ready-made JSON (HCERES, CNU, …) from the examples
+                  repository, then drop it on the dropzone below.
+                </>
+              }
+              link={{
+                href: 'https://github.com/npasquier/rankings',
+                label: 'Open the examples on GitHub',
+              }}
+            />
+            <WorkflowCard
+              number={3}
+              title='Build one from a published list'
+              body={
+                <>
+                  Most discipline-specific rankings circulate as PDFs.
+                  Convert one to the JSON shape below (the editor accepts
+                  it), drop the file here, and you&apos;re done.
+                </>
+              }
+              link={{
+                href: 'https://www.robertholcman.net/index.php/classements-de-revues/',
+                label: 'Examples of published rankings',
+              }}
+            />
+          </div>
 
-      {/* Common landing pad for paths 2 and 3. */}
-      <Dropzone onFile={onFile} />
+          {/* Common landing pad for paths 2 and 3. */}
+          <Dropzone onFile={onFile} />
 
-      {importError && (
-        <div className='banner-danger flex items-start gap-2 px-3 py-2 rounded-lg text-sm'>
-          <AlertTriangle size={14} className='mt-0.5 flex-shrink-0' />
-          <div className='flex-1'>{importError}</div>
-          <button onClick={clearError} className='text-app-soft hover:text-app'>
-            <X size={14} />
-          </button>
+          {importError && (
+            <div className='banner-danger flex items-start gap-2 px-3 py-2 rounded-lg text-sm'>
+              <AlertTriangle size={14} className='mt-0.5 flex-shrink-0' />
+              <div className='flex-1'>{importError}</div>
+              <button
+                onClick={clearError}
+                className='text-app-soft hover:text-app'
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
