@@ -25,12 +25,7 @@
 
 'use client';
 
-import {
-  DragEvent,
-  useCallback,
-  useMemo,
-  useState,
-} from 'react';
+import { DragEvent, useCallback, useMemo, useState } from 'react';
 import {
   Download,
   Upload,
@@ -164,7 +159,9 @@ export default function RankingsEditor() {
   const ingestFile = useCallback(async (file: File) => {
     setImportError(null);
     if (file.size > 5 * 1024 * 1024) {
-      setImportError('File is larger than 5 MB — too big for a ranking scheme.');
+      setImportError(
+        'File is larger than 5 MB — too big for a ranking scheme.',
+      );
       return;
     }
     try {
@@ -179,7 +176,9 @@ export default function RankingsEditor() {
       setPendingImport(parsed);
     } catch (err) {
       setImportError(
-        err instanceof Error ? `Failed to read file: ${err.message}` : 'Failed to read file.',
+        err instanceof Error
+          ? `Failed to read file: ${err.message}`
+          : 'Failed to read file.',
       );
     }
   }, []);
@@ -239,18 +238,10 @@ export default function RankingsEditor() {
 
       <div className='surface-card border border-app rounded-lg p-4'>
         {tab === 'info' && (
-          <InfoTab
-            scheme={active}
-            editable={editable}
-            update={update}
-          />
+          <InfoTab scheme={active} editable={editable} update={update} />
         )}
         {tab === 'journals' && (
-          <JournalsTab
-            scheme={active}
-            editable={editable}
-            update={update}
-          />
+          <JournalsTab scheme={active} editable={editable} update={update} />
         )}
         {tab === 'tiers' && (
           <TiersTab scheme={active} editable={editable} update={update} />
@@ -416,7 +407,15 @@ function ImportDropzone({
         }`}
       >
         <Upload size={14} className='inline-block mr-1 -mt-0.5' />
-        Drop a ranking JSON file here to import.
+        Drop a ranking JSON file here to import. Example ranking files are
+        available on GitHub:
+        <a
+          href='https://github.com/npasquier/rankings'
+          target='_blank'
+          rel='noopener'
+        >
+          https://github.com/npasquier/rankings
+        </a>{' '}
       </div>
       {importError && (
         <div className='banner-danger flex items-start gap-2 px-3 py-2 rounded-lg text-sm'>
@@ -459,13 +458,13 @@ function FormatHelp() {
       {open && (
         <div className='border-t border-app px-4 py-4 space-y-3 bg-[var(--surface-subtle)]'>
           <p className='text-app-muted leading-relaxed'>
-            A ranking is a single, self-contained JSON file. It declares
-            its own tiers, domains, and journals — nothing is inherited
-            from the built-in CNRS scheme, so if you want CNRS-style
-            domains they have to be listed in your file. Minimum shape:
+            A ranking is a single, self-contained JSON file. It declares its own
+            tiers, domains, and journals — nothing is inherited from the
+            built-in CNRS scheme, so if you want CNRS-style domains they have to
+            be listed in your file. Minimum shape:
           </p>
           <pre className='surface-muted border border-app rounded-md p-3 text-[11px] leading-relaxed overflow-x-auto font-mono'>
-{`{
+            {`{
   "version": 1,
   "id": "hceres-2021",
   "name": "HCERES 2021",
@@ -482,8 +481,8 @@ function FormatHelp() {
           <ul className='list-disc pl-5 space-y-1 text-app-muted leading-relaxed text-xs'>
             <li>
               <strong>Tier keys</strong> are arbitrary strings{' '}
-              {'("1"/"2", "A"/"B"/"C", "Q1"/"Q2"…)'}. They show up on
-              the filter pills as-is.
+              {'("1"/"2", "A"/"B"/"C", "Q1"/"Q2"…)'}. They show up on the filter
+              pills as-is.
             </li>
             <li>
               {'Every journal’s '}
@@ -492,8 +491,8 @@ function FormatHelp() {
               <em>(unknown)</em> in the editor.
             </li>
             <li>
-              Optional fields: <code>description</code>,{' '}
-              <code>label</code> on tiers/domains, <code>presets</code>{' '}
+              Optional fields: <code>description</code>, <code>label</code> on
+              tiers/domains, <code>presets</code>{' '}
               {'(shortcut buttons like "Top 5").'}
             </li>
             <li>
@@ -503,10 +502,7 @@ function FormatHelp() {
           </ul>
           <p className='text-app-soft text-[11px]'>
             Full walkthrough on the{' '}
-            <a
-              href='/help#rankings'
-              className='underline hover:text-app-muted'
-            >
+            <a href='/help#rankings' className='underline hover:text-app-muted'>
               Help page
             </a>
             .
@@ -677,8 +673,8 @@ function TiersTab({
       <p className='text-sm text-app-muted'>
         Tiers are the buckets every journal is sorted into (e.g. CNRS uses 1–4;
         a JCR-style ranking would use Q1–Q4). The <strong>key</strong> is the
-        stable identifier stored on each journal — renaming it cascades to
-        every journal that uses it.
+        stable identifier stored on each journal — renaming it cascades to every
+        journal that uses it.
       </p>
 
       <div className='border border-app rounded-lg overflow-hidden'>
@@ -740,9 +736,7 @@ function TiersTab({
 
       {editable && (
         <div className='border border-app rounded-lg p-3 surface-subtle'>
-          <p className='text-xs font-medium text-app-muted mb-2'>
-            Add a tier
-          </p>
+          <p className='text-xs font-medium text-app-muted mb-2'>Add a tier</p>
           <div className='flex gap-2'>
             <input
               value={newKey}
@@ -772,24 +766,21 @@ function TiersTab({
           is non-empty — empty tiers delete in one click. */}
       {pendingDelete && (
         <ConfirmModal
-          title={`Delete tier "${
-            pendingDelete.label || pendingDelete.key
-          }"?`}
+          title={`Delete tier "${pendingDelete.label || pendingDelete.key}"?`}
           body={
             <div className='space-y-1 text-sm text-app-muted'>
               <div>
                 The tier will be removed from the scheme,{' '}
                 <strong>
-                  along with the{' '}
-                  {pendingDelete.count.toLocaleString()} journal
+                  along with the {pendingDelete.count.toLocaleString()} journal
                   {pendingDelete.count === 1 ? '' : 's'}
                 </strong>{' '}
                 currently assigned to it.
               </div>
               <div className='text-app-soft'>
                 This cannot be undone — the only way back is to import the
-                scheme again, or click <em>Reset to default</em> if you want
-                to discard all of your edits.
+                scheme again, or click <em>Reset to default</em> if you want to
+                discard all of your edits.
               </div>
             </div>
           }
@@ -1015,7 +1006,9 @@ function DomainsTab({
 
       {editable && (
         <div className='border border-app rounded-lg p-3 surface-subtle'>
-          <p className='text-xs font-medium text-app-muted mb-2'>Add a domain</p>
+          <p className='text-xs font-medium text-app-muted mb-2'>
+            Add a domain
+          </p>
           <div className='flex gap-2'>
             <input
               value={newKey}
@@ -1043,24 +1036,21 @@ function DomainsTab({
 
       {pendingDelete && (
         <ConfirmModal
-          title={`Delete domain "${
-            pendingDelete.label || pendingDelete.key
-          }"?`}
+          title={`Delete domain "${pendingDelete.label || pendingDelete.key}"?`}
           body={
             <div className='space-y-1 text-sm text-app-muted'>
               <div>
                 The domain will be removed from the scheme,{' '}
                 <strong>
-                  along with the{' '}
-                  {pendingDelete.count.toLocaleString()} journal
+                  along with the {pendingDelete.count.toLocaleString()} journal
                   {pendingDelete.count === 1 ? '' : 's'}
                 </strong>{' '}
                 currently assigned to it.
               </div>
               <div className='text-app-soft'>
                 This cannot be undone — the only way back is to import the
-                scheme again, or click <em>Reset to default</em> if you want
-                to discard all of your edits.
+                scheme again, or click <em>Reset to default</em> if you want to
+                discard all of your edits.
               </div>
             </div>
           }
@@ -1197,8 +1187,7 @@ function JournalsTab({
       if (domainFilter && j.domain !== domainFilter) return false;
       if (!q) return true;
       return (
-        j.name.toLowerCase().includes(q) ||
-        j.issn.toLowerCase().includes(q)
+        j.name.toLowerCase().includes(q) || j.issn.toLowerCase().includes(q)
       );
     });
   }, [scheme.journals, search, tierFilter, domainFilter]);
@@ -1213,7 +1202,10 @@ function JournalsTab({
     setPage(0);
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / JOURNALS_PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filtered.length / JOURNALS_PAGE_SIZE),
+  );
   const pageRows = filtered.slice(
     page * JOURNALS_PAGE_SIZE,
     (page + 1) * JOURNALS_PAGE_SIZE,

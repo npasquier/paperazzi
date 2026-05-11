@@ -848,10 +848,16 @@ export default function FilterPanel({
                                     } else {
                                       next = [...current, tier.key];
                                     }
-                                    // "All tiers selected" collapses to empty
-                                    // (= no tier filter).
-                                    if (next.length === schemeTiers.length)
-                                      next = [];
+                                    // Note: we deliberately do NOT auto-
+                                    // collapse to empty when every tier is
+                                    // selected. Functionally that produces
+                                    // the same ISSN list (all journals
+                                    // match), but the user reads the empty
+                                    // state as "my selection just reset
+                                    // itself". Leaving the explicit
+                                    // selection keeps the UI honest — the
+                                    // "All" pill below is the dedicated way
+                                    // to clear.
                                     return {
                                       ...prev,
                                       econFilter: reconcileEcon({
@@ -934,8 +940,10 @@ export default function FilterPanel({
                                     } else {
                                       next = [...current, key];
                                     }
-                                    if (next.length === schemeDomains.length)
-                                      next = [];
+                                    // Same rationale as the tier row: no
+                                    // auto-collapse when every domain is
+                                    // selected — the "Reset to all" link
+                                    // below is the explicit way out.
                                     return {
                                       ...prev,
                                       econFilter: reconcileEcon({
