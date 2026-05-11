@@ -4,9 +4,7 @@
 
 Paperazzi is a web app that searches academic papers via the [OpenAlex](https://openalex.org/) API and adds a research workflow on top: editable journal ranking schemes, keyword and semantic search, forward + backward citation exploration, a year × log-citations citation network, and a per-collection pin sidebar with notes, keywords, and import/export.
 
-🔗 **Live app:** <https://paperazzi.vercel.app>
-📖 **About / methodology:** <https://paperazzi.vercel.app/about>
-🧭 **Help / user guide:** <https://paperazzi.vercel.app/help>
+**Link to the app:** <https://paperazzi.vercel.app>
 
 ---
 
