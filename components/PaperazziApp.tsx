@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense, useRef } from 'react';
+import { useCallback, useEffect, useState, Suspense, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
@@ -19,7 +19,7 @@ const JournalModal = dynamic(() => import('./JournalModal'), {
 });
 import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
 import { loadActiveRanking } from '@/utils/activeRanking';
-import mapIssnsToJournals from '@/utils/issnToJournals';
+import { mapIssnsToJournalsAsync as mapIssnsToJournals } from '@/utils/loadJournals';
 import { usePersistedBoolean } from '@/utils/usePersistedBoolean';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
 import type { PresetTileId } from './EmptyState';
@@ -280,8 +280,10 @@ function PaperazziAppContent() {
     syncFromURL();
   }, [searchParams]);
 
-  // Build URL params helper
-  const buildURLParams = (
+  // Build URL params helper. Memoised so the navbar-search useEffect can
+  // list it as a dependency without re-subscribing on every render — the
+  // identity only changes when `filters` or `searchParams` actually move.
+  const buildURLParams = useCallback((
     overrides: Partial<
       Filters & { query?: string; page?: number; semantic?: boolean }
     > = {},
@@ -345,7 +347,7 @@ function PaperazziAppContent() {
     params.set('page', (overrides.page ?? 1).toString());
 
     return params;
-  };
+  }, [filters, searchParams]);
 
   // Listen for navbar search events
   useEffect(() => {
@@ -425,7 +427,7 @@ function PaperazziAppContent() {
     return on('navbar-search', (detail) => {
       void handleNavbarSearch(detail);
     });
-  }, [filters, router, searchParams]);
+  }, [filters, router, searchParams, buildURLParams]);
 
   const handleSearch = (newPage = 1) => {
     const params = buildURLParams({ page: newPage });

@@ -104,10 +104,13 @@ export default function HelpPage() {
                       Wide
                     </span>
                     <span>
-                      — preset pills (<em>All</em>, <em>Top 5</em>) and
-                      pickable category & domain rows. Cycle through CNRS
-                      categories (1–4) and economics subdomains (GEN, Macro,
-                      Theory, etc.) to scope a search broadly.
+                      — preset pills plus pickable tier & domain rows
+                      sourced from the active ranking scheme. With the
+                      built-in CNRS baseline that&apos;s tiers 1–4 and
+                      economics subdomains (GEN, Macro, Theory…); with an
+                      imported scheme (HCERES, CNU, JCR, …) the rows show
+                      whatever vocabulary that scheme defines. Manage the
+                      ranking from the <strong>/rankings</strong> page.
                     </span>
                   </li>
                   <li className='flex items-start gap-2'>

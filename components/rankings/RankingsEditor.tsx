@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  ExternalLink as ExternalLinkIcon,
   Info,
   Pencil,
   CheckCircle2,
@@ -219,11 +220,10 @@ export default function RankingsEditor() {
         onExport={handleExport}
       />
 
-      {/* The drag-and-drop area is now the only entry point for import —
-          users grab the file and drop it on the page. No file-picker
-          button, which keeps the header clean. */}
-      <ImportDropzone
-        editableHint
+      {/* Set-up panel: explains the three workflows (edit in place,
+          load a community-shared ranking, or build from a published
+          list) and provides the dropzone that paths 2 and 3 land on. */}
+      <ImportPanel
         onFile={ingestFile}
         importError={importError}
         clearError={() => setImportError(null)}
@@ -367,18 +367,135 @@ function Header({
   );
 }
 
-// ─── Drag-and-drop dropzone ─────────────────────────────────────────────
+// ─── Set-up panel ──────────────────────────────────────────────────────
+//
+// Three workflows live on this page — editing the current ranking,
+// loading a community-shared one, or building one from a published
+// list. The panel below names all three side by side so the user
+// understands their options up front, then presents the dropzone as
+// the common landing pad for paths (2) and (3). Path (1) is just a
+// pointer to the editor controls below.
 
-function ImportDropzone({
-  onFile,
-  importError,
-  clearError,
-}: {
-  editableHint: boolean;
+interface ImportPanelProps {
   onFile: (file: File) => void;
   importError: string | null;
   clearError: () => void;
+}
+
+function ImportPanel({ onFile, importError, clearError }: ImportPanelProps) {
+  return (
+    <div className='surface-card border border-app rounded-lg p-4 space-y-4'>
+      <div>
+        <h2 className='text-sm font-semibold text-stone-900'>
+          Set up your ranking
+        </h2>
+        <p className='text-xs text-app-muted mt-1'>
+          Three ways to land on the right list — pick whichever fits how you
+          already keep track of journals.
+        </p>
+      </div>
+
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+        <WorkflowCard
+          number={1}
+          title='Edit the current ranking'
+          body={
+            <>
+              Click <strong>Fork to edit</strong> above to start customising
+              the built-in CNRS scheme — rename tiers, add domains, edit
+              per-journal assignments in the tabs below. <em>Reset to
+              default</em> always brings the baseline back.
+            </>
+          }
+        />
+        <WorkflowCard
+          number={2}
+          title='Use a community ranking'
+          body={
+            <>
+              Grab a ready-made JSON (HCERES, CNU, …) from the examples
+              repository, then drop it on the dropzone below.
+            </>
+          }
+          link={{
+            href: 'https://github.com/npasquier/rankings',
+            label: 'Open the examples on GitHub',
+          }}
+        />
+        <WorkflowCard
+          number={3}
+          title='Build one from a published list'
+          body={
+            <>
+              Most discipline-specific rankings circulate as PDFs. Convert
+              one to the JSON shape below (the editor accepts it), drop the
+              file here, and you&apos;re done.
+            </>
+          }
+          link={{
+            href: 'https://www.robertholcman.net/index.php/classements-de-revues/',
+            label: 'Examples of published rankings',
+          }}
+        />
+      </div>
+
+      {/* Common landing pad for paths 2 and 3. */}
+      <Dropzone onFile={onFile} />
+
+      {importError && (
+        <div className='banner-danger flex items-start gap-2 px-3 py-2 rounded-lg text-sm'>
+          <AlertTriangle size={14} className='mt-0.5 flex-shrink-0' />
+          <div className='flex-1'>{importError}</div>
+          <button onClick={clearError} className='text-app-soft hover:text-app'>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One of the three numbered workflow cards in the set-up panel. */
+function WorkflowCard({
+  number,
+  title,
+  body,
+  link,
+}: {
+  number: number;
+  title: string;
+  body: React.ReactNode;
+  link?: { href: string; label: string };
 }) {
+  return (
+    <div className='surface-subtle border border-app rounded-lg p-3 flex flex-col gap-2'>
+      <div className='flex items-center gap-2'>
+        <span className='inline-flex items-center justify-center w-5 h-5 rounded-full surface-card text-[11px] font-semibold text-app-muted border border-app'>
+          {number}
+        </span>
+        <h3 className='text-sm font-medium text-stone-900 leading-tight'>
+          {title}
+        </h3>
+      </div>
+      <p className='text-xs text-app-muted leading-relaxed flex-1'>{body}</p>
+      {link && (
+        <a
+          href={link.href}
+          target='_blank'
+          rel='noopener noreferrer'
+          className='inline-flex items-center gap-1 text-xs text-accent-strong hover:underline'
+        >
+          {link.label}
+          <ExternalLinkIcon size={11} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+/** The drag-and-drop tile. Smaller than before — the explanatory copy
+ *  now lives in the workflow cards above, so this is just the action. */
+function Dropzone({ onFile }: { onFile: (file: File) => void }) {
   const [hovering, setHovering] = useState(false);
 
   const onDrop = useCallback(
@@ -392,40 +509,21 @@ function ImportDropzone({
   );
 
   return (
-    <div className='space-y-2'>
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setHovering(true);
-        }}
-        onDragLeave={() => setHovering(false)}
-        onDrop={onDrop}
-        className={`border-2 border-dashed rounded-lg p-3 text-center text-xs transition ${
-          hovering
-            ? 'border-accent-strong bg-[var(--surface-muted)]'
-            : 'border-app-muted text-app-soft'
-        }`}
-      >
-        <Upload size={14} className='inline-block mr-1 -mt-0.5' />
-        Drop a ranking JSON file here to import. Example ranking files are
-        available on GitHub:
-        <a
-          href='https://github.com/npasquier/rankings'
-          target='_blank'
-          rel='noopener'
-        >
-          https://github.com/npasquier/rankings
-        </a>{' '}
-      </div>
-      {importError && (
-        <div className='banner-danger flex items-start gap-2 px-3 py-2 rounded-lg text-sm'>
-          <AlertTriangle size={14} className='mt-0.5 flex-shrink-0' />
-          <div className='flex-1'>{importError}</div>
-          <button onClick={clearError} className='text-app-soft hover:text-app'>
-            <X size={14} />
-          </button>
-        </div>
-      )}
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setHovering(true);
+      }}
+      onDragLeave={() => setHovering(false)}
+      onDrop={onDrop}
+      className={`border-2 border-dashed rounded-lg px-3 py-4 text-center text-xs transition ${
+        hovering
+          ? 'border-accent-strong bg-[var(--surface-muted)]'
+          : 'border-app-muted text-app-soft'
+      }`}
+    >
+      <Upload size={14} className='inline-block mr-1 -mt-0.5' />
+      Drop a ranking JSON file here to load it as the active scheme.
     </div>
   );
 }
@@ -618,337 +716,81 @@ function InfoTab({
   );
 }
 
-// ─── Tiers tab ──────────────────────────────────────────────────────────
+// ─── Tier / Domain tabs (unified) ──────────────────────────────────────
+//
+// Tiers and domains share every piece of behaviour — same row shape (key
+// + label + cascading usage count), same add form, same delete flow
+// (no-warning for empty buckets, cascade-with-confirm otherwise). The
+// generic `KeyedListEditor` does all the rendering; the `TiersTab` /
+// `DomainsTab` wrappers below just compute the usage-by-key map and
+// hand it the recipes that touch `scheme.tiers` vs `scheme.domains`.
 
-function TiersTab({
-  scheme,
-  editable,
-  update,
-}: {
-  scheme: RankingScheme;
-  editable: boolean;
-  update: (recipe: (draft: RankingScheme) => void) => void;
-}) {
-  const [newKey, setNewKey] = useState('');
-  const [newLabel, setNewLabel] = useState('');
-  // Pending tier deletion when the tier is non-empty — surfaces the
-  // cascade warning ("X journals will also be deleted") before commit.
-  const [pendingDelete, setPendingDelete] = useState<{
-    key: string;
-    label?: string;
-    count: number;
-  } | null>(null);
-
-  // How many journals reference each tier — drives the delete cascade
-  // warning.
-  const usageByKey = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const j of scheme.journals) m.set(j.tier, (m.get(j.tier) ?? 0) + 1);
-    return m;
-  }, [scheme.journals]);
-
-  const addTier = () => {
-    const key = newKey.trim();
-    if (!key) return;
-    if (scheme.tiers.some((t) => t.key === key)) return; // dedupe
-    update((d) => {
-      d.tiers.push({ key, label: newLabel.trim() || undefined });
-    });
-    setNewKey('');
-    setNewLabel('');
-  };
-
-  /** Wipe a tier *and every journal referencing it*. Used by the
-   *  confirmation modal below — it's the cascade variant of `onDelete`. */
-  const cascadeDelete = (key: string) => {
-    update((d) => {
-      d.tiers = d.tiers.filter((t) => t.key !== key);
-      d.journals = d.journals.filter((j) => j.tier !== key);
-    });
-    setPendingDelete(null);
-  };
-
-  return (
-    <div className='space-y-4'>
-      <p className='text-sm text-app-muted'>
-        Tiers are the buckets every journal is sorted into (e.g. CNRS uses 1–4;
-        a JCR-style ranking would use Q1–Q4). The <strong>key</strong> is the
-        stable identifier stored on each journal — renaming it cascades to every
-        journal that uses it.
-      </p>
-
-      <div className='border border-app rounded-lg overflow-hidden'>
-        <div className='grid grid-cols-[1fr_2fr_auto_auto] gap-3 px-3 py-2 surface-subtle text-[11px] uppercase tracking-wider text-app-soft border-b border-app'>
-          <div>Key</div>
-          <div>Label (optional)</div>
-          <div>Journals</div>
-          <div></div>
-        </div>
-        {scheme.tiers.length === 0 && (
-          <div className='px-3 py-6 text-center text-sm text-app-soft'>
-            No tiers yet. Add one below.
-          </div>
-        )}
-        {scheme.tiers.map((tier) => {
-          const count = usageByKey.get(tier.key) ?? 0;
-          return (
-            <TierRow
-              key={tier.key}
-              tier={tier}
-              count={count}
-              editable={editable}
-              onRename={(nextKey, nextLabel) => {
-                update((d) => {
-                  const idx = d.tiers.findIndex((t) => t.key === tier.key);
-                  if (idx < 0) return;
-                  // Renaming the key cascades to every journal that uses it.
-                  if (nextKey !== tier.key) {
-                    if (d.tiers.some((t) => t.key === nextKey)) return; // dedupe
-                    for (const j of d.journals) {
-                      if (j.tier === tier.key) j.tier = nextKey;
-                    }
-                  }
-                  d.tiers[idx] = {
-                    key: nextKey,
-                    label: nextLabel || undefined,
-                  };
-                });
-              }}
-              onDelete={() => {
-                if (count === 0) {
-                  // No journals reference it — safe to delete with no warning.
-                  update((d) => {
-                    d.tiers = d.tiers.filter((t) => t.key !== tier.key);
-                  });
-                } else {
-                  // Surface the cascade warning before wiping journals.
-                  setPendingDelete({
-                    key: tier.key,
-                    label: tier.label,
-                    count,
-                  });
-                }
-              }}
-            />
-          );
-        })}
-      </div>
-
-      {editable && (
-        <div className='border border-app rounded-lg p-3 surface-subtle'>
-          <p className='text-xs font-medium text-app-muted mb-2'>Add a tier</p>
-          <div className='flex gap-2'>
-            <input
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              placeholder='Key (e.g. Q1)'
-              className='flex-1 px-2 py-1 text-sm border border-app rounded'
-            />
-            <input
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              placeholder='Label (optional)'
-              className='flex-1 px-2 py-1 text-sm border border-app rounded'
-            />
-            <button
-              onClick={addTier}
-              disabled={!newKey.trim()}
-              className='inline-flex items-center gap-1 px-3 py-1 button-primary rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed'
-            >
-              <Plus size={14} />
-              Add
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Cascade-delete confirmation. We only land here when the tier
-          is non-empty — empty tiers delete in one click. */}
-      {pendingDelete && (
-        <ConfirmModal
-          title={`Delete tier "${pendingDelete.label || pendingDelete.key}"?`}
-          body={
-            <div className='space-y-1 text-sm text-app-muted'>
-              <div>
-                The tier will be removed from the scheme,{' '}
-                <strong>
-                  along with the {pendingDelete.count.toLocaleString()} journal
-                  {pendingDelete.count === 1 ? '' : 's'}
-                </strong>{' '}
-                currently assigned to it.
-              </div>
-              <div className='text-app-soft'>
-                This cannot be undone — the only way back is to import the
-                scheme again, or click <em>Reset to default</em> if you want to
-                discard all of your edits.
-              </div>
-            </div>
-          }
-          confirmLabel='Delete tier and its journals'
-          confirmTone='danger'
-          onConfirm={() => cascadeDelete(pendingDelete.key)}
-          onCancel={() => setPendingDelete(null)}
-        />
-      )}
-    </div>
-  );
+interface KeyedItem {
+  key: string;
+  label?: string;
 }
 
-function TierRow({
-  tier,
-  count,
+interface KeyedListEditorProps {
+  /** The items to render — RankingTier[] or RankingDomain[]. */
+  items: readonly KeyedItem[];
+  /** Whether the user can edit. */
+  editable: boolean;
+  /** Per-key journal-usage count, drives cascade-delete confirmation. */
+  usageByKey: Map<string, number>;
+  /** Singular noun for UI strings ("tier", "domain"). */
+  noun: string;
+  /** Lead paragraph at the top of the panel. */
+  intro: React.ReactNode;
+  /** Empty-state copy when items is []. */
+  emptyHint: string;
+  /** Placeholder for the Key input on the add form. */
+  addPlaceholder: string;
+  /** Add a new item. Caller is responsible for dedupe at the scheme level. */
+  onAdd: (key: string, label: string) => void;
+  /** Rename an item. Caller cascades the key change to every journal. */
+  onRename: (oldKey: string, nextKey: string, nextLabel: string) => void;
+  /** Delete an item that has no journals using it (one-click). */
+  onDelete: (key: string) => void;
+  /** Delete the item AND every journal that references it (confirm path). */
+  onCascadeDelete: (key: string) => void;
+}
+
+function KeyedListEditor({
+  items,
   editable,
+  usageByKey,
+  noun,
+  intro,
+  emptyHint,
+  addPlaceholder,
+  onAdd,
   onRename,
   onDelete,
-}: {
-  tier: RankingTier;
-  count: number;
-  editable: boolean;
-  onRename: (nextKey: string, nextLabel: string) => void;
-  onDelete: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draftKey, setDraftKey] = useState(tier.key);
-  const [draftLabel, setDraftLabel] = useState(tier.label ?? '');
-  // Keep drafts in sync if the prop changes underneath us (e.g. another
-  // edit cascaded here). Uses the React 19 "previous-prop comparison
-  // during render" idiom to avoid the setState-in-useEffect anti-pattern.
-  const [prevSig, setPrevSig] = useState(`${tier.key} ${tier.label ?? ''}`);
-  const sig = `${tier.key} ${tier.label ?? ''}`;
-  if (prevSig !== sig) {
-    setPrevSig(sig);
-    setDraftKey(tier.key);
-    setDraftLabel(tier.label ?? '');
-  }
-
-  const commit = () => {
-    const key = draftKey.trim();
-    if (key) onRename(key, draftLabel.trim());
-    setEditing(false);
-  };
-
-  return (
-    <div className='grid grid-cols-[1fr_2fr_auto_auto] gap-3 items-center px-3 py-2 border-b border-app last:border-b-0 text-sm'>
-      {editing ? (
-        <>
-          <input
-            value={draftKey}
-            onChange={(e) => setDraftKey(e.target.value)}
-            className='px-2 py-1 border border-app rounded text-sm'
-          />
-          <input
-            value={draftLabel}
-            onChange={(e) => setDraftLabel(e.target.value)}
-            placeholder='Label'
-            className='px-2 py-1 border border-app rounded text-sm'
-          />
-        </>
-      ) : (
-        <>
-          <code className='text-app font-medium'>{tier.key}</code>
-          <span className='text-app-muted'>
-            {tier.label || (
-              <span className='text-app-soft italic'>(no label)</span>
-            )}
-          </span>
-        </>
-      )}
-      <span className='text-[11px] text-app-soft text-right'>
-        {count.toLocaleString()}
-      </span>
-      <div className='flex items-center gap-1 justify-end'>
-        {editable && !editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className='p-1 text-app-soft hover:text-app'
-            title='Rename'
-          >
-            <Pencil size={12} />
-          </button>
-        )}
-        {editable && editing && (
-          <button
-            onClick={commit}
-            className='px-2 py-0.5 button-primary rounded text-xs'
-          >
-            Save
-          </button>
-        )}
-        {editable && !editing && (
-          <button
-            onClick={onDelete}
-            className='p-1 text-app-soft hover:text-danger'
-            title={
-              count > 0
-                ? `Delete this tier and its ${count.toLocaleString()} journal${
-                    count === 1 ? '' : 's'
-                  }`
-                : 'Delete'
-            }
-          >
-            <X size={12} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Domains tab — same shape as Tiers ──────────────────────────────────
-
-function DomainsTab({
-  scheme,
-  editable,
-  update,
-}: {
-  scheme: RankingScheme;
-  editable: boolean;
-  update: (recipe: (draft: RankingScheme) => void) => void;
-}) {
+  onCascadeDelete,
+}: KeyedListEditorProps) {
   const [newKey, setNewKey] = useState('');
   const [newLabel, setNewLabel] = useState('');
-  // Same cascade-warning state as TiersTab — deleting a non-empty domain
-  // wipes every journal that referenced it, so confirm first.
+  // Surface the cascade-delete warning ("X journals will also be deleted")
+  // before commit. Only entered when the targeted item is non-empty —
+  // empty items delete in one click.
   const [pendingDelete, setPendingDelete] = useState<{
     key: string;
     label?: string;
     count: number;
   } | null>(null);
 
-  const usageByKey = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const j of scheme.journals)
-      m.set(j.domain, (m.get(j.domain) ?? 0) + 1);
-    return m;
-  }, [scheme.journals]);
-
-  const addDomain = () => {
+  const addItem = () => {
     const key = newKey.trim();
     if (!key) return;
-    if (scheme.domains.some((d) => d.key === key)) return;
-    update((d) => {
-      d.domains.push({ key, label: newLabel.trim() || undefined });
-    });
+    if (items.some((x) => x.key === key)) return; // dedupe at UI layer
+    onAdd(key, newLabel.trim());
     setNewKey('');
     setNewLabel('');
   };
 
-  /** Delete the domain *and every journal in it*. */
-  const cascadeDelete = (key: string) => {
-    update((d) => {
-      d.domains = d.domains.filter((x) => x.key !== key);
-      d.journals = d.journals.filter((j) => j.domain !== key);
-    });
-    setPendingDelete(null);
-  };
-
   return (
     <div className='space-y-4'>
-      <p className='text-sm text-app-muted'>
-        Domains are subject areas (CNRS Economics calls them GEN, OrgInd, etc.;
-        a medical scheme might use cardiology, oncology, …). Renaming a
-        domain&apos;s key cascades to every journal that uses it.
-      </p>
+      <p className='text-sm text-app-muted'>{intro}</p>
 
       <div className='border border-app rounded-lg overflow-hidden'>
         <div className='grid grid-cols-[1fr_2fr_auto_auto] gap-3 px-3 py-2 surface-subtle text-[11px] uppercase tracking-wider text-app-soft border-b border-app'>
@@ -957,44 +799,30 @@ function DomainsTab({
           <div>Journals</div>
           <div></div>
         </div>
-        {scheme.domains.length === 0 && (
+        {items.length === 0 && (
           <div className='px-3 py-6 text-center text-sm text-app-soft'>
-            No domains yet. Add one below.
+            {emptyHint}
           </div>
         )}
-        {scheme.domains.map((domain) => {
-          const count = usageByKey.get(domain.key) ?? 0;
+        {items.map((item) => {
+          const count = usageByKey.get(item.key) ?? 0;
           return (
-            <DomainRow
-              key={domain.key}
-              domain={domain}
+            <KeyedListRow
+              key={item.key}
+              item={item}
               count={count}
               editable={editable}
-              onRename={(nextKey, nextLabel) => {
-                update((d) => {
-                  const idx = d.domains.findIndex((x) => x.key === domain.key);
-                  if (idx < 0) return;
-                  if (nextKey !== domain.key) {
-                    if (d.domains.some((x) => x.key === nextKey)) return;
-                    for (const j of d.journals) {
-                      if (j.domain === domain.key) j.domain = nextKey;
-                    }
-                  }
-                  d.domains[idx] = {
-                    key: nextKey,
-                    label: nextLabel || undefined,
-                  };
-                });
-              }}
+              noun={noun}
+              onRename={(nextKey, nextLabel) =>
+                onRename(item.key, nextKey, nextLabel)
+              }
               onDelete={() => {
                 if (count === 0) {
-                  update((d) => {
-                    d.domains = d.domains.filter((x) => x.key !== domain.key);
-                  });
+                  onDelete(item.key);
                 } else {
                   setPendingDelete({
-                    key: domain.key,
-                    label: domain.label,
+                    key: item.key,
+                    label: item.label,
                     count,
                   });
                 }
@@ -1007,13 +835,13 @@ function DomainsTab({
       {editable && (
         <div className='border border-app rounded-lg p-3 surface-subtle'>
           <p className='text-xs font-medium text-app-muted mb-2'>
-            Add a domain
+            Add a {noun}
           </p>
           <div className='flex gap-2'>
             <input
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
-              placeholder='Key (e.g. Cardio)'
+              placeholder={addPlaceholder}
               className='flex-1 px-2 py-1 text-sm border border-app rounded'
             />
             <input
@@ -1023,7 +851,7 @@ function DomainsTab({
               className='flex-1 px-2 py-1 text-sm border border-app rounded'
             />
             <button
-              onClick={addDomain}
+              onClick={addItem}
               disabled={!newKey.trim()}
               className='inline-flex items-center gap-1 px-3 py-1 button-primary rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed'
             >
@@ -1036,11 +864,13 @@ function DomainsTab({
 
       {pendingDelete && (
         <ConfirmModal
-          title={`Delete domain "${pendingDelete.label || pendingDelete.key}"?`}
+          title={`Delete ${noun} "${
+            pendingDelete.label || pendingDelete.key
+          }"?`}
           body={
             <div className='space-y-1 text-sm text-app-muted'>
               <div>
-                The domain will be removed from the scheme,{' '}
+                The {noun} will be removed from the scheme,{' '}
                 <strong>
                   along with the {pendingDelete.count.toLocaleString()} journal
                   {pendingDelete.count === 1 ? '' : 's'}
@@ -1054,9 +884,12 @@ function DomainsTab({
               </div>
             </div>
           }
-          confirmLabel='Delete domain and its journals'
+          confirmLabel={`Delete ${noun} and its journals`}
           confirmTone='danger'
-          onConfirm={() => cascadeDelete(pendingDelete.key)}
+          onConfirm={() => {
+            onCascadeDelete(pendingDelete.key);
+            setPendingDelete(null);
+          }}
           onCancel={() => setPendingDelete(null)}
         />
       )}
@@ -1064,28 +897,33 @@ function DomainsTab({
   );
 }
 
-function DomainRow({
-  domain,
+function KeyedListRow({
+  item,
   count,
   editable,
+  noun,
   onRename,
   onDelete,
 }: {
-  domain: RankingDomain;
+  item: KeyedItem;
   count: number;
   editable: boolean;
+  noun: string;
   onRename: (nextKey: string, nextLabel: string) => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draftKey, setDraftKey] = useState(domain.key);
-  const [draftLabel, setDraftLabel] = useState(domain.label ?? '');
-  const [prevSig, setPrevSig] = useState(`${domain.key} ${domain.label ?? ''}`);
-  const sig = `${domain.key} ${domain.label ?? ''}`;
+  const [draftKey, setDraftKey] = useState(item.key);
+  const [draftLabel, setDraftLabel] = useState(item.label ?? '');
+  // Keep drafts in sync if the prop changes underneath us. Previous-prop
+  // comparison during render avoids the React 19 setState-in-useEffect
+  // anti-pattern.
+  const [prevSig, setPrevSig] = useState(`${item.key} ${item.label ?? ''}`);
+  const sig = `${item.key} ${item.label ?? ''}`;
   if (prevSig !== sig) {
     setPrevSig(sig);
-    setDraftKey(domain.key);
-    setDraftLabel(domain.label ?? '');
+    setDraftKey(item.key);
+    setDraftLabel(item.label ?? '');
   }
 
   const commit = () => {
@@ -1112,9 +950,9 @@ function DomainRow({
         </>
       ) : (
         <>
-          <code className='text-app font-medium'>{domain.key}</code>
+          <code className='text-app font-medium'>{item.key}</code>
           <span className='text-app-muted'>
-            {domain.label || (
+            {item.label || (
               <span className='text-app-soft italic'>(no label)</span>
             )}
           </span>
@@ -1147,7 +985,7 @@ function DomainRow({
             className='p-1 text-app-soft hover:text-danger'
             title={
               count > 0
-                ? `Delete this domain and its ${count.toLocaleString()} journal${
+                ? `Delete this ${noun} and its ${count.toLocaleString()} journal${
                     count === 1 ? '' : 's'
                   }`
                 : 'Delete'
@@ -1158,6 +996,140 @@ function DomainRow({
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Tiers tab ──────────────────────────────────────────────────────────
+
+function TiersTab({
+  scheme,
+  editable,
+  update,
+}: {
+  scheme: RankingScheme;
+  editable: boolean;
+  update: (recipe: (draft: RankingScheme) => void) => void;
+}) {
+  const usageByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const j of scheme.journals) m.set(j.tier, (m.get(j.tier) ?? 0) + 1);
+    return m;
+  }, [scheme.journals]);
+
+  return (
+    <KeyedListEditor
+      items={scheme.tiers}
+      editable={editable}
+      usageByKey={usageByKey}
+      noun='tier'
+      addPlaceholder='Key (e.g. Q1)'
+      emptyHint='No tiers yet. Add one below.'
+      intro={
+        <>
+          Tiers are the buckets every journal is sorted into (e.g. CNRS uses
+          1–4; a JCR-style ranking would use Q1–Q4). The <strong>key</strong> is
+          the stable identifier stored on each journal — renaming it cascades to
+          every journal that uses it.
+        </>
+      }
+      onAdd={(key, label) =>
+        update((d) => {
+          if (d.tiers.some((t) => t.key === key)) return;
+          d.tiers.push({ key, label: label || undefined });
+        })
+      }
+      onRename={(oldKey, nextKey, nextLabel) =>
+        update((d) => {
+          const idx = d.tiers.findIndex((t) => t.key === oldKey);
+          if (idx < 0) return;
+          if (nextKey !== oldKey) {
+            if (d.tiers.some((t) => t.key === nextKey)) return; // dedupe
+            for (const j of d.journals) {
+              if (j.tier === oldKey) j.tier = nextKey;
+            }
+          }
+          d.tiers[idx] = { key: nextKey, label: nextLabel || undefined };
+        })
+      }
+      onDelete={(key) =>
+        update((d) => {
+          d.tiers = d.tiers.filter((t) => t.key !== key);
+        })
+      }
+      onCascadeDelete={(key) =>
+        update((d) => {
+          d.tiers = d.tiers.filter((t) => t.key !== key);
+          d.journals = d.journals.filter((j) => j.tier !== key);
+        })
+      }
+    />
+  );
+}
+
+// ─── Domains tab ───────────────────────────────────────────────────
+
+function DomainsTab({
+  scheme,
+  editable,
+  update,
+}: {
+  scheme: RankingScheme;
+  editable: boolean;
+  update: (recipe: (draft: RankingScheme) => void) => void;
+}) {
+  const usageByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const j of scheme.journals)
+      m.set(j.domain, (m.get(j.domain) ?? 0) + 1);
+    return m;
+  }, [scheme.journals]);
+
+  return (
+    <KeyedListEditor
+      items={scheme.domains}
+      editable={editable}
+      usageByKey={usageByKey}
+      noun='domain'
+      addPlaceholder='Key (e.g. Cardio)'
+      emptyHint='No domains yet. Add one below.'
+      intro={
+        <>
+          Domains are subject areas (CNRS Economics calls them GEN, OrgInd,
+          etc.; a medical scheme might use cardiology, oncology, …). Renaming a
+          domain&apos;s key cascades to every journal that uses it.
+        </>
+      }
+      onAdd={(key, label) =>
+        update((d) => {
+          if (d.domains.some((x) => x.key === key)) return;
+          d.domains.push({ key, label: label || undefined });
+        })
+      }
+      onRename={(oldKey, nextKey, nextLabel) =>
+        update((d) => {
+          const idx = d.domains.findIndex((x) => x.key === oldKey);
+          if (idx < 0) return;
+          if (nextKey !== oldKey) {
+            if (d.domains.some((x) => x.key === nextKey)) return;
+            for (const j of d.journals) {
+              if (j.domain === oldKey) j.domain = nextKey;
+            }
+          }
+          d.domains[idx] = { key: nextKey, label: nextLabel || undefined };
+        })
+      }
+      onDelete={(key) =>
+        update((d) => {
+          d.domains = d.domains.filter((x) => x.key !== key);
+        })
+      }
+      onCascadeDelete={(key) =>
+        update((d) => {
+          d.domains = d.domains.filter((x) => x.key !== key);
+          d.journals = d.journals.filter((j) => j.domain !== key);
+        })
+      }
+    />
   );
 }
 

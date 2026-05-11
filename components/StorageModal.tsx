@@ -212,13 +212,18 @@ export default function StorageModal({ isOpen, onClose }: Props) {
   // modal. Auto-clears after 3s.
   const [exportFlash, setExportFlash] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Re-snapshot localStorage every time the modal opens. Uses the
+  // previous-prop-comparison-during-render idiom rather than
+  // useEffect+setState — React 19 lints the latter.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
       setData(readStorage());
       setShowConfirm(false);
       setExportFlash(null);
     }
-  }, [isOpen]);
+  }
 
   useEffect(() => {
     if (!exportFlash) return;
@@ -396,7 +401,7 @@ export default function StorageModal({ isOpen, onClose }: Props) {
 
         {/* Tip */}
         <div className='mt-4 p-2.5 surface-muted rounded text-[11px] text-stone-500'>
-          To erase individual items or a single category, use the matching
+          To erase individual items or a single section, use the matching
           panel in Paperazzi (Filters, Pinned papers). The button below erases{' '}
           <strong>everything</strong>.
         </div>
