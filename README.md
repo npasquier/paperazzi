@@ -2,10 +2,11 @@
 
 > Find papers that matter — a focused, citation-aware search tool for economics literature.
 
-Paperazzi is a web app that searches academic papers via the [OpenAlex](https://openalex.org/) API and adds an economics-specific layer on top: CNRS journal categorization, forward + backward citation exploration, a year × log-citations citation network, and a per-collection pin sidebar with notes, keywords, and import/export.
+Paperazzi is a web app that searches academic papers via the [OpenAlex](https://openalex.org/) API and adds a research workflow on top: editable journal ranking schemes, keyword and semantic search, forward + backward citation exploration, a year × log-citations citation network, and a per-collection pin sidebar with notes, keywords, and import/export.
 
 🔗 **Live app:** <https://paperazzi.vercel.app>
 📖 **About / methodology:** <https://paperazzi.vercel.app/about>
+🧭 **Help / user guide:** <https://paperazzi.vercel.app/help>
 
 ---
 
@@ -26,13 +27,14 @@ Paperazzi is a web app that searches academic papers via the [OpenAlex](https://
 
 ## Features
 
-- **Economics-first journal filtering.** Filter results by CNRS-categorized economics journals (1, 1g, 2, 3, 4) or by saved ISSN whitelists (e.g. Top 5).
-- **Forward + backward citation exploration.** From any result, search papers that cite it, papers it references, or visualise both as a network in year × log-citations space.
+- **Ranking-aware journal filtering.** Start with the built-in CNRS economics scheme, or fork, edit, import, export, and replace ranking schemes on `/rankings`. Journal filtering supports `Wide`, `Specific`, and `Off` modes plus saved journal filters such as `Top 5`.
+- **Search bar shortcuts and semantic mode.** Use `@name` for authors and `#abbrev` for journals directly in the query bar, or switch to Semantic search for concept-based retrieval when no filter conflicts are active.
+- **Forward + backward citation exploration.** From any result, search papers that cite it, papers it references, or visualize both as a network in year × log-citations space.
 - **Pin sidebar with collections.** Pin papers into named libraries (e.g. *Job-market paper*, *Lit review – pricing*), drag-and-drop into colour-coded groups, and switch between collections without losing state.
 - **Per-paper notes & keywords.** Annotate pinned papers with a free-text note and up to six tags; both round-trip through export/import.
 - **Share & back up.** Export a single collection as a `.paperazzi-collection.json` file (shareable) or your entire library as a `.paperazzi-library.json` backup. Drop either kind anywhere on the page to import.
 - **Author and institution search.** Click an author or institution name in any paper card to refocus the result list.
-- **Saved searches.** Persist filter presets to localStorage so a recurring query is one click away.
+- **Saved searches.** Persist full search presets to localStorage so a recurring query is one click away.
 - **Privacy-friendly.** No accounts, no server-side user database. All pins, notes, and preferences live in your browser's localStorage. The app's only outbound request is to the OpenAlex API.
 
 ## Tech stack
@@ -107,17 +109,19 @@ paperazzi/
 │   ├── layout.tsx             # Root layout, fonts, providers, NavBar
 │   ├── page.tsx               # Landing page
 │   ├── about/                 # About / methodology page
-│   ├── help/                  # Search-syntax help page
+│   ├── help/                  # User guide / workflow documentation
+│   ├── rankings/              # Ranking-scheme editor and import/export page
 │   ├── search/                # Main search experience (uses PaperazziApp)
 │   └── api/
 │       └── search/            # /api/search route — proxies & shapes OpenAlex
 │           ├── route.ts       #   entry; dispatches to handlers
+│           ├── context.ts     #   request context / shared params
 │           ├── handlers/      #   one file per search mode
 │           │   ├── regular.ts
 │           │   ├── citingAll.ts
 │           │   ├── referencedBy.ts
 │           │   └── referencesAll.ts
-│           └── lib/           #   fetch, format, key-rotation helpers
+│           └── lib/           #   fetch, format, search, key-rotation helpers
 │
 ├── components/                # All UI components
 │   ├── PaperazziApp.tsx       # Top-level client component for /search
@@ -127,6 +131,7 @@ paperazzi/
 │   ├── PinSidebar.tsx         # Right pane: pinned papers, groups, collections
 │   ├── CollectionImportDropzone.tsx  # Global drag-and-drop import overlay
 │   ├── PaperInfoModal.tsx     # Paper detail modal (notes + keywords)
+│   ├── ContributeModal.tsx    # OpenAlex correction flow
 │   ├── AuthorModal.tsx
 │   ├── InstitutionModal.tsx
 │   ├── JournalModal.tsx       # Journal picker (lazy-loaded)
@@ -134,7 +139,9 @@ paperazzi/
 │   ├── OnboardingOverlay.tsx
 │   ├── ErrorBoundary.tsx
 │   ├── EmptyState.tsx
-│   ├── SearchSyntaxHelp.tsx
+│   ├── SearchSyntaxHelp.tsx   # Keyword / semantic syntax + shortcut help
+│   ├── rankings/
+│   │   └── RankingsEditor.tsx
 │   └── ui/                    # Reusable building blocks
 │       ├── PaperCard.tsx      #   default / compact / pinned variants
 │       ├── PinButton.tsx
@@ -144,13 +151,14 @@ paperazzi/
 ├── contexts/
 │   └── PinContext.tsx         # Pins, groups, collections, import/export
 │
-├── data/                      # Static datasets (CNRS rankings, ISSN lists)
+├── data/                      # Static datasets (CNRS scheme, journals, abbreviations)
+│   ├── cnrsScheme.ts
 │   ├── journals.ts
 │   ├── journalAbbreviations.ts
-│   ├── econDomains.ts
 │   └── domains.ts
 │
 ├── utils/
+│   ├── activeRanking.ts          # Active ranking loader / resolver
 │   ├── pinCollectionTransfer.ts  # Export/import format + parser
 │   ├── storageKeys.ts            # Single source of truth for localStorage keys
 │   ├── eventBus.ts               # Tiny pub/sub (paper-citing-click, etc.)
@@ -158,10 +166,11 @@ paperazzi/
 │   ├── parsePapers.ts            # OpenAlex → Paper shape
 │   ├── abstract.ts               # Inverted-index → text
 │   ├── cleanHtml.ts              # Sanitize OpenAlex titles/abstracts
+│   ├── correctionForms.ts        # OpenAlex correction-form links
+│   ├── migrateFilters.ts         # Filter-shape migrations
 │   ├── searchCache.ts            # In-memory result cache
-│   ├── queryMentions.ts          # @author / #journal mention parsing
-│   ├── issnToJournals.ts
-│   ├── loadJournals.ts
+│   ├── queryMentions.ts          # @author / #journal shortcut parsing
+│   ├── loadJournals.ts           # Journal loading / ISSN resolution
 │   └── usePersistedBoolean.ts    # localStorage-backed boolean hook
 │
 ├── types/
@@ -179,28 +188,30 @@ paperazzi/
 ## Data flow
 
 ```
-        ┌────────────────┐  query    ┌──────────────────┐  fetch   ┌──────────┐
-User → │ FilterPanel    │ ────────▶ │ /api/search      │ ───────▶ │ OpenAlex │
-        │ (client)       │           │ (server route)   │          └──────────┘
-        └────────────────┘           └──────────────────┘
-                ▲                             │
-                │ paper events                ▼ shaped JSON
-        ┌────────────────┐           ┌──────────────────┐
-        │ SearchResults  │ ◀──────── │ parsePapers      │
-        └────────────────┘           └──────────────────┘
-                │ pin
-                ▼
-        ┌────────────────────────────────────────────────┐
-        │ PinContext (in-memory + debounced localStorage) │
-        └────────────────────────────────────────────────┘
-                │                          ▲
-                ▼                          │
-        ┌────────────────┐          drag-and-drop import
-        │ PinSidebar     │ ─────────────────────────────── CollectionImportDropzone
+        ┌──────────────────────────┐  query / shortcuts   ┌──────────────────┐  fetch   ┌──────────┐
+User →  │ NavBar + FilterPanel      │ ──────────────────▶ │ /api/search      │ ───────▶ │ OpenAlex │
+        │ (client)                 │                      │ (server route)   │          └──────────┘
+        └──────────────────────────┘                      └──────────────────┘
+                    ▲                                               │
+                    │ paper events                                  ▼ shaped JSON
+        ┌──────────────────────────┐                      ┌──────────────────┐
+        │ SearchResults            │ ◀─────────────────── │ parsePapers      │
+        └──────────────────────────┘                      └──────────────────┘
+                    │ pin
+                    ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │ PinContext (in-memory state + debounced localStorage sync)   │
+        └──────────────────────────────────────────────────────────────┘
+                    │                                   ▲
+                    ▼                                   │
+        ┌────────────────┐                     drag-and-drop import
+        │ PinSidebar     │ ─────────────────────────────────────────── CollectionImportDropzone
         └────────────────┘
 ```
 
-Persistence rules of thumb: anything user-authored (pins, groups, notes, keywords, presets, sidebar width) lives in `localStorage` under keys defined in `utils/storageKeys.ts`. Search results themselves are never persisted; only their cached IDs in the pin sidebar.
+`NavBar` resolves `@author` and `#journal` shortcuts client-side before pushing the search URL. Ranking-aware journal filters are resolved locally to ISSNs, then sent as normal search params to `/api/search`.
+
+Persistence rules of thumb: anything user-authored (pins, groups, notes, keywords, saved searches, saved journal filters, ranking schemes, sidebar width) lives in `localStorage` under keys defined in `utils/storageKeys.ts`. Search results themselves are never persisted; only their cached IDs in the pin sidebar.
 
 ## Scripts
 
@@ -237,6 +248,5 @@ If you spot incorrect paper metadata, that's an OpenAlex data issue — see <htt
 
 - **[OpenAlex](https://openalex.org/)** — the open scholarly metadata graph that powers every search.
 - **[CNRS Section 37](https://www.gate.cnrs.fr/wp-content/uploads/2021/12/categorisation37_liste_juin_2020-2.pdf)** — the (2020) economics-journal categorisation used for filter tiers.
-- **[ResearchRabbit](https://www.researchrabbit.ai/)** — popularised the year × log-citations citation network view.
 
 Built by [Nicolas Pasquier](https://npasquier.github.io/), economics researcher at GAEL.
