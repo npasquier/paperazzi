@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bookmark,
+  ChevronDown,
   Compass,
   Database,
   Download,
@@ -723,58 +724,69 @@ export default function HelpPage() {
             }
             art={<FilterArtwork />}
           >
-            <div className='grid gap-4 lg:grid-cols-[1.15fr_0.85fr]'>
-              <article className='surface-panel rounded-2xl border border-app p-5'>
-                <h3 className='text-base font-semibold text-stone-900'>
-                  Journals
-                </h3>
-                <p className='mt-2 text-sm leading-relaxed text-stone-700'>
-                  The Journals section has three modes.
-                </p>
-
-                <div className='mt-4 grid gap-3 md:grid-cols-3'>
-                  <div className='rounded-2xl border border-app bg-[rgba(255,253,248,0.82)] p-4'>
-                    <p className='text-sm font-semibold text-stone-900'>Wide</p>
-                    <p className='mt-2 text-sm leading-relaxed text-stone-600'>
-                      Preset pills plus tier and domain rows sourced from the
-                      active ranking scheme. Manage that scheme on the{' '}
-                      <Link
-                        href='/rankings'
-                        className='underline underline-offset-2 hover:text-stone-900'
-                      >
-                        /rankings
-                      </Link>{' '}
-                      page.
-                    </p>
-                  </div>
-                  <div className='rounded-2xl border border-app bg-[rgba(255,253,248,0.82)] p-4'>
-                    <p className='text-sm font-semibold text-stone-900'>
-                      Specific
-                    </p>
-                    <p className='mt-2 text-sm leading-relaxed text-stone-600'>
-                      Pick individual journals by name. Updates take effect
-                      live, no need to rerun the search.
-                    </p>
-                  </div>
-                  <div className='rounded-2xl border border-app bg-[rgba(255,253,248,0.82)] p-4'>
-                    <p className='text-sm font-semibold text-stone-900'>Off</p>
-                    <p className='mt-2 text-sm leading-relaxed text-stone-600'>
-                      Disables journal filtering entirely while preserving your
-                      Wide and Specific selections for later.
-                    </p>
-                  </div>
-                </div>
-
-                <p className='mt-4 text-xs leading-relaxed text-stone-500'>
-                  Sessions start in <em>Off</em>. Switching to Wide restores the
-                  last Wide selection you made; the same is true for Specific.
-                </p>
-              </article>
-
-              <div className='grid gap-4'>
-                <article className='surface-panel rounded-2xl border border-app p-5'>
+              <div className='grid gap-4 lg:grid-cols-[1.15fr_0.85fr]'>
+                <article className='surface-panel rounded-2xl border border-app p-4'>
                   <h3 className='text-base font-semibold text-stone-900'>
-                    Authors and institutions
+                    Journals
+                  </h3>
+                  <p className='mt-1.5 text-sm leading-relaxed text-stone-700'>
+                    The Journals section has three modes.
+                  </p>
+
+                  <div className='mt-4 overflow-hidden rounded-2xl border border-app bg-[rgba(255,253,248,0.82)]'>
+                    <div className='grid gap-2 border-b border-app px-4 py-3 md:grid-cols-[88px_minmax(0,1fr)] md:gap-3'>
+                      <div>
+                        <span className='inline-flex rounded-full banner-info px-2.5 py-1 text-xs font-medium text-accent-strong'>
+                          Wide
+                        </span>
+                      </div>
+                      <p className='text-sm leading-relaxed text-stone-600'>
+                        Preset pills and tier/domain rows come from the active
+                        ranking scheme on{' '}
+                        <Link
+                          href='/rankings'
+                          className='underline underline-offset-2 hover:text-stone-900'
+                        >
+                          /rankings
+                        </Link>{' '}
+                        page.
+                      </p>
+                    </div>
+
+                    <div className='grid gap-2 border-b border-app px-4 py-3 md:grid-cols-[88px_minmax(0,1fr)] md:gap-3'>
+                      <div>
+                        <span className='inline-flex rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium text-stone-700'>
+                          Specific
+                        </span>
+                      </div>
+                      <p className='text-sm leading-relaxed text-stone-600'>
+                        Pick journals by name. Changes apply live.
+                      </p>
+                    </div>
+
+                    <div className='grid gap-2 px-4 py-3 md:grid-cols-[88px_minmax(0,1fr)] md:gap-3'>
+                      <div>
+                        <span className='inline-flex rounded-full bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-medium text-stone-700'>
+                          Off
+                        </span>
+                      </div>
+                      <p className='text-sm leading-relaxed text-stone-600'>
+                        Disables journal filtering while preserving your Wide and
+                        Specific selections.
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className='mt-3 text-xs leading-relaxed text-stone-500'>
+                    Sessions start in <em>Off</em>. Returning to Wide or
+                    Specific restores the previous selection for that mode.
+                  </p>
+                </article>
+
+                <div className='flex flex-col gap-4 lg:h-full lg:justify-between'>
+                  <article className='surface-panel rounded-2xl border border-app p-5'>
+                    <h3 className='text-base font-semibold text-stone-900'>
+                      Authors and institutions
                   </h3>
                   <p className='mt-2 text-sm leading-relaxed text-stone-700'>
                     Both work like Specific journals: open the picker, search by
@@ -796,7 +808,33 @@ export default function HelpPage() {
                   </p>
                 </article>
               </div>
-            </div>
+
+                <div className='rounded-2xl banner-info p-5 lg:col-span-2'>
+                  <p className='text-sm font-semibold text-accent-strong'>
+                    Hint: the search bar supports prefixes.
+                  </p>
+                  <p className='mt-2 text-sm leading-relaxed text-accent-strong'>
+                    Use{' '}
+                    <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
+                      @name
+                    </code>{' '}
+                    for authors and{' '}
+                    <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
+                      #abbrev
+                    </code>{' '}
+                    for journals in the query bar. For example:{' '}
+                    <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
+                      @acemoglu #aer institutions
+                    </code>
+                    .
+                  </p>
+                  <p className='mt-2 text-xs leading-relaxed text-accent-strong/85'>
+                    Remaining text is searched as keywords. Multiple authors or
+                    journals are intersected, and in Semantic mode these prefixes
+                    are treated as plain text.
+                  </p>
+                </div>
+              </div>
           </DocSection>
 
           <DocSection
@@ -911,21 +949,32 @@ export default function HelpPage() {
               </article>
             </div>
 
-            <article className='surface-panel rounded-2xl border border-app p-5'>
-              <h3 className='text-base font-semibold text-stone-900'>
-                JSON shape
-              </h3>
-              <p className='mt-2 text-sm leading-relaxed text-stone-700'>
-                A ranking scheme is a plain JSON object with the fields below.
-                Required fields are marked <strong>·</strong>.
-              </p>
+            <details
+              open
+              className='group surface-panel rounded-2xl border border-app p-5'
+            >
+              <summary className='flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden'>
+                <div>
+                  <h3 className='text-base font-semibold text-stone-900'>
+                    JSON shape
+                  </h3>
+                  <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                    A ranking scheme is a plain JSON object with the fields
+                    below. Required fields are marked <strong>·</strong>.
+                  </p>
+                </div>
+                <ChevronDown
+                  size={18}
+                  className='mt-1 shrink-0 text-stone-400 transition-transform group-open:rotate-180'
+                />
+              </summary>
 
               <div className='mt-4 overflow-hidden rounded-2xl border border-app bg-[#f7f1e5]'>
                 <div className='border-b border-app px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400'>
                   ranking.json
                 </div>
                 <pre className='overflow-x-auto px-4 py-4 text-[11px] leading-relaxed text-stone-700'>
-                  {`{
+{`{
   "version": 1,                       · schema version, always 1 for now
   "id": "hceres-2021",                · stable id (free-form string)
   "name": "HCERES 2021",              · display name shown in the navbar/editor
@@ -982,7 +1031,7 @@ export default function HelpPage() {
                   or an explicit ISSN whitelist.
                 </li>
               </ul>
-            </article>
+            </details>
 
             <div className='grid gap-4 lg:grid-cols-[0.84fr_1.16fr]'>
               <article className='surface-panel rounded-2xl border border-app p-5'>
