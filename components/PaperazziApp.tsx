@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, Suspense, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, Suspense, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
@@ -187,6 +187,32 @@ function PaperazziAppContent() {
     });
   }, [filters.journals, filters.journalFilterMode]);
 
+  // Mirror of the live `filters` accessible synchronously from outside
+  // the render cycle. `syncFromURL` (below) uses this to commit the
+  // user's live econFilter / journalFilterMode onto `searchFilters` at
+  // commit time — its functional-update closure only has access to the
+  // previous searchFilters, not the live filters, so without this ref
+  // the user's wide-mode tier/domain edits would silently fail to apply
+  // when they hit Enter.
+  const filtersRef = useRef(filters);
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+
+  // `searchFilters` is the *committed* filter state — the snapshot that
+  // SearchResults' fetch effect depends on. `filters` is the live state
+  // the FilterPanel edits. The two diverge as the user composes filter
+  // changes; pressing Enter (or any other URL push) re-runs syncFromURL,
+  // which sets both back in sync. This memo drives the "press Enter to
+  // apply" hint in the navbar — we deliberately compare via JSON because
+  // the fields are small plain objects and arrays of `{id|issn, name}`.
+  const isDirty = useMemo(() => {
+    return JSON.stringify(filters) !== JSON.stringify(searchFilters);
+  }, [filters, searchFilters]);
+  useEffect(() => {
+    emit('paperazzi-filters-dirty', { isDirty });
+  }, [isDirty]);
+
   // Sync state with URL parameters
   useEffect(() => {
     const syncFromURL = async () => {
@@ -279,16 +305,22 @@ function PaperazziAppContent() {
         return prevMode;
       };
 
-      setFilters((prev) => ({
-        ...newFilters,
-        econFilter: prev.econFilter,
-        journalFilterMode: reconcileMode(prev.journalFilterMode),
-      }));
-      setSearchFilters((prev) => ({
-        ...newFilters,
-        econFilter: prev.econFilter,
-        journalFilterMode: reconcileMode(prev.journalFilterMode),
-      }));
+      // Commit: both `filters` and `searchFilters` are set from the live
+      // `filters` snapshot (via filtersRef) for the non-URL fields
+      // (econFilter, journalFilterMode). The previous version pulled
+      // `prev.econFilter` / `prev.journalFilterMode` from each setter's
+      // own previous state — so setSearchFilters preserved the previous
+      // *committed* econFilter, silently dropping any wide-mode edits
+      // the user had made in the panel before pressing Enter. Reading
+      // from filtersRef.current makes Enter behave as "apply my pending
+      // panel changes", which is what `isDirty` advertises.
+      const liveFilters = filtersRef.current;
+      const committedNonUrl = {
+        econFilter: liveFilters.econFilter,
+        journalFilterMode: reconcileMode(liveFilters.journalFilterMode),
+      };
+      setFilters({ ...newFilters, ...committedNonUrl });
+      setSearchFilters({ ...newFilters, ...committedNonUrl });
       setSearchQuery(q);
       setPage(p);
       setNetworkId(network || null);
@@ -688,12 +720,17 @@ function PaperazziAppContent() {
         >
           <SearchResults
             query={searchQuery}
-            // Use live filters.journals (not searchFilters.journals) so that
-            // adding/removing manual journals in the panel takes effect
-            // immediately — particularly important for the network view's
-            // specific-mode filter, since the JournalModal doesn't push to
-            // the URL.
-            journals={filters.journals}
+            // Every dimension here reads from `searchFilters` — the
+            // *committed* snapshot. Live edits in the FilterPanel update
+            // `filters` and surface via the navbar hint ("Press Enter to
+            // apply") but don't fire the OpenAlex API until the user
+            // commits via Enter / Search / a URL push. journals,
+            // econFilter and journalFilterMode used to read from live
+            // `filters` (so the panel auto-refetched on each click);
+            // this was the main source of redundant API traffic, and
+            // the deferred-commit flow now treats them like every other
+            // filter dimension.
+            journals={searchFilters.journals}
             authors={searchFilters.authors}
             institutions={searchFilters.institutions}
             publicationType={searchFilters.publicationType}
@@ -713,8 +750,8 @@ function PaperazziAppContent() {
             onAuthorSearch={handleAuthorSearch}
             onClearAuthor={handleClearAuthor}
             onExitNetwork={handleResetAll}
-            econFilter={filters.econFilter}
-            journalFilterMode={filters.journalFilterMode}
+            econFilter={searchFilters.econFilter}
+            journalFilterMode={searchFilters.journalFilterMode}
             networkId={networkId}
             onPresetTile={handlePresetTile}
             semantic={semantic}

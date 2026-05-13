@@ -82,6 +82,14 @@ export type AppEvents = {
    * navbar has no other way to detect it.
    */
   'semantic-conflict-econ': { econActive: boolean };
+  /**
+   * True iff the user has pending filter changes that haven't been
+   * committed yet — i.e. they edited the FilterPanel without hitting
+   * Enter / Search since the last commit. The navbar uses this to show
+   * a "Press Enter to apply" hint near the search bar. PaperazziApp is
+   * the only emitter (it owns the live vs. committed split).
+   */
+  'paperazzi-filters-dirty': { isDirty: boolean };
 };
 
 type EventName = keyof AppEvents;

@@ -91,6 +91,13 @@ function NavBarContent() {
   const [chips, setChips] = useState<SelectedAuthor[]>([]);
   const [journalChips, setJournalChips] = useState<SelectedJournal[]>([]);
 
+  // True iff the user has edited filters in the panel without committing
+  // (pressing Enter / clicking Search). Drives the "Press Enter to apply"
+  // hint below the search bar — the deferred-commit flow now waits for an
+  // explicit commit before re-querying OpenAlex, and this hint is the
+  // user-visible signal that there are pending changes.
+  const [filtersDirty, setFiltersDirty] = useState(false);
+
   useEffect(() => {
     const offAuthors = on('paperazzi-authors-changed', ({ authors }) => {
       setChips(authors || []);
@@ -98,9 +105,13 @@ function NavBarContent() {
     const offJournals = on('paperazzi-journals-changed', ({ journals }) => {
       setJournalChips(journals || []);
     });
+    const offDirty = on('paperazzi-filters-dirty', ({ isDirty }) => {
+      setFiltersDirty(isDirty);
+    });
     return () => {
       offAuthors();
       offJournals();
+      offDirty();
     };
   }, []);
 
@@ -736,6 +747,35 @@ function NavBarContent() {
                     )}
                   </div>
                 )}
+
+                {/* Pending-filter hint: the FilterPanel edits `filters`
+                    live, but the search uses the committed `searchFilters`
+                    so OpenAlex isn't hit on every click. The hint signals
+                    "you have unapplied changes — press Enter to commit".
+                    Gated on `!mentionOpen` so it doesn't pile on top of
+                    the autocomplete dropdown, and skipped in favor of the
+                    semantic warning when both would otherwise fire. */}
+                {filtersDirty &&
+                  !mentionOpen &&
+                  !(semantic && SHORTCUT_ANYWHERE_RE.test(query)) && (
+                    <div
+                      role='status'
+                      aria-live='polite'
+                      className='absolute left-0 right-0 top-full mt-1 banner-info rounded p-2 text-[11px] flex items-start gap-2 z-40'
+                    >
+                      <Search
+                        size={12}
+                        className='flex-shrink-0 mt-0.5 text-accent-strong'
+                      />
+                      <p className='text-app-muted leading-snug'>
+                        Filters changed — press{' '}
+                        <kbd className='surface-subtle rounded px-1 border border-app text-app font-medium'>
+                          Enter
+                        </kbd>{' '}
+                        in the search bar to apply.
+                      </p>
+                    </div>
+                  )}
 
                 {/* Just-in-time hint: surface only when the user types a
                     shortcut-shaped token in semantic mode. Tells them why
