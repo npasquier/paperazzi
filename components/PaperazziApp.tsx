@@ -161,6 +161,32 @@ function PaperazziAppContent() {
     emit('semantic-conflict-econ', { econActive });
   }, [filters.journalFilterMode, filters.econFilter]);
 
+  // Keep the navbar's chip facade in sync with filters.authors /
+  // filters.journals. syncFromURL already broadcasts these when URL params
+  // change, but the FilterPanel modals (AuthorModal / JournalModal) and the
+  // per-section "remove" buttons mutate `filters.*` directly without
+  // touching the URL — so without these effects, the navbar's chip list
+  // goes stale. A subsequent search then submits stale `chipAuthors` /
+  // `chipJournals` (which the navbar-search handler treats as
+  // authoritative), wiping the author/journal filters the user had set
+  // via the panel.
+  useEffect(() => {
+    emit('paperazzi-authors-changed', { authors: filters.authors });
+  }, [filters.authors]);
+  useEffect(() => {
+    // Only surface journal chips in the navbar when the panel is in
+    // 'specific' mode — otherwise the wide-econ filter (or 'off') is what
+    // determines results, and showing a `#ms` chip falsely suggests a
+    // manual journal filter is active. `filters.journals` itself is
+    // preserved in component state so toggling back to 'specific' from
+    // the FilterPanel re-displays the chip — the navbar mirror reacts
+    // because this effect also re-runs on `journalFilterMode` changes.
+    const mode = filters.journalFilterMode || 'wide';
+    emit('paperazzi-journals-changed', {
+      journals: mode === 'specific' ? filters.journals : [],
+    });
+  }, [filters.journals, filters.journalFilterMode]);
+
   // Sync state with URL parameters
   useEffect(() => {
     const syncFromURL = async () => {

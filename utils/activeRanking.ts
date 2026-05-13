@@ -259,14 +259,20 @@ export function useActiveRanking(): RankingScheme | null {
       });
     };
 
-    // Initial fetch. When a snapshot is already cached the lazy
-    // `useState` initialiser above already picked it up; we only need
-    // to fire the loader when nothing has resolved yet.
-    if (!snapshot) {
-      loadActiveRanking().then((s) => {
-        if (!cancelled) setScheme(s);
-      });
-    }
+    // Initial fetch — always run, never skip on `!snapshot`. The previous
+    // guard introduced a StrictMode race: when the dynamic import for the
+    // baseline scheme resolved *between* the first effect's cleanup and
+    // the second mount's effect, `snapshot` was already populated, so the
+    // second effect short-circuited and never called `setScheme`. The
+    // first effect's `.then` had been cancelled by then, so the component
+    // stayed stuck on `null` indefinitely — visible on /search as a wide
+    // filter with only the hardcoded "All" button (no tiers/domains/presets).
+    // Calling `loadActiveRanking().then(setScheme)` unconditionally costs
+    // one extra microtask when the snapshot is already known and React
+    // bails out of the re-render if the value is identical.
+    loadActiveRanking().then((s) => {
+      if (!cancelled) setScheme(s);
+    });
 
     // Same-tab changes go through saveActiveRanking().
     const off = subscribeActiveRanking(reload);
