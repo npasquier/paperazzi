@@ -454,6 +454,7 @@ export default function FilterPanel({
             <ChevronLeft size={16} className='text-stone-400' />
           </button>
         </div>
+
       </div>
       {/* Save Journal-Filter Modal */}
       {showSaveJournalModal && (

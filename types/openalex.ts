@@ -70,3 +70,20 @@ export interface OpenAlexResultsPage<T> {
     db_response_time_ms?: number;
   };
 }
+
+export interface OpenAlexRateLimit {
+  daily_budget_usd?: number;
+  daily_used_usd?: number;
+  daily_remaining_usd?: number;
+  prepaid_balance_usd?: number;
+  prepaid_remaining_usd?: number;
+  prepaid_expires_at?: string | null;
+  resets_at?: string;
+  resets_in_seconds?: number;
+  endpoint_costs_usd?: Record<string, number>;
+}
+
+export interface OpenAlexRateLimitResponse {
+  api_key?: string;
+  rate_limit?: OpenAlexRateLimit;
+}

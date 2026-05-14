@@ -39,6 +39,9 @@ export const STORAGE_KEYS = {
   // Panel open/closed preferences (set via usePersistedBoolean).
   filterPanelOpen: 'paperazzi:filterPanelOpen',
   pinSidebarOpen: 'paperazzi:pinSidebarOpen',
+  // Lightweight history of OpenAlex usage snapshots captured by the
+  // usage dashboard modal so we can render a recent trend line.
+  openAlexUsageHistory: 'paperazzi:openalex-usage-history',
 } as const;
 
 /** Type of any fixed key value above. Useful for narrow consumers. */

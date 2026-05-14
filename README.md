@@ -94,8 +94,8 @@ npm run start
 | --------------------- | -------- | --------- | ----------------------------------------------------------------------------- |
 | `MAIL_ID`             | No       | server    | Email passed to OpenAlex via `mailto=` to join the [polite pool](https://docs.openalex.org/how-to-use-the-api/api-overview#the-polite-pool). |
 | `NEXT_PUBLIC_MAIL_ID` | No       | client    | Same email, used by client-side fetches to OpenAlex (e.g. modal abstract).    |
-| `OPEN_ALEX_API_KEY`   | No       | server    | Single OpenAlex API key, if you have one.                                     |
-| `OPENALEX_KEYS`       | No       | server    | Comma-separated list of keys; the API route rotates through them.             |
+| `OPEN_ALEX_API_KEY`   | No       | server    | Legacy single OpenAlex API key; Paperazzi will use it as a fallback or merge it into the rotation pool. |
+| `OPENALEX_KEYS`       | No       | server    | Comma-separated list of keys; the API route rotates through them and the usage dashboard inspects them individually. |
 
 A starter file lives at `.env.example` (do not commit `.env.local`).
 

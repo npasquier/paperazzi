@@ -90,6 +90,13 @@ export type AppEvents = {
    * the only emitter (it owns the live vs. committed split).
    */
   'paperazzi-filters-dirty': { isDirty: boolean };
+  /**
+   * Discard pending (uncommitted) filter changes — revert `filters` back
+   * to `searchFilters`. Emitted by the navbar's discard button. The
+   * payload is empty because PaperazziApp owns both pieces of state;
+   * the event is just the trigger.
+   */
+  'paperazzi-filters-discard': undefined;
 };
 
 type EventName = keyof AppEvents;

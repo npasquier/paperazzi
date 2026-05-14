@@ -5,10 +5,22 @@
 // random offset, and tracks per-key success/failure counters that can be
 // dumped when retries are exhausted.
 
-const RAW_KEYS = (process.env.OPENALEX_KEYS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+function parseKeys(raw: string | undefined): string[] {
+  return (raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// Support both the newer multi-key env var and the older single-key one.
+// If both are set, merge + de-duplicate them so the old value still
+// participates in rotation instead of being silently ignored.
+const RAW_KEYS = Array.from(
+  new Set([
+    ...parseKeys(process.env.OPENALEX_KEYS),
+    ...parseKeys(process.env.OPEN_ALEX_API_KEY),
+  ]),
+);
 
 // Boot-time env validation. Without keys the app technically still works
 // (OpenAlex's no-key path is rate-limited harder but functional), so we
@@ -55,7 +67,7 @@ export function makeKeyPicker(): KeyPicker {
 // raw key string in logs — only a redacted prefix — so a counter dump
 // can be safely included in error traces.
 
-interface KeyStat {
+export interface KeyStat {
   calls: number; // total fetchOpenAlex invocations using this key
   failures: number; // non-2xx responses or thrown errors
   lastFailureAt?: number; // ms epoch
@@ -86,15 +98,26 @@ export function recordKeyFailure(key: string | null, status?: number) {
   if (typeof status === 'number') s.lastFailureStatus = status;
 }
 
-/** Redact a key for logging — keep only the first 8 chars + ellipsis. */
-function redact(key: string): string {
+/** Redact a key for logging/UI — keep only the first 8 chars + ellipsis. */
+export function redactOpenAlexKey(key: string): string {
   return key.length <= 8 ? `${key}...` : `${key.slice(0, 8)}...`;
+}
+
+/** Internal/raw snapshot for one key, suitable for server-side joins. */
+export function getKeyCounterSnapshotForKey(key: string): KeyStat {
+  const s = counters.get(key);
+  return s
+    ? { ...s }
+    : {
+        calls: 0,
+        failures: 0,
+      };
 }
 
 /** Snapshot of all counters, with keys redacted. Safe to log. */
 export function getKeyCountersSnapshot() {
   return Array.from(counters.entries()).map(([k, s]) => ({
-    key: redact(k),
+    key: redactOpenAlexKey(k),
     ...s,
   }));
 }

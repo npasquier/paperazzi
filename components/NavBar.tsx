@@ -1,10 +1,21 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, Database, Sparkles, X, Info, Flag, ListOrdered } from 'lucide-react';
+import {
+  Search,
+  X,
+  Info,
+  Flag,
+  Database,
+  Gauge,
+  SlidersHorizontal,
+  ChevronDown,
+  Wrench,
+} from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import ContributeModal from './ContributeModal';
+import OpenAlexUsageModal from './OpenAlexUsageModal';
 import SearchSyntaxHelp from './SearchSyntaxHelp';
 import {
   extractMentions,
@@ -23,10 +34,10 @@ import { emit, on } from '@/utils/eventBus';
 // chars. We only suggest while the user is actively typing the *last* token,
 // which keeps the dropdown out of the way for everything else.
 const TRAILING_SHORTCUT_RE = /(?:^|\s)([@#])([A-Za-z][A-Za-z0-9-]{1,})$/;
-// Anywhere-in-query variant — used purely to detect "is the user typing a
-// shortcut while semantic mode is on?" so we can surface a warning. We
-// don't need to capture or strip; presence is the only signal.
-const SHORTCUT_ANYWHERE_RE = /(?:^|\s)[@#][A-Za-z][A-Za-z0-9-]+/;
+// (The SHORTCUT_ANYWHERE_RE companion regex used to detect "shortcut
+// typed while semantic mode is on" so we could show a hint. The
+// Semantic toggle no longer has a UI affordance, so that hint and its
+// regex went away.)
 
 type Suggestion =
   | {
@@ -56,12 +67,38 @@ function NavBarContent() {
   // Econ-filter activeness, broadcast by PaperazziApp (lives in component
   // state, not URL params — see `semantic-conflict-econ` event).
   const [econActive, setEconActive] = useState(false);
-  // Storage viewer modal
-  const [showStorage, setShowStorage] = useState(false);
-  // Contribute-to-OpenAlex call-to-action modal (triggered by the Flag
-  // icon). A modal is more engaging than a deep link to /help#contribute:
-  // the user gets one click from "I noticed an error" to filling the form.
+  // Contribute-to-OpenAlex call-to-action modal — triggered from the
+  // Tools dropdown. A modal is more engaging than a deep link to
+  // /help#contribute: one click from "I noticed an error" to the
+  // correction form.
   const [showContribute, setShowContribute] = useState(false);
+  // Stored-data viewer modal — also in the Tools dropdown.
+  const [showStorage, setShowStorage] = useState(false);
+  // OpenAlex API key usage dashboard — also in the Tools dropdown.
+  const [showOpenAlexUsage, setShowOpenAlexUsage] = useState(false);
+
+  // "Tools" dropdown — collects four utility actions (Personalize
+  // ranking, View stored data, Contribute corrections, API key usage)
+  // behind a single labelled trigger so Help and About are the only
+  // text/icon links the user sees at the top level. Click-outside /
+  // Escape close, same pattern as the previous More menu.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (!toolsRef.current?.contains(e.target as Node)) setToolsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setToolsOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [toolsOpen]);
 
   // ── @author / #journal autocomplete ─────────────────────────────────
   // Suggestions for the trailing @partial or #partial token. Open only
@@ -97,6 +134,19 @@ function NavBarContent() {
   // explicit commit before re-querying OpenAlex, and this hint is the
   // user-visible signal that there are pending changes.
   const [filtersDirty, setFiltersDirty] = useState(false);
+
+  // True iff the input text differs from the URL's currently-applied
+  // `q=` param. The query input is owned by the navbar (not
+  // PaperazziApp), so we can't piggy-back on the filters event — we
+  // derive it locally. Combined with `filtersDirty` below, this is what
+  // turns the submit-glass green: any uncommitted change (text *or*
+  // panel) should give the user one place to look.
+  const queryDirty = isSearchPage && query !== (searchParams.get('q') || '');
+
+  // Single boolean for "user has something pending to apply". The glass
+  // button and the hint banner both consume this so they stay in sync
+  // no matter which kind of change triggered the dirty state.
+  const isDirty = filtersDirty || queryDirty;
 
   useEffect(() => {
     const offAuthors = on('paperazzi-authors-changed', ({ authors }) => {
@@ -166,21 +216,15 @@ function NavBarContent() {
     }
   }, [searchParams, isSearchPage, semanticDisabled, router]);
 
-  // Toggle semantic mode. On the search page, push the URL change immediately
-  // so the results refetch in the new mode. Off the search page, just keep
-  // local state — it'll be applied when the user submits.
-  const handleToggleSemantic = (next: boolean) => {
-    // Refuse to enable semantic when conflicts are active. The pill itself
-    // is disabled in that state, but this is a defensive guard.
-    if (next && semanticDisabled) return;
-    setSemantic(next);
-    if (!isSearchPage) return;
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (next) params.set('semantic', 'true');
-    else params.delete('semantic');
-    params.set('page', '1');
-    router.replace(`/search?${params.toString()}`);
-  };
+  // (handleToggleSemantic was removed alongside the Semantic icon
+  // toggle. The `semantic` state still tracks `?semantic=true` from
+  // the URL so deep links keep working and the mode flows through to
+  // the API; there's just no UI affordance to flip it from the
+  // navbar anymore. The semantic-disabled conflict detection
+  // (`semanticDisabled`, `semanticConflicts`) is retained because the
+  // search-syntax (i) popover lists them so a power user with a
+  // semantic deep link can see why the chips/filters they're seeing
+  // would conflict.)
 
   // Debounced suggestion update. Triggers only when the query ends in
   // `@xxx` or `#xxx` (xxx ≥ 2 chars), so the dropdown is fully opt-in to a
@@ -230,7 +274,7 @@ function NavBarContent() {
       try {
         const url = `https://api.openalex.org/authors?search=${encodeURIComponent(
           partial,
-        )}&per-page=25`;
+        )}&per-page=25&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`;
         const res = await fetch(url);
         if (!res.ok) {
           setMentionSuggestions([]);
@@ -346,11 +390,6 @@ function NavBarContent() {
     emit('paperazzi-reset-search');
     router.push('/search');
   };
-
-  // True when there's anything visible to clear. Drives the X button's
-  // visibility — no point showing it on an already-empty bar.
-  const hasSomethingToClear =
-    query.length > 0 || chips.length > 0 || journalChips.length > 0;
 
   // Same for journal chips, but routes to the `journals=` URL param.
   const removeJournalChip = (issn: string) => {
@@ -555,15 +594,12 @@ function NavBarContent() {
                   // perimeter; warmer "paper on desk" fill (`background-card`)
                   // so the bar reads as an inset card rather than a hard
                   // input field; subtle border + soft shadow + smooth focus
-                  // ring transition.
-                  className='w-full flex flex-wrap items-center gap-1.5 px-4 py-1.5 min-h-[44px] rounded-full cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
+                  // ring transition. `pr-7` reserves space for the
+                  // absolutely-positioned (i) syntax-help icon on the
+                  // right edge — same layout we had before the
+                  // submit-glass-inside experiment.
+                  className='w-full flex flex-wrap items-center gap-1.5 pl-4 pr-7 py-1.5 min-h-[44px] rounded-full cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
                 >
-                  <Search
-                    size={16}
-                    className='flex-shrink-0 text-app-soft pointer-events-none'
-                    aria-hidden='true'
-                  />
-
                   {/* Author chips — green (success palette). */}
                   {chips.map((chip) => (
                     <span
@@ -652,30 +688,12 @@ function NavBarContent() {
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
                   
-                  {/* Clear-all: wipes query, chips, and non-URL state, then
-                      navigates to /search so the welcome state renders
-                      (instead of running an unfiltered "search everything"
-                      query). Hidden when the bar is already empty.
-                      `mr-7` reserves the spot covered by the absolutely-
-                      positioned (i) help icon so the two never overlap. */}
-                  {hasSomethingToClear && (
-                    <button
-                      type='button'
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearAll();
-                      }}
-                      className='flex-shrink-0 mr-7 p-1 rounded-md text-app-soft hover:text-app hover:bg-[var(--surface-muted)] transition'
-                      title='Clear search'
-                      aria-label='Clear search'
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-
                 </div>
 
+                {/* Search-syntax (i) icon, anchored to the bar's
+                    right edge — its `pr-7` reservation above leaves
+                    room for it. The popover itself is position: fixed
+                    so it isn't clipped by the bar's perimeter. */}
                 <SearchSyntaxHelp
                   semantic={semantic}
                   conflicts={semanticConflicts}
@@ -748,114 +766,53 @@ function NavBarContent() {
                   </div>
                 )}
 
-                {/* Pending-filter hint: the FilterPanel edits `filters`
-                    live, but the search uses the committed `searchFilters`
-                    so OpenAlex isn't hit on every click. The hint signals
-                    "you have unapplied changes — press Enter to commit".
-                    Gated on `!mentionOpen` so it doesn't pile on top of
-                    the autocomplete dropdown, and skipped in favor of the
-                    semantic warning when both would otherwise fire. */}
-                {filtersDirty &&
-                  !mentionOpen &&
-                  !(semantic && SHORTCUT_ANYWHERE_RE.test(query)) && (
-                    <div
-                      role='status'
-                      aria-live='polite'
-                      className='absolute left-0 right-0 top-full mt-1 banner-info rounded p-2 text-[11px] flex items-start gap-2 z-40'
-                    >
-                      <Search
-                        size={12}
-                        className='flex-shrink-0 mt-0.5 text-accent-strong'
-                      />
-                      <p className='text-app-muted leading-snug'>
-                        Filters changed — press{' '}
-                        <kbd className='surface-subtle rounded px-1 border border-app text-app font-medium'>
-                          Enter
-                        </kbd>{' '}
-                        in the search bar to apply.
-                      </p>
-                    </div>
-                  )}
+                {/* (Pending-changes hint banner removed — the green
+                    submit-glass is sufficient signal. Discard is still
+                    reachable via the event bus if we later want to wire
+                    it to a context-menu / keyboard shortcut.) */}
 
-                {/* Just-in-time hint: surface only when the user types a
-                    shortcut-shaped token in semantic mode. Tells them why
-                    the dropdown didn't fire and what their `@`/`#` will
-                    actually do — namely, stay as literal text. Disappears
-                    the moment they remove the token or switch back to
-                    Keyword mode. */}
-                {semantic && SHORTCUT_ANYWHERE_RE.test(query) && (
-                  <div
-                    role='status'
-                    aria-live='polite'
-                    className='absolute left-0 right-0 top-full mt-1 banner-info rounded p-2 text-[11px] flex items-start gap-2 z-40'
-                  >
-                    <Sparkles
-                      size={12}
-                      className='flex-shrink-0 mt-0.5 text-accent-strong'
-                    />
-                    <p className='text-app-muted leading-snug'>
-                      <code className='surface-subtle rounded px-1'>@</code> and{' '}
-                      <code className='surface-subtle rounded px-1'>#</code>{' '}
-                      shortcuts are inactive in Semantic mode — the tokens will
-                      be searched as literal text. Switch to{' '}
-                      <strong>Keyword</strong> to filter by author or journal.
-                    </p>
-                  </div>
-                )}
+                {/* (The semantic-mode shortcut hint was removed along
+                    with the Semantic toggle in the navbar. The
+                    semantic= URL param still flows through to the API
+                    if set, but there's no UI affordance to enable it
+                    here anymore.) */}
               </div>
             </div>
 
-            {/* Mode toggle: keyword (Boolean syntax) vs. semantic (concept). */}
-            <div
-              role='radiogroup'
-              aria-label='Search mode'
-              className='flex items-center surface-subtle border border-app rounded-lg p-0.5 flex-shrink-0'
+            {/* Standalone submit-glass — sits right of the bar (not
+                inside it). Same dual-state visual as before: muted
+                idle, success/green when anything is uncommitted. The
+                pill button replaces the Google-Scholar-style in-bar
+                glass; the (i) syntax icon goes back to its old spot
+                inside the bar. */}
+            <button
+              type='button'
+              onClick={() => handleSearch()}
+              className={`relative flex-shrink-0 h-10 w-10 rounded-full inline-flex items-center justify-center transition shadow-sm ${
+                isDirty
+                  ? ''
+                  : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)] border border-[var(--border-muted)]'
+              }`}
+              style={
+                isDirty
+                  ? {
+                      background: 'var(--success-bg)',
+                      color: 'var(--success-foreground)',
+                      border: '1px solid var(--success-border)',
+                    }
+                  : undefined
+              }
+              title={
+                isDirty
+                  ? 'Apply pending changes (Enter)'
+                  : 'Search (Enter)'
+              }
+              aria-label={
+                isDirty ? 'Apply pending changes' : 'Search'
+              }
             >
-              <button
-                role='radio'
-                aria-checked={!semantic}
-                onClick={() => handleToggleSemantic(false)}
-                className={`px-3 py-1 text-sm rounded-md transition ${
-                  !semantic
-                    ? 'surface-card text-app shadow-sm font-medium'
-                    : 'text-app-muted hover:text-app'
-                }`}
-                title='Keyword search — Boolean syntax, full filtering, unlimited pagination'
-              >
-                Keyword
-              </button>
-              <button
-                role='radio'
-                aria-checked={semantic}
-                aria-disabled={semanticDisabled}
-                disabled={semanticDisabled}
-                onClick={() => handleToggleSemantic(true)}
-                className={`px-3 py-1 text-sm rounded-md transition flex items-center gap-1 ${
-                  semantic
-                    ? 'surface-card text-accent-strong shadow-sm font-medium'
-                    : semanticDisabled
-                      ? 'text-app-soft opacity-50 cursor-not-allowed'
-                      : 'text-app-muted hover:text-app'
-                }`}
-                title={
-                  semanticDisabled
-                    ? `Semantic disabled — clear ${semanticConflicts.join(
-                        ', ',
-                      )} to use Semantic. Click the info icon for details.`
-                    : 'Semantic search — natural-language concept matching (max 50 results)'
-                }
-              >
-                <Sparkles size={13} />
-                Semantic
-              </button>
-            </div>
-
-            {/* <button
-              onClick={handleSearch}
-              className='h-8 px-3 text-sm button-primary rounded-md transition font-medium shrink-0 inline-flex items-center justify-center'
-            >
-              Search
-            </button> */}
+              <Search size={18} />
+            </button>
           </>
         ) : (
           // Other pages: Show tagline
@@ -864,56 +821,102 @@ function NavBarContent() {
           </div>
         )}
 
-        {/* GitHub link — open source signal */}
-        {/* Stored-data viewer */}
-        <button
-          onClick={() => setShowStorage(true)}
-          className='text-app-soft hover:text-app transition flex-shrink-0 p-1'
-          title='View stored data'
-          aria-label='View stored data'
-        >
-          <Database size={18} />
-        </button>
+        {/* Tools dropdown — utility actions collapsed under one
+            labelled trigger. Items live here because they're
+            *deliberate* actions a user goes looking for (configure
+            ranking, inspect storage, report data issues, check API
+            quota) rather than glanceable controls. Help and About
+            stay direct because they're the canonical "what is this /
+            how does it work" entry points. */}
+        <div ref={toolsRef} className='relative flex-shrink-0'>
+          <button
+            type='button'
+            onClick={() => setToolsOpen((o) => !o)}
+            aria-haspopup='menu'
+            aria-expanded={toolsOpen}
+            className='inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-app-muted hover:text-app hover:bg-[var(--surface-muted)] transition'
+            title='Open Tools menu'
+            aria-label='Open Tools menu'
+          >
+            <Wrench size={14} />
+            <span>Tools</span>
+            <ChevronDown
+              size={14}
+              className={`transition-transform ${toolsOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {toolsOpen && (
+            <div
+              role='menu'
+              aria-label='Tools'
+              className='absolute right-0 top-full mt-1 min-w-[220px] surface-panel border border-app rounded-lg shadow-lg z-50 py-1'
+            >
+              {/* Configuration first — the highest-intent action.
+                  Goes to /rankings; we used to expose this as a
+                  standalone icon, then briefly as a link in the
+                  FilterPanel's Wide section. Tools is a better home
+                  because it groups with the other "go-find-it"
+                  actions. */}
+              <Link
+                role='menuitem'
+                href='/rankings'
+                onClick={() => setToolsOpen(false)}
+                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
+              >
+                <SlidersHorizontal size={14} className='text-app-soft' />
+                <span>Personalize ranking</span>
+              </Link>
+              <button
+                role='menuitem'
+                onClick={() => {
+                  setToolsOpen(false);
+                  setShowContribute(true);
+                }}
+                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
+              >
+                <Flag size={14} className='text-app-soft' />
+                <span>Contribute corrections</span>
+              </button>
+              <div className='border-t border-app-muted my-1' aria-hidden='true' />
+              {/* Diagnostic / power-user actions live below the
+                  divider — separating them from the two high-intent
+                  items above so the menu reads in tiers. */}
+              <button
+                role='menuitem'
+                onClick={() => {
+                  setToolsOpen(false);
+                  setShowStorage(true);
+                }}
+                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
+              >
+                <Database size={14} className='text-app-soft' />
+                <span>View stored data</span>
+              </button>
+              <button
+                role='menuitem'
+                onClick={() => {
+                  setToolsOpen(false);
+                  setShowOpenAlexUsage(true);
+                }}
+                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
+              >
+                <Gauge size={14} className='text-app-soft' />
+                <span>API key usage</span>
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* Improve OpenAlex — small persistent CTA so contributing
-            data corrections is reachable from any page, not just the
-            paper card or the Help / About pages. Opens the contribute
-            modal (one-click pitch + correction-form buttons) rather
-            than scrolling the user through the Help page. */}
-        <button
-          type='button'
-          onClick={() => setShowContribute(true)}
-          className='hidden md:inline-flex items-center gap-1 text-sm text-app-muted hover:text-app transition flex-shrink-0'
-          title='Contribute data corrections to OpenAlex'
-          aria-label='Contribute data corrections to OpenAlex'
-        >
-          <Flag size={18} />
-        </button>
-
-        {/* Rankings editor — single source of truth for the journal
-            classification. Users can fork the built-in CNRS scheme,
-            edit tiers/domains/journals, or import a JSON for a different
-            field (medicine, JCR, etc.). */}
-        <Link
-          href='/rankings'
-          className='text-app-soft hover:text-app transition flex-shrink-0 p-1'
-          title='Manage the journal ranking scheme'
-          aria-label='Manage the journal ranking scheme'
-        >
-          <ListOrdered size={18} />
-        </Link>
-
-        {/* Help link - always visible */}
+        {/* Help and About stay as direct links — the canonical
+            "what is this / how do I use this" entry points. */}
         <Link
           href='/help'
           className='text-sm text-app-muted hover:text-app transition flex-shrink-0'
           title='View help documentation'
-
+          aria-label='Help'
         >
-          <Info size={18} />
+          Help
         </Link>
-
-        {/* About link - always visible */}
         <Link
           href='/about'
           className='text-sm text-app-muted hover:text-app transition flex-shrink-0'
@@ -922,13 +925,17 @@ function NavBarContent() {
         </Link>
       </div>
 
+      <ContributeModal
+        isOpen={showContribute}
+        onClose={() => setShowContribute(false)}
+      />
       <StorageModal
         isOpen={showStorage}
         onClose={() => setShowStorage(false)}
       />
-      <ContributeModal
-        isOpen={showContribute}
-        onClose={() => setShowContribute(false)}
+      <OpenAlexUsageModal
+        isOpen={showOpenAlexUsage}
+        onClose={() => setShowOpenAlexUsage(false)}
       />
     </nav>
   );

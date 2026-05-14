@@ -29,7 +29,7 @@ export default function AuthorModal({
       const res = await axios.get(
         `https://api.openalex.org/authors?filter=display_name.search:${encodeURIComponent(
           query
-        )}&per-page=10&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`
+        )}&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`
       );
       const authors: SelectedAuthor[] = res.data.results.map((a: any) => ({
         id: a.id.split('/').pop(),

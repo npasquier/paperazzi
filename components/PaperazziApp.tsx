@@ -31,6 +31,7 @@ import {
 import PinSidebar from './PinSidebar';
 import CelebrationOverlay from './ui/CelebrationOverlay';
 import { emit, on } from '@/utils/eventBus';
+import { filtersEqual } from '@/utils/filtersEqual';
 import CollectionImportDropzone from './CollectionImportDropzone';
 
 function PaperazziAppContent() {
@@ -204,14 +205,31 @@ function PaperazziAppContent() {
   // the FilterPanel edits. The two diverge as the user composes filter
   // changes; pressing Enter (or any other URL push) re-runs syncFromURL,
   // which sets both back in sync. This memo drives the "press Enter to
-  // apply" hint in the navbar — we deliberately compare via JSON because
-  // the fields are small plain objects and arrays of `{id|issn, name}`.
-  const isDirty = useMemo(() => {
-    return JSON.stringify(filters) !== JSON.stringify(searchFilters);
-  }, [filters, searchFilters]);
+  // apply" hint in the navbar. We use a typed field-by-field comparator
+  // (`filtersEqual`) instead of JSON.stringify because the latter is
+  // order-sensitive (two objects with the same keys but different
+  // insertion order would falsely register as dirty) and conflates
+  // `undefined` with missing keys.
+  const isDirty = useMemo(
+    () => !filtersEqual(filters, searchFilters),
+    [filters, searchFilters],
+  );
   useEffect(() => {
     emit('paperazzi-filters-dirty', { isDirty });
   }, [isDirty]);
+
+  // Discard pending changes — wired to the navbar's discard button via
+  // the event bus. Reverts the live `filters` back to `searchFilters`
+  // so the FilterPanel snaps back to whatever the API is currently
+  // showing. No URL push: the committed state didn't change, only the
+  // user's draft did.
+  useEffect(
+    () =>
+      on('paperazzi-filters-discard', () => {
+        setFilters(searchFilters);
+      }),
+    [searchFilters],
+  );
 
   // Sync state with URL parameters
   useEffect(() => {
@@ -487,13 +505,38 @@ function PaperazziAppContent() {
     });
   }, [filters, router, searchParams, buildURLParams]);
 
-  const handleSearch = (newPage = 1) => {
-    const params = buildURLParams({ page: newPage });
+  // (Previously `handleSearch(page)` lived here as the "commit via URL
+  // push" path. It was the source of the auto-commit-on-pagination bug
+  // because `buildURLParams` falls back to live `filters` for any
+  // missing override. The navbar submit-glass now goes straight through
+  // the `navbar-search` event listener, and pagination/sort use their
+  // own single-field URL nudges below — so this function had no callers
+  // left and was removed. Resurrect it if a new "commit live filters"
+  // path appears.)
+
+  // Pagination — single-field URL nudge. Critically *not* a commit:
+  // it preserves the current URL params (which reflect `searchFilters`,
+  // the committed state) and only bumps `page=`. The previous version
+  // routed through `handleSearch` → `buildURLParams`, which falls back
+  // to live `filters` for missing overrides — so paginating with
+  // pending FilterPanel edits silently committed those edits. Now the
+  // user's draft is preserved across page-flips; they apply it
+  // deliberately via Enter / Search.
+  const handlePaginate = (newPage: number) => {
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    params.set('page', newPage.toString());
     router.push(`/search?${params.toString()}`);
   };
 
+  // Sort change — same "single-field URL nudge" pattern as pagination
+  // for the same reason: a sort tweak shouldn't sneak in any pending
+  // panel edits. Reset to page 1 because the previous offset isn't
+  // meaningful under a different order.
   const handleSortChange = (newSort: string) => {
-    const params = buildURLParams({ sortBy: newSort, page: 1 });
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (newSort) params.set('sort', newSort);
+    else params.delete('sort');
+    params.set('page', '1');
     router.push(`/search?${params.toString()}`);
   };
 
@@ -738,7 +781,7 @@ function PaperazziAppContent() {
             to={searchFilters.dateTo}
             sortBy={searchFilters.sortBy}
             page={page}
-            loadMore={(newPage) => handleSearch(newPage)}
+            loadMore={(newPage) => handlePaginate(newPage)}
             citing={searchFilters.citing}
             citingAll={searchFilters.citingAll}
             referencedBy={searchFilters.referencedBy}
@@ -768,42 +811,56 @@ function PaperazziAppContent() {
       />
 
       {/* Modals */}
+      {/* Modal apply / add semantics.
+            Authors and institutions *queue* — adding via the modal
+            just updates `filters`, leaving the user to commit via the
+            navbar's submit-glass (which turns green to flag the
+            pending change). JournalModal keeps its eager commit
+            because picking journals usually means "show me papers in
+            these journals now" — a single click of Apply should
+            re-run the search. If you want journals to also queue, the
+            change is local: drop the buildURLParams + router.push
+            calls below and leave only setFilters. */}
       <AuthorModal
         isOpen={showAuthorModal}
         selectedAuthors={filters.authors}
         onClose={() => setShowAuthorModal(false)}
-        onAddAuthor={(author) =>
+        onAddAuthor={(author) => {
           setFilters((prev) => ({
             ...prev,
             authors: [
               ...prev.authors.filter((a) => a.id !== author.id),
               author,
             ],
-          }))
-        }
+          }));
+        }}
       />
 
       <JournalModal
         isOpen={showJournalModal}
         selectedJournals={filters.journals}
         onClose={() => setShowJournalModal(false)}
-        onApply={(selected) =>
+        onApply={(selected) => {
+          // Adding any manual journal auto-switches to specific mode.
+          const nextMode: NonNullable<Filters['journalFilterMode']> =
+            selected.length > 0 ? 'specific' : filters.journalFilterMode || 'off';
           setFilters((prev) => ({
             ...prev,
             journals: selected,
-            // Adding any manual journal auto-switches to specific mode.
-            journalFilterMode: selected.length > 0 ? 'specific' : prev.journalFilterMode,
-          }))
-        }
+            journalFilterMode: nextMode,
+          }));
+          const params = buildURLParams({ journals: selected, page: 1 });
+          router.push(`/search?${params.toString()}`);
+        }}
       />
 
       <InstitutionModal
         isOpen={showInstitutionModal}
         selectedInstitutions={filters.institutions}
         onClose={() => setShowInstitutionModal(false)}
-        onApply={(selected) =>
-          setFilters((prev) => ({ ...prev, institutions: selected }))
-        }
+        onApply={(selected) => {
+          setFilters((prev) => ({ ...prev, institutions: selected }));
+        }}
       />
 
     </div>
