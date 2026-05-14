@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { Filters, JournalFilterPreset } from '../types/interfaces';
 import {
   ChevronLeft,
@@ -10,6 +11,7 @@ import {
   Plus,
   Save,
   Bookmark,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 import { countIssns, useActiveRanking } from '@/utils/activeRanking';
@@ -30,8 +32,6 @@ interface FilterPanelProps {
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
   query: string;
   openJournalModal: () => void;
-  openAuthorModal: () => void;
-  openInstitutionModal: () => void;
   onSortChange?: (sortBy: string) => void;
   onPresetLoad?: (preset: FilterPreset) => void;
   isOpen: boolean;
@@ -53,8 +53,6 @@ export default function FilterPanel({
   setFilters,
   query,
   openJournalModal,
-  openAuthorModal,
-  openInstitutionModal,
   onSortChange,
   onPresetLoad,
   isOpen,
@@ -78,7 +76,8 @@ export default function FilterPanel({
         .map((p): FilterPreset | null => {
           if (!p || typeof p !== 'object') return null;
           const o = p as Record<string, unknown>;
-          if (typeof o.id !== 'string' || typeof o.name !== 'string') return null;
+          if (typeof o.id !== 'string' || typeof o.name !== 'string')
+            return null;
           return {
             id: o.id,
             name: o.name,
@@ -140,10 +139,7 @@ export default function FilterPanel({
   const updateJournalPresets = (next: JournalFilterPreset[]) => {
     setJournalPresets(next);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(
-        STORAGE_KEYS.journalPresets,
-        JSON.stringify(next),
-      );
+      localStorage.setItem(STORAGE_KEYS.journalPresets, JSON.stringify(next));
     }
   };
 
@@ -279,20 +275,11 @@ export default function FilterPanel({
     }));
     setActivePresetId(null);
   };
-  const removeAuthor = (authorId: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      authors: prev.authors.filter((a) => a.id !== authorId),
-    }));
-    setActivePresetId(null);
-  };
-  const removeInstitution = (instId: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      institutions: prev.institutions.filter((i) => i.id !== instId),
-    }));
-    setActivePresetId(null);
-  };
+  // (removeAuthor / removeInstitution were used by the Authors and
+  // Institutions sections that this panel used to render. Both
+  // sections moved into the navbar's chip facade; chip removal is
+  // owned there. Re-add these handlers if you re-introduce the panel
+  // sections.)
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newSort = e.target.value;
     setFilters((prev) => ({ ...prev, sortBy: newSort }));
@@ -360,7 +347,6 @@ export default function FilterPanel({
     </span>
   );
 
-
   // Compute `enabled` from the rest of the wide-filter state. Wide filter is
   // active iff any of: a preset is selected, an ISSN whitelist is set, or
   // any tier/domain is picked.
@@ -382,56 +368,10 @@ export default function FilterPanel({
     return merged;
   };
 
-  // Render collapsible section
-  const renderSection = (
-    id: string,
-    label: string,
-    count: number,
-    onAdd: () => void,
-    items: { key: string; label: string; onRemove: () => void }[],
-  ) => {
-    const isExpanded = expandedSections.has(id);
-    return (
-      <div className='border-b border-app-muted last:border-b-0'>
-        <button
-          onClick={() => toggleSection(id)}
-          className='w-full flex items-center justify-between py-3 hover:bg-[var(--surface-muted)] transition'
-        >
-          <div className='flex items-center gap-2'>
-            {isExpanded ? (
-              <ChevronDown size={14} className='text-stone-400' />
-            ) : (
-              <ChevronRight size={14} className='text-stone-400' />
-            )}
-            <span className='text-sm text-stone-600'>{label}</span>
-          </div>
-          {count > 0 && (
-            <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
-              {count}
-            </span>
-          )}
-        </button>
-        {isExpanded && (
-          <div className='pb-3 pl-6'>
-            {items.length > 0 && (
-              <div className='flex flex-wrap gap-1.5 mb-2'>
-                {items.map((item) =>
-                  renderPill(item.key, item.label, item.onRemove),
-                )}
-              </div>
-            )}
-            <button
-              onClick={onAdd}
-              className='inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition'
-            >
-              <Plus size={12} />
-              Add
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
+  // (renderSection used to be the generic body for the Authors and
+  // Institutions collapsible sections. With both sections gone, this
+  // helper has no callers. Kept the comment as documentation; the
+  // body was removed to satisfy the unused-variable lint.)
   return (
     <aside className='w-64 surface-panel border-r border-app flex flex-col h-full overflow-hidden'>
       {/* Header */}
@@ -454,7 +394,6 @@ export default function FilterPanel({
             <ChevronLeft size={16} className='text-stone-400' />
           </button>
         </div>
-
       </div>
       {/* Save Journal-Filter Modal */}
       {showSaveJournalModal && (
@@ -594,10 +533,10 @@ export default function FilterPanel({
         {/* Collapsible filter sections */}
         <div className='px-4'>
           {/* Saved Presets - Collapsible and Discrete */}
-          <div className='border-b border-app-muted'>
+          <div className='-mx-4 px-4 border-b border-app-muted'>
             <button
               onClick={() => toggleSection('presets')}
-              className='w-full flex items-center justify-between py-2.5 hover:bg-[var(--surface-muted)] transition'
+              className='w-full flex items-center justify-between py-2.5 transition'
             >
               <div className='flex items-center gap-2'>
                 {expandedSections.has('presets') ? (
@@ -605,11 +544,11 @@ export default function FilterPanel({
                 ) : (
                   <ChevronRight size={12} className='text-stone-300' />
                 )}
-                <span className='text-xs text-stone-400'>Saved Searches</span>
+                <span className='text-xs text-stone-400 hover:text-stone-500'>Saved Searches</span>
               </div>
-              {/* {presets.length > 0 && (
+              {presets.length > 0 && (
                 <span className='text-xs text-stone-400'>{presets.length}</span>
-              )} */}
+              )}
             </button>
             {expandedSections.has('presets') && (
               <div className='pb-2.5 pl-5'>
@@ -672,41 +611,57 @@ export default function FilterPanel({
               </div>
             )}
           </div>
-          {/* Journals */}
-          <div className='border-b border-app-muted'>
-            <button
-              onClick={() => toggleSection('journals')}
-              className='w-full flex items-center justify-between py-3 hover:bg-[var(--surface-muted)] transition'
-            >
-              <div className='flex items-center gap-2'>
-                {expandedSections.has('journals') ? (
-                  <ChevronDown size={14} className='text-stone-400' />
-                ) : (
-                  <ChevronRight size={14} className='text-stone-400' />
-                )}
-                <span className='text-sm text-stone-600'>Journals</span>
+          {/* Journals — section header row is a flex container
+              instead of one big button, because we want a secondary
+              entry point (Personalize ranking → /rankings) next to
+              the section title without nesting buttons. The toggle
+              button still spans the chevron + label region so the
+              click target stays generous. */}
+          <div className='border-b border-app-muted '>
+            <div className='w-full flex items-right justify-between py-3'>
+              
+              <span className='text-xs text-app-soft block mb-1.5'>
+                Journals
+              </span>
+
+              <div className='flex items-center gap-2 pr-1'>
+                {(() => {
+                  const mode = filters.journalFilterMode || 'wide';
+                  if (mode === 'wide' && filters.econFilter?.enabled) {
+                    return (
+                      <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
+                        Wide
+                      </span>
+                    );
+                  }
+                  if (mode === 'specific' && filters.journals.length > 0) {
+                    return (
+                      <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
+                        {filters.journals.length}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+                {/* Personalize ranking — the journal-filter UI is
+                    sourced from the active RankingScheme (tiers,
+                    domains, ISSN whitelist), so the most contextual
+                    place to edit that scheme is right here in the
+                    section header. Used to be in the navbar Tools
+                    dropdown; promoted here when the navbar was
+                    sobered up. */}
+                <Link
+                  href='/rankings'
+                  className='inline-flex items-center gap-1 text-[10px] text-app-soft hover:text-app underline-offset-2 hover:underline transition px-1 py-0.5'
+                  title='Personalize the journal ranking scheme — tiers, domains, journals'
+                >
+                  <SlidersHorizontal size={11} />
+                  <span>Personalize</span>
+                </Link>
               </div>
-              {(() => {
-                const mode = filters.journalFilterMode || 'wide';
-                if (mode === 'wide' && filters.econFilter?.enabled) {
-                  return (
-                    <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
-                      Wide
-                    </span>
-                  );
-                }
-                if (mode === 'specific' && filters.journals.length > 0) {
-                  return (
-                    <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
-                      {filters.journals.length}
-                    </span>
-                  );
-                }
-                return null;
-              })()}
-            </button>
+            </div>
             {expandedSections.has('journals') && (
-              <div className='pb-3 pl-6'>
+              <div className='pb-3 pl-0'>
                 {/* Mode toggle: which subsection feeds the search */}
                 {(() => {
                   const mode = filters.journalFilterMode || 'wide';
@@ -750,261 +705,263 @@ export default function FilterPanel({
                 })()}
 
                 {/* ─── Subsection: Wide filter (only visible in wide mode) ── */}
-                {(filters.journalFilterMode || 'wide') === 'wide' && (() => {
-                  const econ = filters.econFilter || reconcileEcon({});
-                  const hasIssnWhitelist = !!econ.issns?.length;
-                  return (
-                    <div className='mb-3'>
-                      <p className='text-[10px] uppercase tracking-wider text-app-soft mb-1.5'>
-                        Wide filter
-                      </p>
+                {(filters.journalFilterMode || 'wide') === 'wide' &&
+                  (() => {
+                    const econ = filters.econFilter || reconcileEcon({});
+                    const hasIssnWhitelist = !!econ.issns?.length;
+                    return (
+                      <div className='mb-3'>
+                        <p className='text-[10px] uppercase tracking-wider text-app-soft mb-1.5'>
+                          Wide filter
+                        </p>
 
-                      {/* Preset pills — sourced from the active ranking
+                        {/* Preset pills — sourced from the active ranking
                           scheme so an imported scheme can ship its own
                           shortcuts (e.g. "Q1 only" for a JCR-style ranking). */}
-                      <div className='flex flex-wrap gap-1 mb-2'>
-                        {schemePresets.map((preset) => {
-                          const isActive = econ.presetId === preset.id;
-                          return (
+                        <div className='flex flex-wrap gap-1 mb-2'>
+                          {schemePresets.map((preset) => {
+                            const isActive = econ.presetId === preset.id;
+                            return (
+                              <button
+                                key={preset.id}
+                                onClick={() => {
+                                  setFilters((prev) => ({
+                                    ...prev,
+                                    econFilter: reconcileEcon(
+                                      isActive
+                                        ? {} // deselect → empty state
+                                        : {
+                                            tiers: preset.tiers
+                                              ? [...preset.tiers]
+                                              : [],
+                                            domains: preset.domains
+                                              ? [...preset.domains]
+                                              : [],
+                                            presetId: preset.id,
+                                            issns: preset.issns
+                                              ? [...preset.issns]
+                                              : undefined,
+                                          },
+                                    ),
+                                    // Picking any wide pill auto-switches mode.
+                                    journalFilterMode: 'wide',
+                                  }));
+                                  setActivePresetId(null);
+                                }}
+                                className={`px-2 py-0.5 text-[11px] rounded transition ${
+                                  isActive
+                                    ? 'button-primary'
+                                    : 'surface-muted text-stone-500 hover:bg-[var(--surface-subtle)]'
+                                }`}
+                              >
+                                {preset.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Note when an ISSN-whitelist preset is active */}
+                        {hasIssnWhitelist && (
+                          <p className='text-[10px] text-app-soft mb-2'>
+                            Using whitelist of {econ.issns!.length} journals —
+                            tier & domain rows have no effect.
+                          </p>
+                        )}
+
+                        {/* Tier row — keys come from the active scheme.
+                          Selecting every tier collapses to "all" (empty),
+                          mirroring the previous behaviour for CNRS 1..4. */}
+                        <div
+                          className={`mb-2 ${
+                            hasIssnWhitelist ? 'opacity-50' : ''
+                          }`}
+                        >
+                          <p className='text-[11px] text-app-soft mb-1'>Tier</p>
+                          <div className='flex gap-1'>
+                            {schemeTiers.map((tier) => {
+                              // Only highlight when the wide filter is actually
+                              // engaged — default WIDE state (nothing selected)
+                              // shows no buttons highlighted.
+                              const isSelected =
+                                econ.enabled &&
+                                !hasIssnWhitelist &&
+                                (econ.tiers.length === 0 ||
+                                  econ.tiers.includes(tier.key));
+                              return (
+                                <button
+                                  key={tier.key}
+                                  title={tier.label || undefined}
+                                  onClick={() => {
+                                    setFilters((prev) => {
+                                      const current =
+                                        prev.econFilter?.tiers || [];
+                                      let next: string[];
+                                      if (current.length === 0) {
+                                        next = [tier.key];
+                                      } else if (current.includes(tier.key)) {
+                                        next = current.filter(
+                                          (c) => c !== tier.key,
+                                        );
+                                      } else {
+                                        next = [...current, tier.key];
+                                      }
+                                      // Note: we deliberately do NOT auto-
+                                      // collapse to empty when every tier is
+                                      // selected. Functionally that produces
+                                      // the same ISSN list (all journals
+                                      // match), but the user reads the empty
+                                      // state as "my selection just reset
+                                      // itself". Leaving the explicit
+                                      // selection keeps the UI honest — the
+                                      // "All" pill below is the dedicated way
+                                      // to clear.
+                                      return {
+                                        ...prev,
+                                        econFilter: reconcileEcon({
+                                          tiers: next,
+                                          domains:
+                                            prev.econFilter?.domains || [],
+                                          // manual edit clears any active preset
+                                          presetId: null,
+                                          issns: undefined,
+                                        }),
+                                        journalFilterMode: 'wide',
+                                      };
+                                    });
+                                    setActivePresetId(null);
+                                  }}
+                                  className={`px-2 py-0.5 text-[11px] rounded transition ${
+                                    isSelected
+                                      ? 'button-primary'
+                                      : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
+                                  }`}
+                                >
+                                  {/* Compact pills: show the stable key
+                                    (e.g. "1", "Q1") with the human label
+                                    surfaced as a tooltip on hover. */}
+                                  {tier.key}
+                                </button>
+                              );
+                            })}
                             <button
-                              key={preset.id}
                               onClick={() => {
                                 setFilters((prev) => ({
                                   ...prev,
-                                  econFilter: reconcileEcon(
-                                    isActive
-                                      ? {} // deselect → empty state
-                                      : {
-                                          tiers: preset.tiers
-                                            ? [...preset.tiers]
-                                            : [],
-                                          domains: preset.domains
-                                            ? [...preset.domains]
-                                            : [],
-                                          presetId: preset.id,
-                                          issns: preset.issns
-                                            ? [...preset.issns]
-                                            : undefined,
-                                        },
-                                  ),
-                                  // Picking any wide pill auto-switches mode.
+                                  econFilter: reconcileEcon({
+                                    tiers: [],
+                                    domains: prev.econFilter?.domains || [],
+                                    presetId: null,
+                                    issns: undefined,
+                                  }),
                                   journalFilterMode: 'wide',
                                 }));
                                 setActivePresetId(null);
                               }}
                               className={`px-2 py-0.5 text-[11px] rounded transition ${
-                                isActive
+                                !hasIssnWhitelist &&
+                                econ.tiers.length === 0 &&
+                                econ.enabled
                                   ? 'button-primary'
-                                  : 'surface-muted text-stone-500 hover:bg-[var(--surface-subtle)]'
+                                  : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
                               }`}
                             >
-                              {preset.name}
+                              All
                             </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Note when an ISSN-whitelist preset is active */}
-                      {hasIssnWhitelist && (
-                        <p className='text-[10px] text-app-soft mb-2'>
-                          Using whitelist of {econ.issns!.length} journals —
-                          tier & domain rows have no effect.
-                        </p>
-                      )}
-
-                      {/* Tier row — keys come from the active scheme.
-                          Selecting every tier collapses to "all" (empty),
-                          mirroring the previous behaviour for CNRS 1..4. */}
-                      <div
-                        className={`mb-2 ${
-                          hasIssnWhitelist ? 'opacity-50' : ''
-                        }`}
-                      >
-                        <p className='text-[11px] text-app-soft mb-1'>Tier</p>
-                        <div className='flex gap-1'>
-                          {schemeTiers.map((tier) => {
-                            // Only highlight when the wide filter is actually
-                            // engaged — default WIDE state (nothing selected)
-                            // shows no buttons highlighted.
-                            const isSelected =
-                              econ.enabled &&
-                              !hasIssnWhitelist &&
-                              (econ.tiers.length === 0 ||
-                                econ.tiers.includes(tier.key));
-                            return (
-                              <button
-                                key={tier.key}
-                                title={tier.label || undefined}
-                                onClick={() => {
-                                  setFilters((prev) => {
-                                    const current =
-                                      prev.econFilter?.tiers || [];
-                                    let next: string[];
-                                    if (current.length === 0) {
-                                      next = [tier.key];
-                                    } else if (current.includes(tier.key)) {
-                                      next = current.filter(
-                                        (c) => c !== tier.key,
-                                      );
-                                    } else {
-                                      next = [...current, tier.key];
-                                    }
-                                    // Note: we deliberately do NOT auto-
-                                    // collapse to empty when every tier is
-                                    // selected. Functionally that produces
-                                    // the same ISSN list (all journals
-                                    // match), but the user reads the empty
-                                    // state as "my selection just reset
-                                    // itself". Leaving the explicit
-                                    // selection keeps the UI honest — the
-                                    // "All" pill below is the dedicated way
-                                    // to clear.
-                                    return {
-                                      ...prev,
-                                      econFilter: reconcileEcon({
-                                        tiers: next,
-                                        domains: prev.econFilter?.domains || [],
-                                        // manual edit clears any active preset
-                                        presetId: null,
-                                        issns: undefined,
-                                      }),
-                                      journalFilterMode: 'wide',
-                                    };
-                                  });
-                                  setActivePresetId(null);
-                                }}
-                                className={`px-2 py-0.5 text-[11px] rounded transition ${
-                                  isSelected
-                                    ? 'button-primary'
-                                    : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
-                                }`}
-                              >
-                                {/* Compact pills: show the stable key
-                                    (e.g. "1", "Q1") with the human label
-                                    surfaced as a tooltip on hover. */}
-                                {tier.key}
-                              </button>
-                            );
-                          })}
-                          <button
-                            onClick={() => {
-                              setFilters((prev) => ({
-                                ...prev,
-                                econFilter: reconcileEcon({
-                                  tiers: [],
-                                  domains: prev.econFilter?.domains || [],
-                                  presetId: null,
-                                  issns: undefined,
-                                }),
-                                journalFilterMode: 'wide',
-                              }));
-                              setActivePresetId(null);
-                            }}
-                            className={`px-2 py-0.5 text-[11px] rounded transition ${
-                              !hasIssnWhitelist &&
-                              econ.tiers.length === 0 &&
-                              econ.enabled
-                                ? 'button-primary'
-                                : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
-                            }`}
-                          >
-                            All
-                          </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Domain row — dimmed + unhighlighted under whitelist */}
-                      <div className={hasIssnWhitelist ? 'opacity-50' : ''}>
-                        <p className='text-[11px] text-app-soft mb-1'>
-                          Domain
-                        </p>
-                        <div className='flex flex-wrap gap-1 max-h-24 overflow-y-auto'>
-                          {schemeDomains.map(({ key, label }) => {
-                            const isSelected =
-                              econ.enabled &&
-                              !hasIssnWhitelist &&
-                              (econ.domains.length === 0 ||
-                                econ.domains.includes(key));
-                            return (
-                              <button
-                                key={key}
-                                title={label || undefined}
-                                onClick={() => {
-                                  setFilters((prev) => {
-                                    const current =
-                                      prev.econFilter?.domains || [];
-                                    let next: string[];
-                                    if (current.length === 0) {
-                                      next = [key];
-                                    } else if (current.includes(key)) {
-                                      next = current.filter((d) => d !== key);
-                                    } else {
-                                      next = [...current, key];
-                                    }
-                                    // Same rationale as the tier row: no
-                                    // auto-collapse when every domain is
-                                    // selected — the "Reset to all" link
-                                    // below is the explicit way out.
-                                    return {
-                                      ...prev,
-                                      econFilter: reconcileEcon({
-                                        tiers: prev.econFilter?.tiers || [],
-                                        domains: next,
-                                        presetId: null,
-                                        issns: undefined,
-                                      }),
-                                      journalFilterMode: 'wide',
-                                    };
-                                  });
-                                  setActivePresetId(null);
-                                }}
-                                className={`px-1.5 py-0.5 text-[10px] rounded transition ${
-                                  isSelected
-                                    ? 'button-primary'
-                                    : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
-                                }`}
-                              >
-                                {/* Pill shows the stable key (e.g. "GEN",
+                        {/* Domain row — dimmed + unhighlighted under whitelist */}
+                        <div className={hasIssnWhitelist ? 'opacity-50' : ''}>
+                          <p className='text-[11px] text-app-soft mb-1'>
+                            Domain
+                          </p>
+                          <div className='flex flex-wrap gap-1 max-h-24 overflow-y-auto'>
+                            {schemeDomains.map(({ key, label }) => {
+                              const isSelected =
+                                econ.enabled &&
+                                !hasIssnWhitelist &&
+                                (econ.domains.length === 0 ||
+                                  econ.domains.includes(key));
+                              return (
+                                <button
+                                  key={key}
+                                  title={label || undefined}
+                                  onClick={() => {
+                                    setFilters((prev) => {
+                                      const current =
+                                        prev.econFilter?.domains || [];
+                                      let next: string[];
+                                      if (current.length === 0) {
+                                        next = [key];
+                                      } else if (current.includes(key)) {
+                                        next = current.filter((d) => d !== key);
+                                      } else {
+                                        next = [...current, key];
+                                      }
+                                      // Same rationale as the tier row: no
+                                      // auto-collapse when every domain is
+                                      // selected — the "Reset to all" link
+                                      // below is the explicit way out.
+                                      return {
+                                        ...prev,
+                                        econFilter: reconcileEcon({
+                                          tiers: prev.econFilter?.tiers || [],
+                                          domains: next,
+                                          presetId: null,
+                                          issns: undefined,
+                                        }),
+                                        journalFilterMode: 'wide',
+                                      };
+                                    });
+                                    setActivePresetId(null);
+                                  }}
+                                  className={`px-1.5 py-0.5 text-[10px] rounded transition ${
+                                    isSelected
+                                      ? 'button-primary'
+                                      : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
+                                  }`}
+                                >
+                                  {/* Pill shows the stable key (e.g. "GEN",
                                     "AgrEnEnv"); tooltip carries the full
                                     human label. */}
-                                {key}
-                              </button>
-                            );
-                          })}
+                                  {key}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {econ.domains.length > 0 && !hasIssnWhitelist && (
+                            <button
+                              onClick={() => {
+                                setFilters((prev) => ({
+                                  ...prev,
+                                  econFilter: reconcileEcon({
+                                    tiers: prev.econFilter?.tiers || [],
+                                    domains: [],
+                                    presetId: null,
+                                    issns: undefined,
+                                  }),
+                                  journalFilterMode: 'wide',
+                                }));
+                                setActivePresetId(null);
+                              }}
+                              className='text-[10px] text-app-soft hover:text-app-muted mt-1'
+                            >
+                              Reset to all
+                            </button>
+                          )}
                         </div>
-                        {econ.domains.length > 0 && !hasIssnWhitelist && (
-                          <button
-                            onClick={() => {
-                              setFilters((prev) => ({
-                                ...prev,
-                                econFilter: reconcileEcon({
-                                  tiers: prev.econFilter?.tiers || [],
-                                  domains: [],
-                                  presetId: null,
-                                  issns: undefined,
-                                }),
-                                journalFilterMode: 'wide',
-                              }));
-                              setActivePresetId(null);
-                            }}
-                            className='text-[10px] text-app-soft hover:text-app-muted mt-1'
-                          >
-                            Reset to all
-                          </button>
+
+                        {/* Journal count (only when wide is active) */}
+                        {econ.enabled && (
+                          <p className='text-[10px] text-app-soft mt-1.5'>
+                            {hasIssnWhitelist
+                              ? `${econ.issns!.length} journals (whitelist)`
+                              : `${econJournalCount} journals selected`}
+                          </p>
                         )}
                       </div>
-
-                      {/* Journal count (only when wide is active) */}
-                      {econ.enabled && (
-                        <p className='text-[10px] text-app-soft mt-1.5'>
-                          {hasIssnWhitelist
-                            ? `${econ.issns!.length} journals (whitelist)`
-                            : `${econJournalCount} journals selected`}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
                 {/* ─── Subsection: Manual selection (only in specific mode) ── */}
                 {(filters.journalFilterMode || 'wide') === 'specific' && (
@@ -1015,10 +972,8 @@ export default function FilterPanel({
                     {filters.journals.length > 0 && (
                       <div className='flex flex-wrap gap-1.5 mb-2 max-h-32 overflow-y-auto pr-1'>
                         {filters.journals.map((j) =>
-                          renderPill(
-                            j.issn,
-                            j.name || 'Unknown Journal',
-                            () => removeJournal(j.issn),
+                          renderPill(j.issn, j.name || 'Unknown Journal', () =>
+                            removeJournal(j.issn),
                           ),
                         )}
                       </div>
@@ -1076,7 +1031,7 @@ export default function FilterPanel({
                       })}
                     </div>
                   ) : (
-                      <div className='text-[11px] text-app-soft mb-2'>
+                    <div className='text-[11px] text-app-soft mb-2'>
                       No saved journal filters yet
                     </div>
                   )}
@@ -1100,30 +1055,17 @@ export default function FilterPanel({
             )}
           </div>
 
-          {/* Authors */}
-          {renderSection(
-            'authors',
-            'Authors',
-            filters.authors.length,
-            openAuthorModal,
-            filters.authors.map((a) => ({
-              key: a.id,
-              label: a.name || 'Unknown Author',
-              onRemove: () => removeAuthor(a.id),
-            })),
-          )}
-          {/* Institutions */}
-          {renderSection(
-            'institutions',
-            'Institutions',
-            filters.institutions.length,
-            openInstitutionModal,
-            filters.institutions.map((i) => ({
-              key: i.id,
-              label: i.display_name || 'Unknown Institution',
-              onRemove: () => removeInstitution(i.id),
-            })),
-          )}
+          {/* Authors and Institutions sections used to live here.
+              Both moved into the navbar's chip facade — authors via
+              the existing `@partial` autocomplete, institutions via
+              a new `~partial` autocomplete with the same pagination
+              and chip-rendering pattern. Removing the two sections
+              from the panel keeps the filter-by-entity flow in one
+              place and shortens the left rail. The `removeAuthor`,
+              `removeInstitution`, `openAuthorModal`, and
+              `openInstitutionModal` bindings are kept (currently
+              unused) so this is reversible — re-add the
+              `renderSection` calls and the panel works again. */}
         </div>
         {/* Type & Year */}
         <div className='px-4 py-3 border-t border-app-muted space-y-3'>

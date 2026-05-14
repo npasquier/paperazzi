@@ -5,8 +5,9 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterPanel from './FilterPanel';
 import SearchResults from './SearchResults';
-import AuthorModal from './AuthorModal';
-import InstitutionModal from './InstitutionModal';
+// (AuthorModal and InstitutionModal were dropped along with the
+// FilterPanel sections that triggered them — see the Modal block at
+// the bottom of this file for the rationale.)
 
 // JournalModal carries the heaviest deps in the modal trio (the full
 // journals dataset is fetched on mount, plus react-select). Loading it
@@ -40,8 +41,8 @@ function PaperazziAppContent() {
 
   // --- Modal state ---
   const [showJournalModal, setShowJournalModal] = useState(false);
-  const [showAuthorModal, setShowAuthorModal] = useState(false);
-  const [showInstitutionModal, setShowInstitutionModal] = useState(false);
+  // (showAuthorModal / showInstitutionModal removed — modals were
+  // dropped when their FilterPanel triggers went away.)
   // Panel open/closed preferences — persisted to localStorage so the layout
   // a user left with is the layout they come back to. Default to open on
   // first visit (no persisted value yet).
@@ -174,6 +175,16 @@ function PaperazziAppContent() {
   useEffect(() => {
     emit('paperazzi-authors-changed', { authors: filters.authors });
   }, [filters.authors]);
+  useEffect(() => {
+    // Institution chips are now the only entry point for the
+    // institutions filter (the FilterPanel section was removed). Same
+    // mirror-on-state-change pattern as authors — URL-driven changes
+    // also trip this effect because syncFromURL writes to
+    // filters.institutions.
+    emit('paperazzi-institutions-changed', {
+      institutions: filters.institutions,
+    });
+  }, [filters.institutions]);
   useEffect(() => {
     // Only surface journal chips in the navbar when the panel is in
     // 'specific' mode — otherwise the wide-econ filter (or 'off') is what
@@ -439,11 +450,13 @@ function PaperazziAppContent() {
       semantic: isSemantic,
       chipAuthors,
       chipJournals,
+      chipInstitutions,
     }: {
       query: string;
       semantic: boolean;
       chipAuthors: Array<{ id: string; name?: string }>;
       chipJournals: Array<{ issn: string; name?: string }>;
+      chipInstitutions: Array<{ id: string; display_name: string }>;
     }) => {
       // In semantic mode the @/# shortcuts are inert — OpenAlex's semantic
       // endpoint expects a bare concept query, so we skip extraction and
@@ -484,6 +497,17 @@ function PaperazziAppContent() {
         }
       }
 
+      // Institutions: no text-token resolver yet (the dropdown is the
+      // only entry point), so the chip list is the whole picture.
+      // Mapped onto the Filters shape — country_code / type aren't in
+      // the chip payload, but syncFromURL refetches the full Institution
+      // record from OpenAlex by id afterwards, so the URL push only
+      // needs the id.
+      const finalInstitutions: Institution[] = chipInstitutions.map((i) => ({
+        id: i.id,
+        display_name: i.display_name,
+      }));
+
       const params = buildURLParams({
         query: cleanQuery,
         page: 1,
@@ -493,6 +517,7 @@ function PaperazziAppContent() {
         // have just removed all of them).
         authors: finalAuthors,
         journals: finalJournals,
+        institutions: finalInstitutions,
       });
       router.push(`/search?${params.toString()}`);
     };
@@ -717,8 +742,6 @@ function PaperazziAppContent() {
         setFilters={setFilters}
         query={searchQuery}
         openJournalModal={() => setShowJournalModal(true)}
-        openAuthorModal={() => setShowAuthorModal(true)}
-        openInstitutionModal={() => setShowInstitutionModal(true)}
         onSortChange={handleSortChange}
         isOpen={isFilterOpen}
         onToggle={() => setIsFilterOpen((v) => !v)}
@@ -821,20 +844,13 @@ function PaperazziAppContent() {
             re-run the search. If you want journals to also queue, the
             change is local: drop the buildURLParams + router.push
             calls below and leave only setFilters. */}
-      <AuthorModal
-        isOpen={showAuthorModal}
-        selectedAuthors={filters.authors}
-        onClose={() => setShowAuthorModal(false)}
-        onAddAuthor={(author) => {
-          setFilters((prev) => ({
-            ...prev,
-            authors: [
-              ...prev.authors.filter((a) => a.id !== author.id),
-              author,
-            ],
-          }));
-        }}
-      />
+      {/* AuthorModal and InstitutionModal used to live here as
+          triggers for the FilterPanel's Authors / Institutions
+          sections. Both sections were dropped — authors are picked
+          via @autocomplete in the navbar, institutions via
+          ~autocomplete — so the modals lost their only triggers and
+          were removed along with their state. Component files are
+          left in the repo in case the modal flow is desired again. */}
 
       <JournalModal
         isOpen={showJournalModal}
@@ -851,15 +867,6 @@ function PaperazziAppContent() {
           }));
           const params = buildURLParams({ journals: selected, page: 1 });
           router.push(`/search?${params.toString()}`);
-        }}
-      />
-
-      <InstitutionModal
-        isOpen={showInstitutionModal}
-        selectedInstitutions={filters.institutions}
-        onClose={() => setShowInstitutionModal(false)}
-        onApply={(selected) => {
-          setFilters((prev) => ({ ...prev, institutions: selected }));
         }}
       />
 

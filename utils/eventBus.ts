@@ -22,6 +22,7 @@
 // using addEventListener — they aren't ours to centralize.
 
 import type {
+  Institution,
   Paper,
   SelectedAuthor,
   SelectedJournal,
@@ -58,6 +59,8 @@ export type AppEvents = {
   'paperazzi-authors-changed': { authors: SelectedAuthor[] };
   /** Same idea for journals — keeps navbar journal chips in sync with URL. */
   'paperazzi-journals-changed': { journals: SelectedJournal[] };
+  /** Same idea for institutions — keeps navbar institution chips in sync. */
+  'paperazzi-institutions-changed': { institutions: Institution[] };
   /**
    * The navbar's search bar was submitted. PaperazziApp owns the URL push
    * (it's the only place that knows the full filter state), so the navbar
@@ -68,6 +71,7 @@ export type AppEvents = {
     semantic: boolean;
     chipAuthors: Array<{ id: string; name?: string }>;
     chipJournals: Array<{ issn: string; name?: string }>;
+    chipInstitutions: Array<{ id: string; display_name: string }>;
   };
   /**
    * The navbar's clear-all (X) button was pressed. PaperazziApp listens so

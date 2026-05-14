@@ -1,39 +1,34 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import {
-  Search,
-  X,
-  Info,
-  Flag,
-  Database,
-  Gauge,
-  SlidersHorizontal,
-  ChevronDown,
-  Wrench,
-} from 'lucide-react';
+import { Search, X, Database } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
-import ContributeModal from './ContributeModal';
 import OpenAlexUsageModal from './OpenAlexUsageModal';
-import SearchSyntaxHelp from './SearchSyntaxHelp';
 import {
   extractMentions,
   resolveMentions,
   resolveJournalShortcuts,
 } from '@/utils/queryMentions';
-import { SelectedAuthor, SelectedJournal } from '@/types/interfaces';
+import {
+  Institution,
+  SelectedAuthor,
+  SelectedJournal,
+} from '@/types/interfaces';
 import {
   searchJournalShortcuts,
   abbrevForIssn,
 } from '@/data/journalAbbreviations';
 import { emit, on } from '@/utils/eventBus';
 
-// Trailing shortcut pattern: matches `@xxx` (author) or `#xxx` (journal) at
-// the end of the query, where xxx starts with a letter and is at least 2
-// chars. We only suggest while the user is actively typing the *last* token,
-// which keeps the dropdown out of the way for everything else.
-const TRAILING_SHORTCUT_RE = /(?:^|\s)([@#])([A-Za-z][A-Za-z0-9-]{1,})$/;
+// Trailing shortcut pattern: matches `@xxx` (author), `#xxx` (journal) or
+// `~xxx` (institution) at the end of the query, where xxx starts with a
+// letter and is at least 2 chars. We only suggest while the user is
+// actively typing the *last* token, which keeps the dropdown out of the
+// way for everything else. The `~` prefix is the institution equivalent
+// of `@` for authors — single character, visually distinct, rare in
+// research-query text so it doesn't collide with literal content.
+const TRAILING_SHORTCUT_RE = /(?:^|\s)([@#~])([A-Za-z][A-Za-z0-9-]{1,})$/;
 // (The SHORTCUT_ANYWHERE_RE companion regex used to detect "shortcut
 // typed while semantic mode is on" so we could show a hint. The
 // Semantic toggle no longer has a UI affordance, so that hint and its
@@ -52,6 +47,13 @@ type Suggestion =
       issn: string;
       display_name: string;
       abbrev: string;
+    }
+  | {
+      kind: 'institution';
+      id: string; // OpenAlex ID, normalized
+      display_name: string;
+      works_count: number;
+      hint?: string; // country name / type, when available
     };
 
 function NavBarContent() {
@@ -67,38 +69,33 @@ function NavBarContent() {
   // Econ-filter activeness, broadcast by PaperazziApp (lives in component
   // state, not URL params — see `semantic-conflict-econ` event).
   const [econActive, setEconActive] = useState(false);
-  // Contribute-to-OpenAlex call-to-action modal — triggered from the
-  // Tools dropdown. A modal is more engaging than a deep link to
-  // /help#contribute: one click from "I noticed an error" to the
-  // correction form.
-  const [showContribute, setShowContribute] = useState(false);
-  // Stored-data viewer modal — also in the Tools dropdown.
+  // Stored-data viewer modal — direct trigger in the navbar.
   const [showStorage, setShowStorage] = useState(false);
-  // OpenAlex API key usage dashboard — also in the Tools dropdown.
-  const [showOpenAlexUsage, setShowOpenAlexUsage] = useState(false);
 
-  // "Tools" dropdown — collects four utility actions (Personalize
-  // ranking, View stored data, Contribute corrections, API key usage)
-  // behind a single labelled trigger so Help and About are the only
-  // text/icon links the user sees at the top level. Click-outside /
-  // Escape close, same pattern as the previous More menu.
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const toolsRef = useRef<HTMLDivElement>(null);
+  // OpenAlex API key usage dashboard — admin-only affordance, no
+  // visible trigger. Open it with Cmd+Shift+U (Mac) / Ctrl+Shift+U
+  // (Windows/Linux). The modal stays mounted so the shortcut just
+  // flips the boolean; closing returns to normal navbar state. If
+  // someone needs this UI surfaced later, give it back a button —
+  // the modal component and its state slot here are unchanged.
+  const [showOpenAlexUsage, setShowOpenAlexUsage] = useState(false);
   useEffect(() => {
-    if (!toolsOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (!toolsRef.current?.contains(e.target as Node)) setToolsOpen(false);
-    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setToolsOpen(false);
+      // `e.metaKey` covers Cmd on Mac; `e.ctrlKey` covers Ctrl on
+      // Windows/Linux. We accept either so the same shortcut works
+      // cross-platform without forking. Skip when the user is typing
+      // in an input/textarea — let those owners handle Ctrl/Cmd
+      // combos for their own UX (e.g. select-all).
+      if (e.key.toLowerCase() !== 'u' || !e.shiftKey) return;
+      if (!e.metaKey && !e.ctrlKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      e.preventDefault();
+      setShowOpenAlexUsage((v) => !v);
     };
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [toolsOpen]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // ── @author / #journal autocomplete ─────────────────────────────────
   // Suggestions for the trailing @partial or #partial token. Open only
@@ -111,10 +108,40 @@ function NavBarContent() {
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionIdx, setMentionIdx] = useState(0);
   const [mentionLoading, setMentionLoading] = useState(false);
+  // Pagination state for the @author dropdown. OpenAlex returns 25
+  // results per page; we keep loading subsequent pages as the user
+  // scrolls to the bottom of the suggestion list. `mentionPartial` is
+  // the search string the current pages were fetched for — it's both
+  // the load-more API input and the race-condition guard (if the user
+  // is still typing when a page resolves, we discard if partial moved
+  // on). #journal lookups are synchronous against a static map so
+  // they don't participate in any of this.
+  const [mentionPartial, setMentionPartial] = useState('');
+  const [mentionPage, setMentionPage] = useState(1);
+  // Which paged kind is currently active in the dropdown — drives
+  // which OpenAlex endpoint `loadMoreMention` hits. `null` outside
+  // the paged kinds (e.g. when journals are showing — those are
+  // static and not paged).
+  const [mentionKind, setMentionKind] = useState<
+    'author' | 'institution' | null
+  >(null);
+  const [mentionHasMore, setMentionHasMore] = useState(false);
+  const [mentionLoadingMore, setMentionLoadingMore] = useState(false);
+  // Latest-partial mirror — used inside the async load-more callback
+  // to detect "the user is now typing something different, this
+  // page's results are stale" without depending on the React state
+  // closure (which would capture the value at definition time).
+  const mentionPartialRef = useRef('');
+  useEffect(() => {
+    mentionPartialRef.current = mentionPartial;
+  }, [mentionPartial]);
   const inputRef = useRef<HTMLInputElement>(null);
   // One ref per suggestion row so arrow-key navigation can scroll the
   // highlighted item into view inside the (overflow-y-auto) dropdown.
   const mentionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Page size — kept as a constant so the pagination arithmetic
+  // (`page * pageSize < totalCount`) and the URL builder agree.
+  const MENTION_PAGE_SIZE = 25;
 
   // ── In-bar chips (authors + journals) ───────────────────────────────
   // Visual representation of the currently active author + journal filters,
@@ -127,6 +154,11 @@ function NavBarContent() {
   // from the autocomplete stack additively until submit.
   const [chips, setChips] = useState<SelectedAuthor[]>([]);
   const [journalChips, setJournalChips] = useState<SelectedJournal[]>([]);
+  // Institution chips — third pill type in the bar, picked via `~`
+  // autocomplete. Same mirror-from-PaperazziApp pattern as authors
+  // and journals; the chip palette uses --warning-* (amber) so the
+  // three chip types stay visually distinct.
+  const [institutionChips, setInstitutionChips] = useState<Institution[]>([]);
 
   // True iff the user has edited filters in the panel without committing
   // (pressing Enter / clicking Search). Drives the "Press Enter to apply"
@@ -155,12 +187,19 @@ function NavBarContent() {
     const offJournals = on('paperazzi-journals-changed', ({ journals }) => {
       setJournalChips(journals || []);
     });
+    const offInstitutions = on(
+      'paperazzi-institutions-changed',
+      ({ institutions }) => {
+        setInstitutionChips(institutions || []);
+      },
+    );
     const offDirty = on('paperazzi-filters-dirty', ({ isDirty }) => {
       setFiltersDirty(isDirty);
     });
     return () => {
       offAuthors();
       offJournals();
+      offInstitutions();
       offDirty();
     };
   }, []);
@@ -197,9 +236,14 @@ function NavBarContent() {
     [],
   );
 
-  // Sync with URL when on search page
+  // Sync with URL when on search page. The set-state-in-effect lint
+  // rule wants us to derive `query` from `searchParams` directly, but
+  // `query` is also user-editable via the input — so it's intrinsically
+  // owned by useState and just *seeded* from the URL on entry / back-
+  // forward. Suppress the rule for these two seeding writes.
   useEffect(() => {
     if (!isSearchPage) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery(searchParams.get('q') || '');
 
     const urlSemantic = searchParams.get('semantic') === 'true';
@@ -235,24 +279,119 @@ function NavBarContent() {
   // endpoint expects a bare concept query, so author/journal shortcuts
   // would defeat the point. Users can still *type* `@x` or `#y`; those
   // characters just stay in the query as literal text.
+  // Fetch one page of mention suggestions from OpenAlex. Handles both
+  // /authors (kind='author') and /institutions (kind='institution')
+  // because they share an identical paged-response shape; only the
+  // endpoint and the per-row mapper differ. Returns null on HTTP /
+  // parse error so the caller can decide what to render (typically:
+  // clear the list and close the dropdown for page 1, mark
+  // hasMore=false for subsequent pages). Shared between the initial
+  // fetch and the infinite-scroll load-more.
+  const fetchMentionPage = async (
+    kind: 'author' | 'institution',
+    partial: string,
+    page: number,
+  ): Promise<{ results: Suggestion[]; totalCount: number } | null> => {
+    try {
+      const endpoint = kind === 'author' ? 'authors' : 'institutions';
+      const url = `https://api.openalex.org/${endpoint}?search=${encodeURIComponent(
+        partial,
+      )}&per-page=${MENTION_PAGE_SIZE}&page=${page}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      if (kind === 'author') {
+        const data: {
+          results?: Array<{
+            id: string;
+            display_name: string;
+            works_count?: number;
+            last_known_institution?: { display_name?: string };
+            affiliations?: { institution?: { display_name?: string } }[];
+          }>;
+          meta?: { count?: number };
+        } = await res.json();
+        const results: Suggestion[] = (data.results || []).map((a) => ({
+          kind: 'author' as const,
+          id: a.id.replace('https://openalex.org/', ''),
+          display_name: a.display_name,
+          works_count: a.works_count || 0,
+          hint:
+            a.last_known_institution?.display_name ||
+            a.affiliations?.[0]?.institution?.display_name ||
+            undefined,
+        }));
+        return { results, totalCount: data.meta?.count ?? 0 };
+      } else {
+        // Institution mapper. Hint is country code + type (e.g.
+        // "FR · education") so the dropdown row carries enough to
+        // disambiguate between same-named institutions in different
+        // countries.
+        const data: {
+          results?: Array<{
+            id: string;
+            display_name: string;
+            works_count?: number;
+            country_code?: string;
+            type?: string;
+          }>;
+          meta?: { count?: number };
+        } = await res.json();
+        const results: Suggestion[] = (data.results || []).map((i) => {
+          const country = i.country_code?.toUpperCase();
+          const type = i.type;
+          const hint = [country, type].filter(Boolean).join(' · ') || undefined;
+          return {
+            kind: 'institution' as const,
+            id: i.id.replace('https://openalex.org/', ''),
+            display_name: i.display_name,
+            works_count: i.works_count || 0,
+            hint,
+          };
+        });
+        return { results, totalCount: data.meta?.count ?? 0 };
+      }
+    } catch {
+      return null;
+    }
+  };
+
   useEffect(() => {
-    if (semantic) {
+    // Cleanup-driven cancellation token. Any setState after the user
+    // has typed past this partial is dropped — same trick the load-
+    // more callback uses via `mentionPartialRef`.
+    let cancelled = false;
+
+    const resetAll = () => {
       setMentionOpen(false);
       setMentionSuggestions([]);
       setMentionLoading(false);
+      setMentionLoadingMore(false);
+      setMentionHasMore(false);
+      setMentionPage(1);
+      setMentionPartial('');
+      setMentionKind(null);
+    };
+
+    if (semantic) {
+      resetAll();
       return;
     }
     const m = query.match(TRAILING_SHORTCUT_RE);
     if (!m) {
-      setMentionOpen(false);
-      setMentionSuggestions([]);
-      setMentionLoading(false);
+      resetAll();
       return;
     }
     const prefix = m[1];
     const partial = m[2];
 
-    // Journal: synchronous static lookup, no need to debounce or load.
+    // Journal: synchronous static lookup, no need to debounce or
+    // paginate — the catalog is small and the whole list fits in one
+    // pass. The set-state-in-effect lint rule fires on these direct
+    // writes; the cleaner alternative would be a separate useMemo
+    // derived from `query`, but `mentionSuggestions` is shared with
+    // the async author path which can't be expressed as a memo. The
+    // duplicate state would force a merge layer that's strictly
+    // worse than this brief synchronous burst. Suppress.
     if (prefix === '#') {
       const hits = searchJournalShortcuts(partial, 25);
       const results: Suggestion[] = hits.map((j) => ({
@@ -261,57 +400,103 @@ function NavBarContent() {
         display_name: j.name,
         abbrev: j.abbrev,
       }));
+      /* eslint-disable react-hooks/set-state-in-effect */
       setMentionSuggestions(results);
       setMentionOpen(results.length > 0);
       setMentionIdx(0);
       setMentionLoading(false);
+      setMentionHasMore(false);
+      setMentionPage(1);
+      setMentionPartial('');
+      setMentionKind(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
-    // Author: debounced network call.
+    // Author (@) or institution (~): debounced network call, page 1.
+    // Both endpoints share `fetchMentionPage` and the same pagination
+    // bookkeeping — the only difference is the kind we tell it to
+    // fetch, which then drives the load-more endpoint via
+    // `mentionKind` state.
+    const kind: 'author' | 'institution' =
+      prefix === '~' ? 'institution' : 'author';
     setMentionLoading(true);
+    setMentionPartial(partial);
+    setMentionPage(1);
+    setMentionKind(kind);
     const handle = setTimeout(async () => {
-      try {
-        const url = `https://api.openalex.org/authors?search=${encodeURIComponent(
-          partial,
-        )}&per-page=25&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          setMentionSuggestions([]);
-          setMentionOpen(false);
-          return;
-        }
-        const data = await res.json();
-        const results: Suggestion[] = (data.results || []).map(
-          (a: {
-            id: string;
-            display_name: string;
-            works_count?: number;
-            last_known_institution?: { display_name?: string };
-            affiliations?: { institution?: { display_name?: string } }[];
-          }) => ({
-            kind: 'author' as const,
-            id: a.id.replace('https://openalex.org/', ''),
-            display_name: a.display_name,
-            works_count: a.works_count || 0,
-            hint:
-              a.last_known_institution?.display_name ||
-              a.affiliations?.[0]?.institution?.display_name ||
-              undefined,
-          }),
-        );
-        setMentionSuggestions(results);
-        setMentionOpen(results.length > 0);
-        setMentionIdx(0);
-      } catch {
+      const page = await fetchMentionPage(kind, partial, 1);
+      if (cancelled) return;
+      if (!page) {
         setMentionSuggestions([]);
         setMentionOpen(false);
-      } finally {
+        setMentionHasMore(false);
         setMentionLoading(false);
+        return;
       }
+      setMentionSuggestions(page.results);
+      setMentionOpen(page.results.length > 0);
+      setMentionIdx(0);
+      // hasMore: a non-empty first page that doesn't cover the total.
+      // Falls back to false when count is missing (older response
+      // shapes) so we don't loop forever fetching empty pages.
+      setMentionHasMore(
+        page.results.length > 0 && MENTION_PAGE_SIZE < page.totalCount,
+      );
+      setMentionLoading(false);
     }, 300);
-    return () => clearTimeout(handle);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [query, semantic]);
+
+  // Load the next page of mention suggestions and append. Invoked by
+  // the scroll handler on the dropdown when the list nears its bottom
+  // (see `handleMentionListScroll`). Works for either kind (@author or
+  // ~institution) by dispatching through `mentionKind`. Self-gates:
+  // bails if a load is already in flight, if we know there's no more,
+  // or if the partial has changed since this call was scheduled (race
+  // guard via the ref — the state-based `mentionPartial` would be
+  // stale here).
+  const loadMoreMention = async () => {
+    if (
+      mentionLoadingMore ||
+      !mentionHasMore ||
+      !mentionPartial ||
+      !mentionKind
+    )
+      return;
+    const partialAtStart = mentionPartial;
+    const kindAtStart = mentionKind;
+    setMentionLoadingMore(true);
+    const nextPage = mentionPage + 1;
+    const page = await fetchMentionPage(kindAtStart, partialAtStart, nextPage);
+    // Race guard: user kept typing while this page was in flight —
+    // the initial-fetch effect has already reset state for the new
+    // partial. Don't pollute the new list.
+    if (mentionPartialRef.current !== partialAtStart) return;
+    if (!page) {
+      setMentionHasMore(false);
+      setMentionLoadingMore(false);
+      return;
+    }
+    setMentionSuggestions((prev) => [...prev, ...page.results]);
+    setMentionPage(nextPage);
+    setMentionHasMore(nextPage * MENTION_PAGE_SIZE < page.totalCount);
+    setMentionLoadingMore(false);
+  };
+
+  // Trigger load-more when the user scrolls near the bottom of the
+  // suggestion list. 60px from the bottom edge is enough lead time
+  // that the next page is usually loaded by the time the user reaches
+  // the end of the current page.
+  const handleMentionListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const t = e.currentTarget;
+    if (t.scrollHeight - t.scrollTop - t.clientHeight < 60) {
+      void loadMoreMention();
+    }
+  };
 
   // Scroll the highlighted suggestion into view so arrow-key navigation
   // doesn't lose the user inside a long, scrollable dropdown.
@@ -341,15 +526,34 @@ function NavBarContent() {
           ? prev
           : [...prev, { id: sug.id, name: sug.display_name }],
       );
-    } else {
+    } else if (sug.kind === 'journal') {
       setJournalChips((prev) =>
         prev.find((j) => j.issn === sug.issn)
           ? prev
           : [...prev, { issn: sug.issn, name: sug.display_name }],
       );
+    } else {
+      // Institution chip. The Institution shape includes country_code
+      // and type, but we don't carry them through the chip facade —
+      // PaperazziApp's syncFromURL refetches the full record from
+      // OpenAlex when the URL is committed, and a chip only needs the
+      // id + display name to render and to round-trip via the URL.
+      setInstitutionChips((prev) =>
+        prev.find((c) => c.id === sug.id)
+          ? prev
+          : [...prev, { id: sug.id, display_name: sug.display_name }],
+      );
     }
     setMentionOpen(false);
     setMentionSuggestions([]);
+    // Clear the pagination bookkeeping too — otherwise the next time
+    // the dropdown opens for a new partial, a stale `mentionPartial`
+    // could fool the load-more guard into appending the wrong page.
+    setMentionPartial('');
+    setMentionPage(1);
+    setMentionHasMore(false);
+    setMentionLoadingMore(false);
+    setMentionKind(null);
     // Keep focus in the input so the user can keep typing (keywords or
     // another @ / # token) without clicking back into the bar.
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -385,6 +589,7 @@ function NavBarContent() {
     setQuery('');
     setChips([]);
     setJournalChips([]);
+    setInstitutionChips([]);
     setMentionOpen(false);
     setMentionSuggestions([]);
     emit('paperazzi-reset-search');
@@ -406,16 +611,33 @@ function NavBarContent() {
     router.push(`/search?${params.toString()}`);
   };
 
+  // Institution chip removal — same pattern as authors / journals.
+  // The URL param is `institutions=` and the id matches the form
+  // PaperazziApp's syncFromURL parses (no `https://openalex.org/`
+  // prefix).
+  const removeInstitutionChip = (id: string) => {
+    setInstitutionChips((prev) => prev.filter((i) => i.id !== id));
+    if (!isSearchPage) return;
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    const remaining = (params.get('institutions') || '')
+      .split(',')
+      .filter(Boolean)
+      .filter((i) => i !== id);
+    if (remaining.length > 0) params.set('institutions', remaining.join(','));
+    else params.delete('institutions');
+    params.set('page', '1');
+    router.push(`/search?${params.toString()}`);
+  };
+
   const handleSearch = async () => {
     if (isSearchPage) {
-      // On search page: dispatch the full chip state (authors + journals)
-      // and let PaperazziApp's listener resolve any leftover @text / #text
-      // tokens before pushing the URL. In semantic mode we skip the
-      // shortcut machinery entirely — the OpenAlex semantic endpoint
-      // expects a bare concept query, so we send the raw text untouched
-      // and zero chips. (The toggle pill is already disabled when chips
-      // exist, so this case in practice means the user toggled to
-      // semantic on an empty bar.)
+      // On search page: dispatch the full chip state (authors,
+      // journals, institutions) and let PaperazziApp's listener
+      // resolve any leftover @text / #text tokens before pushing the
+      // URL. In semantic mode we skip the shortcut machinery
+      // entirely — the OpenAlex semantic endpoint expects a bare
+      // concept query, so we send the raw text untouched and zero
+      // chips.
       emit('navbar-search', {
         query: query.trim(),
         semantic,
@@ -425,15 +647,26 @@ function NavBarContent() {
         chipJournals: semantic
           ? []
           : journalChips.map((j) => ({ issn: j.issn, name: j.name })),
+        chipInstitutions: semantic
+          ? []
+          : institutionChips.map((i) => ({
+              id: i.id,
+              display_name: i.display_name,
+            })),
       });
     } else {
       // Off search page: build the URL ourselves. Resolve @ tokens via API
       // and # tokens via the static map, then assemble the params — unless
       // semantic mode is on, in which case the query goes through as-is
-      // with no filter resolution.
+      // with no filter resolution. `~institution` shortcuts don't have a
+      // static resolver yet, so off-page we just forward the existing
+      // `institutionChips` (set via the dropdown autocomplete).
       if (
         query.trim() ||
-        (!semantic && (chips.length > 0 || journalChips.length > 0))
+        (!semantic &&
+          (chips.length > 0 ||
+            journalChips.length > 0 ||
+            institutionChips.length > 0))
       ) {
         const params = new URLSearchParams();
 
@@ -465,6 +698,13 @@ function NavBarContent() {
           }
           if (allJournalIssns.length > 0) {
             params.set('journals', allJournalIssns.join(','));
+          }
+
+          if (institutionChips.length > 0) {
+            params.set(
+              'institutions',
+              institutionChips.map((i) => i.id).join(','),
+            );
           }
         }
 
@@ -503,14 +743,21 @@ function NavBarContent() {
         return;
       }
     }
-    // Backspace at the very start of an empty input deletes the last chip
-    // — same gesture as Slack/Gmail/Linear's chip inputs. Journal chips
-    // come visually after author chips, so they get popped first.
+    // Backspace at the very start of an empty input deletes the last
+    // chip — same gesture as Slack/Gmail/Linear's chip inputs. Pop
+    // order matches the visual order (authors, journals, institutions)
+    // so the rightmost chip — the one closest to the cursor — leaves
+    // first.
     if (
       e.key === 'Backspace' &&
       query === '' &&
       (e.currentTarget.selectionStart ?? 0) === 0
     ) {
+      if (institutionChips.length > 0) {
+        e.preventDefault();
+        removeInstitutionChip(institutionChips[institutionChips.length - 1].id);
+        return;
+      }
       if (journalChips.length > 0) {
         e.preventDefault();
         removeJournalChip(journalChips[journalChips.length - 1].issn);
@@ -580,7 +827,7 @@ function NavBarContent() {
         {isSearchPage ? (
           // Search page: Show search bar
           <>
-            <div className='flex-1 max-w-2xl ml-auto'>
+            <div className='flex-1 max-w-2xl ml-auto mr-auto'>
               <div className='relative'>
                 {/* Chip facade. Functions exactly like the previous
                     bordered <input> — chips + the real text input share
@@ -591,14 +838,11 @@ function NavBarContent() {
                 <div
                   onClick={() => inputRef.current?.focus()}
                   // Visual: rounded-full (pill) for the softest possible
-                  // perimeter; warmer "paper on desk" fill (`background-card`)
-                  // so the bar reads as an inset card rather than a hard
-                  // input field; subtle border + soft shadow + smooth focus
-                  // ring transition. `pr-7` reserves space for the
-                  // absolutely-positioned (i) syntax-help icon on the
-                  // right edge — same layout we had before the
-                  // submit-glass-inside experiment.
-                  className='w-full flex flex-wrap items-center gap-1.5 pl-4 pr-7 py-1.5 min-h-[44px] rounded-full cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
+                  // perimeter; warmer "paper on desk" fill
+                  // (`background-card`) so the bar reads as an inset
+                  // card rather than a hard input field; subtle border
+                  // + soft shadow + smooth focus ring transition.
+                  className='w-full flex flex-wrap items-center gap-1.5 px-4 py-1.5 min-h-[44px] rounded-full cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
                 >
                   {/* Author chips — green (success palette). */}
                   {chips.map((chip) => (
@@ -671,6 +915,43 @@ function NavBarContent() {
                       </span>
                     );
                   })}
+                  {/* Institution chips — amber (warning palette).
+                      Third pill type, sourced from the `~partial`
+                      autocomplete. The leading tilde mirrors the `@`
+                      and `#` conventions so the user reads the bar as
+                      "three kinds of entity references plus free
+                      text". Display name is shown verbatim since
+                      there's no standard abbrev catalog for
+                      institutions. */}
+                  {institutionChips.map((chip) => (
+                    <span
+                      key={`i-${chip.id}`}
+                      className='inline-flex items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
+                      style={{
+                        background: 'var(--warning-bg)',
+                        borderColor: 'var(--warning-border)',
+                        color: 'var(--warning-foreground)',
+                      }}
+                      title={`Filtering by institution: ${chip.display_name}`}
+                    >
+                      <span className='truncate max-w-[180px]'>
+                        ~{chip.display_name}
+                      </span>
+                      <button
+                        type='button'
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeInstitutionChip(chip.id);
+                        }}
+                        className='rounded-full p-0.5 transition hover:bg-[var(--warning-border)]'
+                        aria-label={`Remove ${chip.display_name} institution filter`}
+                        title='Remove'
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
                   <input
                     ref={inputRef}
                     type='text'
@@ -679,25 +960,55 @@ function NavBarContent() {
                     onKeyDown={handleKeyDown}
                     onBlur={handleInputBlur}
                     placeholder={
-                      chips.length > 0 || journalChips.length > 0
+                      chips.length > 0 ||
+                      journalChips.length > 0 ||
+                      institutionChips.length > 0
                         ? ''
                         : semantic
                           ? 'Describe a concept...'
-                          : 'Search papers, @authors, #journals…'
+                          : 'Search papers, @authors, #journals, ~institutions…'
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
-                  
+                    {/* Standalone submit-glass — sits right of the bar (not
+                  inside it). Same dual-state visual as before: muted
+                  idle, success/green when anything is uncommitted. The
+                  pill button replaces the Google-Scholar-style in-bar
+                  glass; the (i) syntax icon goes back to its old spot
+                  inside the bar. */}
+                  <button
+                    type='button'
+                    onClick={() => handleSearch()}
+                    className={`relative -my-2 -mr-4 flex-shrink-0 h-10 w-10 rounded-r-full inline-flex items-center justify-center transition ${
+                      isDirty
+                        ? ''
+                        : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)] border border-[var(--border-muted)]'
+                    }`}
+                    style={
+                      isDirty
+                        ? {
+                            background: 'var(--success-bg)',
+                            color: 'var(--success-foreground)',
+                            border: '1px solid var(--success-border)',
+                          }
+                        : undefined
+                    }
+                    title={
+                      isDirty
+                        ? 'Apply pending changes (Enter)'
+                        : 'Search (Enter)'
+                    }
+                    aria-label={isDirty ? 'Apply pending changes' : 'Search'}
+                  >
+                    <Search size={18} />
+                  </button>
                 </div>
 
-                {/* Search-syntax (i) icon, anchored to the bar's
-                    right edge — its `pr-7` reservation above leaves
-                    room for it. The popover itself is position: fixed
-                    so it isn't clipped by the bar's perimeter. */}
-                <SearchSyntaxHelp
-                  semantic={semantic}
-                  conflicts={semanticConflicts}
-                />
+                {/* (Search-syntax (i) popover removed from the bar —
+                    the same syntax info now lives in the /help page's
+                    Filters section. The component is still exported in
+                    case we want to re-mount it elsewhere; nothing
+                    imports it from the navbar anymore.) */}
 
                 {/* @-mention autocomplete dropdown. Anchored to the input,
                     z-50 so it sits above the search results below but under
@@ -711,13 +1022,26 @@ function NavBarContent() {
                     // overflow-y-auto turns the rest into a scrollable list.
                     // overscroll-contain prevents wheel events from leaking
                     // out and scrolling the page when the user reaches the
-                    // dropdown's edge.
+                    // dropdown's edge. onScroll powers the infinite-load
+                    // for @author results — see `handleMentionListScroll`.
+                    onScroll={handleMentionListScroll}
                     className='absolute left-0 right-0 top-full mt-1 surface-panel border border-app rounded-lg shadow-lg z-50 overflow-y-auto overscroll-contain max-h-80'
                   >
                     {mentionSuggestions.map((sug, idx) => {
                       const active = idx === mentionIdx;
                       const key =
-                        sug.kind === 'author' ? `a-${sug.id}` : `j-${sug.issn}`;
+                        sug.kind === 'author'
+                          ? `a-${sug.id}`
+                          : sug.kind === 'journal'
+                            ? `j-${sug.issn}`
+                            : `i-${sug.id}`;
+                      // Right-side meta column: works count for the
+                      // paged kinds (author / institution), the
+                      // #abbrev pill for journals.
+                      const meta =
+                        sug.kind === 'journal'
+                          ? `#${sug.abbrev}`
+                          : `${sug.works_count.toLocaleString()} works`;
                       return (
                         <button
                           key={key}
@@ -740,11 +1064,13 @@ function NavBarContent() {
                               {sug.display_name}
                             </span>
                             <span className='text-[11px] text-app-soft flex-shrink-0'>
-                              {sug.kind === 'author'
-                                ? `${sug.works_count.toLocaleString()} works`
-                                : `#${sug.abbrev}`}
+                              {meta}
                             </span>
                           </div>
+                          {/* Secondary row: kind-specific context.
+                              Authors get their last-known
+                              institution; journals show ISSN;
+                              institutions get country · type. */}
                           {sug.kind === 'author' && sug.hint && (
                             <div className='text-[11px] text-app-soft truncate mt-0.5'>
                               {sug.hint}
@@ -755,6 +1081,11 @@ function NavBarContent() {
                               ISSN {sug.issn}
                             </div>
                           )}
+                          {sug.kind === 'institution' && sug.hint && (
+                            <div className='text-[11px] text-app-soft truncate mt-0.5'>
+                              {sug.hint}
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -763,6 +1094,26 @@ function NavBarContent() {
                         Searching…
                       </div>
                     )}
+                    {/* Infinite-load footers (author dropdown only).
+                        `mentionLoadingMore` shows while page N+1 is in
+                        flight; the "End of results" line replaces it
+                        once we've exhausted the result set so the user
+                        knows scrolling further won't reveal more. Both
+                        are sticky-bottom so they hover at the dropdown
+                        edge as the user scrolls. */}
+                    {!mentionLoading && mentionLoadingMore && (
+                      <div className='px-3 py-1.5 text-[11px] text-app-soft border-t border-app sticky bottom-0 surface-panel'>
+                        Loading more…
+                      </div>
+                    )}
+                    {!mentionLoading &&
+                      !mentionLoadingMore &&
+                      !mentionHasMore &&
+                      mentionSuggestions.length > MENTION_PAGE_SIZE && (
+                        <div className='px-3 py-1.5 text-[11px] text-app-soft border-t border-app sticky bottom-0 surface-panel'>
+                          End of results
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -778,41 +1129,6 @@ function NavBarContent() {
                     here anymore.) */}
               </div>
             </div>
-
-            {/* Standalone submit-glass — sits right of the bar (not
-                inside it). Same dual-state visual as before: muted
-                idle, success/green when anything is uncommitted. The
-                pill button replaces the Google-Scholar-style in-bar
-                glass; the (i) syntax icon goes back to its old spot
-                inside the bar. */}
-            <button
-              type='button'
-              onClick={() => handleSearch()}
-              className={`relative flex-shrink-0 h-10 w-10 rounded-full inline-flex items-center justify-center transition shadow-sm ${
-                isDirty
-                  ? ''
-                  : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)] border border-[var(--border-muted)]'
-              }`}
-              style={
-                isDirty
-                  ? {
-                      background: 'var(--success-bg)',
-                      color: 'var(--success-foreground)',
-                      border: '1px solid var(--success-border)',
-                    }
-                  : undefined
-              }
-              title={
-                isDirty
-                  ? 'Apply pending changes (Enter)'
-                  : 'Search (Enter)'
-              }
-              aria-label={
-                isDirty ? 'Apply pending changes' : 'Search'
-              }
-            >
-              <Search size={18} />
-            </button>
           </>
         ) : (
           // Other pages: Show tagline
@@ -821,94 +1137,23 @@ function NavBarContent() {
           </div>
         )}
 
-        {/* Tools dropdown — utility actions collapsed under one
-            labelled trigger. Items live here because they're
-            *deliberate* actions a user goes looking for (configure
-            ranking, inspect storage, report data issues, check API
-            quota) rather than glanceable controls. Help and About
-            stay direct because they're the canonical "what is this /
-            how does it work" entry points. */}
-        <div ref={toolsRef} className='relative flex-shrink-0'>
-          <button
-            type='button'
-            onClick={() => setToolsOpen((o) => !o)}
-            aria-haspopup='menu'
-            aria-expanded={toolsOpen}
-            className='inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-app-muted hover:text-app hover:bg-[var(--surface-muted)] transition'
-            title='Open Tools menu'
-            aria-label='Open Tools menu'
-          >
-            <Wrench size={14} />
-            <span>Tools</span>
-            <ChevronDown
-              size={14}
-              className={`transition-transform ${toolsOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
-          {toolsOpen && (
-            <div
-              role='menu'
-              aria-label='Tools'
-              className='absolute right-0 top-full mt-1 min-w-[220px] surface-panel border border-app rounded-lg shadow-lg z-50 py-1'
-            >
-              {/* Configuration first — the highest-intent action.
-                  Goes to /rankings; we used to expose this as a
-                  standalone icon, then briefly as a link in the
-                  FilterPanel's Wide section. Tools is a better home
-                  because it groups with the other "go-find-it"
-                  actions. */}
-              <Link
-                role='menuitem'
-                href='/rankings'
-                onClick={() => setToolsOpen(false)}
-                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
-              >
-                <SlidersHorizontal size={14} className='text-app-soft' />
-                <span>Personalize ranking</span>
-              </Link>
-              <button
-                role='menuitem'
-                onClick={() => {
-                  setToolsOpen(false);
-                  setShowContribute(true);
-                }}
-                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
-              >
-                <Flag size={14} className='text-app-soft' />
-                <span>Contribute corrections</span>
-              </button>
-              <div className='border-t border-app-muted my-1' aria-hidden='true' />
-              {/* Diagnostic / power-user actions live below the
-                  divider — separating them from the two high-intent
-                  items above so the menu reads in tiers. */}
-              <button
-                role='menuitem'
-                onClick={() => {
-                  setToolsOpen(false);
-                  setShowStorage(true);
-                }}
-                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
-              >
-                <Database size={14} className='text-app-soft' />
-                <span>View stored data</span>
-              </button>
-              <button
-                role='menuitem'
-                onClick={() => {
-                  setToolsOpen(false);
-                  setShowOpenAlexUsage(true);
-                }}
-                className='w-full flex items-center gap-2 px-3 py-1.5 text-sm text-app hover:bg-[var(--surface-muted)] transition'
-              >
-                <Gauge size={14} className='text-app-soft' />
-                <span>API key usage</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Help and About stay as direct links — the canonical
-            "what is this / how do I use this" entry points. */}
+        {/* Final navbar utility cluster.
+            Three direct items, no overflow menu. The deliberate
+            "go-find-it" actions either moved closer to their context
+            (Personalize ranking → FilterPanel header) or to the help
+            page (Contribute → /help#contribute; search syntax → /help
+            Filters section). API-key usage stayed in the codebase but
+            lost its visible trigger — it's now reachable only via the
+            Cmd/Ctrl+Shift+U keyboard shortcut (admin-only affordance,
+            see the `useEffect` near the top of the file). */}
+        <button
+          onClick={() => setShowStorage(true)}
+          className='text-app-soft hover:text-app transition flex-shrink-0 p-1'
+          title='View stored data'
+          aria-label='View stored data'
+        >
+          <Database size={18} />
+        </button>
         <Link
           href='/help'
           className='text-sm text-app-muted hover:text-app transition flex-shrink-0'
@@ -925,10 +1170,6 @@ function NavBarContent() {
         </Link>
       </div>
 
-      <ContributeModal
-        isOpen={showContribute}
-        onClose={() => setShowContribute(false)}
-      />
       <StorageModal
         isOpen={showStorage}
         onClose={() => setShowStorage(false)}
