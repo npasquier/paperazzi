@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   ArrowRight,
   ArrowUpRight,
+  AtSign,
   Bookmark,
   ChevronDown,
   Compass,
@@ -25,6 +26,7 @@ import {
   OPENALEX_FIX_ERRORS_URL,
   PAPER_CORRECTION_FORM_URL,
 } from '@/utils/correctionForms';
+import { JOURNAL_SHORTCUTS_LIST } from '@/data/journalAbbreviations';
 
 type JumpLink = {
   id: string;
@@ -61,6 +63,12 @@ const jumpLinks: JumpLink[] = [
     icon: Filter,
     title: 'Filters',
     body: 'Journals, authors, institutions, type, date, and sort.',
+  },
+  {
+    id: 'syntax',
+    icon: AtSign,
+    title: 'Search syntax',
+    body: '@/#/~ shortcuts, the ~ typing tip, and OpenAlex operators.',
   },
   {
     id: 'rankings',
@@ -809,135 +817,329 @@ export default function HelpPage() {
                 </article>
               </div>
 
+                {/* Brief pointer to the dedicated Search syntax
+                    section below. The full reference (shortcut
+                    prefixes, the ~ typing tip, OpenAlex operators,
+                    the journal-abbreviation catalog) lives there as
+                    its own jump-card so it's discoverable from the
+                    table of contents. We keep a one-line teaser here
+                    because the Filters section is where most users
+                    first ask "can I filter inline from the query
+                    bar?" — the answer should be in their line of
+                    sight, with a link to the deep dive. */}
                 <div className='rounded-2xl banner-info p-5 lg:col-span-2'>
                   <p className='text-sm font-semibold text-accent-strong'>
-                    Hint: the search bar supports prefixes.
+                    The search bar also has shortcuts.
                   </p>
                   <p className='mt-2 text-sm leading-relaxed text-accent-strong'>
                     Use{' '}
                     <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
                       @name
-                    </code>{' '}
-                    for authors,{' '}
+                    </code>
+                    ,{' '}
                     <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
                       #abbrev
-                    </code>{' '}
-                    for journals, and{' '}
+                    </code>
+                    , or{' '}
                     <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
                       ~name
                     </code>{' '}
-                    for institutions in the query bar. For example:{' '}
-                    <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
-                      @acemoglu #aer ~stanford institutions
-                    </code>
-                    .
-                  </p>
-                  <p className='mt-2 text-xs leading-relaxed text-accent-strong/85'>
-                    Remaining text is searched as keywords. Multiple chips of
-                    the same kind are intersected (AND), and in Semantic mode
-                    these prefixes are treated as plain text.
-                  </p>
-
-                  {/* Typing-the-tilde tip — AZERTY layouts make `~`
-                      annoying enough to warrant a dedicated note. The
-                      full keyboard-by-keyboard breakdown lives in the
-                      (i) popover next to the search bar; this is the
-                      quick reference. */}
-                  <div className='mt-3 rounded-xl border border-white/40 bg-white/40 p-3 text-xs leading-relaxed text-accent-strong/90'>
-                    <p className='font-semibold text-accent-strong'>
-                      Typing{' '}
-                      <code className='rounded bg-white/55 px-1 py-0.5 font-mono'>
-                        ~
-                      </code>{' '}
-                      on common keyboards
-                    </p>
-                    <ul className='mt-1 list-disc space-y-0.5 pl-5'>
-                      <li>
-                        <strong>US / UK QWERTY:</strong>{' '}
-                        <code className='rounded bg-white/55 px-1 font-mono'>
-                          Shift + `
-                        </code>{' '}
-                        (top-left key).
-                      </li>
-                      <li>
-                        <strong>Mac French AZERTY:</strong>{' '}
-                        <code className='rounded bg-white/55 px-1 font-mono'>
-                          Option + N
-                        </code>
-                        , then{' '}
-                        <code className='rounded bg-white/55 px-1 font-mono'>
-                          Space
-                        </code>
-                        .
-                      </li>
-                      <li>
-                        <strong>Windows / Linux French AZERTY:</strong>{' '}
-                        <code className='rounded bg-white/55 px-1 font-mono'>
-                          AltGr + é
-                        </code>{' '}
-                        (the{' '}
-                        <code className='rounded bg-white/55 px-1 font-mono'>
-                          2
-                        </code>{' '}
-                        key), then{' '}
-                        <code className='rounded bg-white/55 px-1 font-mono'>
-                          Space
-                        </code>
-                        .
-                      </li>
-                      <li>
-                        Or copy from here:{' '}
-                        <code className='select-all rounded bg-white/55 px-1 font-mono'>
-                          ~
-                        </code>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <p className='mt-3 text-xs leading-relaxed text-accent-strong/85'>
-                    The query bar also supports OpenAlex&apos;s full keyword
-                    syntax: Boolean (
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      AND
-                    </code>
-                    ,{' '}
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      OR
-                    </code>
-                    ,{' '}
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      NOT
-                    </code>
-                    ), exact phrases (
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      &quot;horizontal merger&quot;
-                    </code>
-                    ), wildcards (
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      machin*
-                    </code>
-                    ), and proximity / fuzzy (
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      &quot;climate change&quot;~5
-                    </code>
-                    ). The{' '}
-                    <code className='rounded bg-white/55 px-1 font-mono'>
-                      (i)
-                    </code>{' '}
-                    icon inside the search bar opens a popover with the full
-                    syntax reference; the underlying OpenAlex docs are at{' '}
-                    <a
-                      href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='underline underline-offset-2 hover:text-accent-strong'
+                    to add author, journal, or institution chips inline. See{' '}
+                    <Link
+                      href='#syntax'
+                      className='underline underline-offset-2 hover:text-stone-900'
                     >
-                      docs.openalex.org
-                    </a>
-                    .
+                      Search syntax
+                    </Link>{' '}
+                    for the full reference — including how to type{' '}
+                    <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
+                      ~
+                    </code>{' '}
+                    on AZERTY keyboards and OpenAlex&apos;s keyword operators.
                   </p>
                 </div>
               </div>
+          </DocSection>
+
+          {/* Search syntax — promoted to a dedicated section so the
+              reference is discoverable from the help table of
+              contents. Mirrors the SearchSyntaxHelp popover's
+              content (shortcuts + OpenAlex operators + journal
+              abbreviations + ~ typing tip) so users have a single
+              canonical place to look. The popover itself is no
+              longer mounted in the navbar; this section is the
+              source of truth. */}
+          <DocSection
+            id='syntax'
+            icon={AtSign}
+            eyebrow='Query bar'
+            title='Search syntax'
+            intro={
+              <p>
+                The search bar accepts plain keywords plus three
+                shortcut prefixes for filtering inline by author,
+                journal, or institution. Whatever isn&apos;t a chip
+                is sent to OpenAlex&apos;s keyword endpoint, so its
+                full operator grammar — Boolean, exact phrases,
+                wildcards, proximity, fuzzy — works too.
+              </p>
+            }
+          >
+            {/* Three-shortcut grid. Cards are uniform so the eye
+                reads them as variations of one concept (prefix → chip)
+                rather than three separate features. */}
+            <div className='grid gap-4 lg:grid-cols-3'>
+              <article className='surface-panel rounded-2xl border border-app p-5'>
+                <h3 className='text-base font-semibold text-stone-900'>
+                  <code className='rounded surface-muted px-1.5 py-0.5 text-[13px] font-mono text-accent-strong'>
+                    @name
+                  </code>{' '}
+                  Author
+                </h3>
+                <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                  Suggestions appear as you type; arrow keys + Enter
+                  pick one. The selection becomes a green chip in the
+                  bar. Click the chip&apos;s{' '}
+                  <code className='rounded surface-muted px-1 text-xs font-mono text-stone-700'>
+                    ✕
+                  </code>{' '}
+                  (or press{' '}
+                  <Kbd>Backspace</Kbd> at an empty input) to remove
+                  it.
+                </p>
+                <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`@acemoglu institutions
+@kahneman @tversky prospect`}
+                </pre>
+              </article>
+
+              <article className='surface-panel rounded-2xl border border-app p-5'>
+                <h3 className='text-base font-semibold text-stone-900'>
+                  <code className='rounded surface-muted px-1.5 py-0.5 text-[13px] font-mono text-accent-strong'>
+                    #abbrev
+                  </code>{' '}
+                  Journal
+                </h3>
+                <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                  Resolves a journal abbreviation against a built-in
+                  catalog ({JOURNAL_SHORTCUTS_LIST.length} entries,
+                  see below). The pick becomes a purple chip.
+                </p>
+                <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`#aer minimum wage
+#qje #jpe inequality`}
+                </pre>
+              </article>
+
+              <article className='surface-panel rounded-2xl border border-app p-5'>
+                <h3 className='text-base font-semibold text-stone-900'>
+                  <code className='rounded surface-muted px-1.5 py-0.5 text-[13px] font-mono text-accent-strong'>
+                    ~name
+                  </code>{' '}
+                  Institution
+                </h3>
+                <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                  Searches institutions against OpenAlex. The pick
+                  becomes an amber chip. See the typing tip below for
+                  the{' '}
+                  <code className='rounded surface-muted px-1 text-xs font-mono text-stone-700'>
+                    ~
+                  </code>{' '}
+                  key.
+                </p>
+                <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`~stanford econ
+~MIT inequality`}
+                </pre>
+              </article>
+            </div>
+
+            {/* Cross-shortcut notes (kept compact). */}
+            <div className='rounded-2xl border border-dashed border-app-strong bg-[rgba(255,253,248,0.74)] p-4'>
+              <p className='text-sm leading-relaxed text-stone-600'>
+                Multiple chips of the same kind are intersected (AND).
+                Whatever isn&apos;t a chip is searched as keywords.
+                Chips persist across queries until you remove them
+                — they only commit on Enter / Search, same as the
+                rest of the bar.
+              </p>
+            </div>
+
+            {/* Typing-the-tilde — its own card so the per-layout
+                instructions have room to breathe. */}
+            <article className='surface-panel rounded-2xl border border-app p-5'>
+              <h3 className='text-base font-semibold text-stone-900'>
+                Typing{' '}
+                <code className='rounded surface-muted px-1.5 py-0.5 text-[13px] font-mono text-accent-strong'>
+                  ~
+                </code>{' '}
+                on common keyboards
+              </h3>
+              <ul className='mt-3 space-y-2 text-sm leading-relaxed text-stone-700'>
+                <li>
+                  <strong className='text-stone-900'>
+                    US / UK QWERTY:
+                  </strong>{' '}
+                  top-left key — <Kbd>Shift</Kbd> + <Kbd>`</Kbd>.
+                </li>
+                <li>
+                  <strong className='text-stone-900'>
+                    Mac French AZERTY:
+                  </strong>{' '}
+                  <Kbd>Option</Kbd> + <Kbd>N</Kbd>, then <Kbd>Space</Kbd>.
+                </li>
+                <li>
+                  <strong className='text-stone-900'>
+                    Windows / Linux French AZERTY:
+                  </strong>{' '}
+                  <Kbd>AltGr</Kbd> + <Kbd>é</Kbd> (the <Kbd>2</Kbd>{' '}
+                  key), then <Kbd>Space</Kbd>.
+                </li>
+                <li>
+                  <strong className='text-stone-900'>
+                    Or copy from here:
+                  </strong>{' '}
+                  <code className='select-all rounded surface-muted px-1.5 py-0.5 text-[13px] font-mono text-accent-strong'>
+                    ~
+                  </code>
+                </li>
+              </ul>
+            </article>
+
+            {/* OpenAlex keyword operators. Each card mirrors a
+                section from the SearchSyntaxHelp popover so the
+                content is feature-complete on the help page. */}
+            <div>
+              <h3 className='mb-3 text-sm font-semibold uppercase tracking-wider text-stone-500'>
+                OpenAlex keyword operators
+              </h3>
+              <div className='grid gap-4 lg:grid-cols-2'>
+                <article className='surface-panel rounded-2xl border border-app p-5'>
+                  <h4 className='text-base font-semibold text-stone-900'>
+                    Boolean
+                  </h4>
+                  <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                    Combine terms with <Kbd>AND</Kbd>, <Kbd>OR</Kbd>,{' '}
+                    <Kbd>NOT</Kbd> (uppercase). Plain words are
+                    joined by <Kbd>AND</Kbd>.
+                  </p>
+                  <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`(firm AND "horizontal merger") NOT (chicken OR vertical)`}
+                  </pre>
+                </article>
+
+                <article className='surface-panel rounded-2xl border border-app p-5'>
+                  <h4 className='text-base font-semibold text-stone-900'>
+                    Exact phrase
+                  </h4>
+                  <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                    Quote a phrase to match it exactly.
+                  </p>
+                  <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`"horizontal merger"`}
+                  </pre>
+                </article>
+
+                <article className='surface-panel rounded-2xl border border-app p-5'>
+                  <h4 className='text-base font-semibold text-stone-900'>
+                    Wildcards
+                  </h4>
+                  <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                    <Kbd>*</Kbd> matches any characters, <Kbd>?</Kbd>{' '}
+                    matches one. Need ≥3 chars before the wildcard;
+                    leading wildcards aren&apos;t supported.
+                  </p>
+                  <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`machin*     wom?n`}
+                  </pre>
+                </article>
+
+                <article className='surface-panel rounded-2xl border border-app p-5'>
+                  <h4 className='text-base font-semibold text-stone-900'>
+                    Proximity
+                  </h4>
+                  <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                    Append <Kbd>~N</Kbd> to a quoted phrase to find
+                    the words within N positions of each other.
+                  </p>
+                  <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`"climate change"~5`}
+                  </pre>
+                </article>
+
+                <article className='surface-panel rounded-2xl border border-app p-5 lg:col-span-2'>
+                  <h4 className='text-base font-semibold text-stone-900'>
+                    Fuzzy
+                  </h4>
+                  <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                    Append <Kbd>~N</Kbd> (N = 0, 1, 2) to a single
+                    term to tolerate typos. Needs ≥3 chars before the{' '}
+                    <Kbd>~</Kbd>.
+                  </p>
+                  <pre className='mt-3 overflow-x-auto rounded surface-muted px-2 py-1.5 text-[12px] font-mono text-stone-700'>
+{`machin~1`}
+                  </pre>
+                </article>
+              </div>
+            </div>
+
+            {/* Journal abbreviation catalog — a long flat list, so
+                it's hidden inside a native <details> by default.
+                Sourced from data/journalAbbreviations.ts; matches the
+                catalog the search bar's # autocomplete uses. */}
+            <article className='surface-panel rounded-2xl border border-app p-5'>
+              <h3 className='text-base font-semibold text-stone-900'>
+                Available journal abbreviations
+              </h3>
+              <p className='mt-2 text-sm leading-relaxed text-stone-700'>
+                The same catalog the{' '}
+                <code className='rounded surface-muted px-1 text-xs font-mono text-stone-700'>
+                  #abbrev
+                </code>{' '}
+                autocomplete uses ({JOURNAL_SHORTCUTS_LIST.length}{' '}
+                journals). Expand to scan; copy an abbreviation
+                directly into the search bar.
+              </p>
+              <details className='mt-3 text-sm'>
+                <summary className='cursor-pointer select-none text-stone-600 hover:text-stone-900'>
+                  Show all {JOURNAL_SHORTCUTS_LIST.length} abbreviations
+                </summary>
+                <div className='mt-3 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3'>
+                  {JOURNAL_SHORTCUTS_LIST.map((j) => (
+                    <div
+                      key={j.abbrev}
+                      className='flex items-baseline gap-2 text-[12px]'
+                    >
+                      <code className='select-all rounded surface-muted px-1 font-mono text-accent-strong'>
+                        #{j.abbrev}
+                      </code>
+                      <span className='truncate text-stone-600'>
+                        {j.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </article>
+
+            {/* Closing note + link to OpenAlex docs. */}
+            <p className='text-xs leading-relaxed text-stone-500'>
+              Results sort by{' '}
+              <code className='rounded surface-muted px-1 font-mono text-stone-700'>
+                relevance_score
+              </code>{' '}
+              by default — a blend of text similarity and citation
+              count. The full OpenAlex grammar is documented at{' '}
+              <a
+                href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='underline underline-offset-2 hover:text-stone-900'
+              >
+                docs.openalex.org
+              </a>
+              .
+            </p>
           </DocSection>
 
           <DocSection

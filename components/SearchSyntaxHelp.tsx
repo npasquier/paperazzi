@@ -94,7 +94,7 @@ export default function SearchSyntaxHelp({
         aria-label='Search syntax help'
         aria-expanded={open}
       >
-        <Info size={16} />
+        <Info size={16} className='opacity-0 group-hover:opacity-100' />
       </button>
 
       {open && coords && (
@@ -267,11 +267,10 @@ export default function SearchSyntaxHelp({
               </section>
 
               {/* Institution — third shortcut, paired with the
-                  `~partial` autocomplete that lives in NavBar. The
-                  ~ key is famously awkward on a few keyboard
-                  layouts, so a typing tip lives right under the
-                  example: it's the single most likely friction
-                  point for users on AZERTY laptops. */}
+                  `~partial` autocomplete that lives in NavBar. A
+                  typing tip for the `~` key lives right under the
+                  example, since the keystroke isn't obvious on
+                  every layout. */}
               <section>
                 <div className='text-app text-xs font-semibold mb-1'>
                   Institution —{' '}

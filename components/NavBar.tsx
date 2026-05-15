@@ -5,7 +5,6 @@ import { Search, X, Database, CircleQuestionMark } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import OpenAlexUsageModal from './OpenAlexUsageModal';
-import SearchSyntaxHelp from './SearchSyntaxHelp';
 import {
   extractMentions,
   resolveMentions,
@@ -176,10 +175,55 @@ function NavBarContent() {
   // panel) should give the user one place to look.
   const queryDirty = isSearchPage && query !== (searchParams.get('q') || '');
 
+  // True iff the navbar's chip lists differ from the URL's currently-
+  // committed `authors=` / `journals=` / `institutions=` params. We
+  // can't reuse `filtersDirty` for chip-only edits: PaperazziApp's
+  // `paperazzi-filters-dirty` event only fires on transitions of
+  // `filters !== searchFilters`, but chip-only edits never enter
+  // PaperazziApp's `filters` (the chip state lives in the navbar
+  // until commit, then both `filters` and `searchFilters` are set
+  // in sync via syncFromURL — so the transition never happens and
+  // the event never fires to reset the flag). Deriving from the URL
+  // mirrors the `queryDirty` pattern and self-resets after each
+  // commit. Without this, adding/removing a chip would leave the
+  // submit-glass stuck on green after a search by chip alone.
+  const chipsDirty =
+    isSearchPage &&
+    (() => {
+      const eq = (a: string[], b: string[]) => {
+        if (a.length !== b.length) return false;
+        const s = new Set(a);
+        return b.every((x) => s.has(x));
+      };
+      const urlAuthors = (searchParams.get('authors') || '')
+        .split(',')
+        .filter(Boolean);
+      const urlJournals = (searchParams.get('journals') || '')
+        .split(',')
+        .filter(Boolean);
+      const urlInstitutions = (searchParams.get('institutions') || '')
+        .split(',')
+        .filter(Boolean);
+      return (
+        !eq(
+          chips.map((c) => c.id),
+          urlAuthors,
+        ) ||
+        !eq(
+          journalChips.map((c) => c.issn),
+          urlJournals,
+        ) ||
+        !eq(
+          institutionChips.map((c) => c.id),
+          urlInstitutions,
+        )
+      );
+    })();
+
   // Single boolean for "user has something pending to apply". The glass
   // button and the hint banner both consume this so they stay in sync
   // no matter which kind of change triggered the dirty state.
-  const isDirty = filtersDirty || queryDirty;
+  const isDirty = filtersDirty || queryDirty || chipsDirty;
 
   useEffect(() => {
     const offAuthors = on('paperazzi-authors-changed', ({ authors }) => {
@@ -556,28 +600,28 @@ function NavBarContent() {
     setMentionLoadingMore(false);
     setMentionKind(null);
     // Adding a chip from the autocomplete is a *pending* filter edit,
-    // exactly like removing one — it shouldn't fire a search by itself.
-    // The act of selecting also strips the `@partial` / `#partial` /
-    // `~partial` token out of the query, which would otherwise flip
-    // `queryDirty` back to false and (with no other dirty signal) make
-    // the submit-glass revert to its inactive look. Mark filters dirty
-    // here so the green "press Enter to apply" state persists from the
-    // moment the chip lands until the user actually commits.
-    if (isSearchPage) setFiltersDirty(true);
+    // exactly like removing one — it shouldn't fire a search by
+    // itself. The dirty state is computed from the URL via
+    // `chipsDirty` above, so no manual marker is needed here: the new
+    // chip list differs from the URL until commit, which keeps the
+    // submit-glass green automatically. (Previously this called
+    // setFiltersDirty(true) manually, but that flag only resets via
+    // PaperazziApp's dirty-transition event, which never fires for
+    // chip-only edits — so the glass got stuck on green after a
+    // search-by-chip-alone.)
     // Keep focus in the input so the user can keep typing (keywords or
     // another @ / # token) without clicking back into the bar.
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  // Remove an author chip — update local chip state only and mark the
-  // filters as dirty. We deliberately do NOT push the URL here: chip
-  // edits behave like query-text edits, accumulating until the user
-  // commits with Enter or the search button. The next handleSearch()
-  // will read the trimmed chip list and produce a single URL push.
+  // Remove an author chip — update local chip state only. The dirty
+  // signal is derived from the URL via `chipsDirty` above, so no
+  // manual flag is set here. Chip edits behave like query-text edits,
+  // accumulating until the user commits with Enter or the search
+  // button; the next handleSearch() reads the trimmed chip list and
+  // produces a single URL push.
   const removeAuthorChip = (id: string) => {
     setChips((prev) => prev.filter((c) => c.id !== id));
-    if (!isSearchPage) return;
-    setFiltersDirty(true);
   };
 
   // Wipe the search bar to a neutral state: clear text, clear all chips,
@@ -600,21 +644,18 @@ function NavBarContent() {
     router.push('/search');
   };
 
-  // Same deferred-commit behavior for journal chips — local state only,
-  // mark dirty, wait for explicit submit. See removeAuthorChip for the
-  // rationale.
+  // Same deferred-commit behavior for journal chips — local state
+  // only, dirty signal derived from URL via `chipsDirty`. See
+  // removeAuthorChip for the rationale.
   const removeJournalChip = (issn: string) => {
     setJournalChips((prev) => prev.filter((j) => j.issn !== issn));
-    if (!isSearchPage) return;
-    setFiltersDirty(true);
   };
 
-  // Institution chip removal — same deferred-commit pattern as authors
-  // / journals. Local state only, mark dirty, no URL push.
+  // Institution chip removal — same deferred-commit pattern as
+  // authors / journals. Local state only, no URL push; dirty signal
+  // derived from URL via `chipsDirty`.
   const removeInstitutionChip = (id: string) => {
     setInstitutionChips((prev) => prev.filter((i) => i.id !== id));
-    if (!isSearchPage) return;
-    setFiltersDirty(true);
   };
 
   const handleSearch = async () => {
@@ -815,7 +856,7 @@ function NavBarContent() {
         {isSearchPage ? (
           // Search page: Show search bar
           <>
-            <div className='flex-1 max-w-2xl ml-auto mr-auto'>
+            <div className='flex-1 max-w-2xl ml-auto mr-auto group'>
               <div className='relative'>
                 {/* Chip facade. Functions exactly like the previous
                     bordered <input> — chips + the real text input share
@@ -966,23 +1007,18 @@ function NavBarContent() {
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
-                  {/* Search-syntax (i) popover — re-mounted at point
-                      of need so users discovering @/#/~ in the
-                      placeholder can immediately learn how to use them
-                      (and, crucially, how to *type* ~ on AZERTY
-                      layouts) without leaving the page. The popover
-                      content (SearchSyntaxHelp) is the single source
-                      of truth for search-syntax docs; the /help page
-                      cross-references back here. The buttonClassName
-                      override turns the default absolutely-positioned
-                      trigger into an inline icon that sits just
-                      before the submit button — tight padding so it
-                      doesn't compete visually with the green CTA. */}
-                  <SearchSyntaxHelp
-                    semantic={semantic}
-                    conflicts={semanticConflicts}
-                    buttonClassName='flex-shrink-0 p-1 text-app-soft hover:text-app transition rounded'
-                  />
+                  {/* (Search-syntax popover removed from the bar to
+                      keep the search row uncluttered — placing it
+                      next to the green submit button made the two
+                      affordances compete in a tight space. The
+                      placeholder still hints at @/#/~ shortcuts, and
+                      the navbar's Help link goes to /help where the
+                      full syntax reference (incl. ~ typing tips and
+                      OpenAlex keyword operators) is documented. The
+                      SearchSyntaxHelp component is still exported,
+                      so it can be re-mounted later — e.g. as a
+                      contextual footer link inside the autocomplete
+                      dropdown, or behind a `?` keyboard shortcut. */}
                   {/* Submit affordance — integrated into the bar's right
                       pill end. Geometry matches the chip-facade
                       container so the button reads as part of the bar
@@ -1029,11 +1065,12 @@ function NavBarContent() {
                   </button>
                 </div>
 
-                {/* (Search-syntax (i) popover is mounted just before
-                    the submit button — see <SearchSyntaxHelp /> above.
-                    The /help page's Filters section cross-references
-                    the same docs for users browsing help instead of
-                    asking from the bar.) */}
+                {/* (No inline syntax-help affordance lives in the bar
+                    on purpose — the row is intentionally spare. The
+                    /help page's Filters section is the canonical
+                    reference for @/#/~ shortcuts, ~ typing tips, and
+                    OpenAlex keyword operators. SearchSyntaxHelp.tsx
+                    is kept around for a future contextual surface.) */}
 
                 {/* @-mention autocomplete dropdown. Anchored to the input,
                     z-50 so it sits above the search results below but under

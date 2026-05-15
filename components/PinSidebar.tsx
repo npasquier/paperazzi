@@ -1108,67 +1108,44 @@ export default function PinSidebar({
 
         {/* Header */}
         <div className='px-4 pt-4 pb-3 border-b border-app flex-shrink-0 space-y-3'>
-          {/* "Pinned papers" sits at the top of the sidebar so the
-              section title is the first thing the user sees — feels
-              more natural than leading with the collection switcher.
-              The collection name lives in the pill just below, so the
-              user reads "Pinned papers / in <Collection>" top-down. */}
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <div className='flex items-center gap-2'>
-                <Pin size={13} className='text-stone-400' />
-                <span className='text-sm font-medium text-stone-700'>
-                  Pinned papers
-                </span>
-                {pinnedPapers.length > 0 && (
-                  <span className='text-xs text-stone-400'>
-                    ({pinnedPapers.length}/{MAX_PINS})
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={onToggle}
-              className='p-1 text-stone-400 hover:text-stone-600 rounded transition'
-              title='Close'
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-
-          {/* Collection switcher — shows the active library name as a
-              clickable pill that opens a small menu. The menu lets the
-              user pick another collection, create a new one, rename the
-              active one, or delete it. Modal-free so it stays out of
-              the way during normal pinning workflow. */}
-          <div className='relative'>
+          {/* Single-row header — the collection name doubles as the
+              section title. Folding the collection switcher into the
+              title row removes a row from the stack of controls
+              between the sidebar toggle and the paper cards (a
+              recurring user pain point: too much chrome before the
+              actual content). The Pin icon plus the visible
+              collection name are enough to identify the contents;
+              the dedicated "Pinned papers" label was redundant
+              inside the pin sidebar. The wrapper is both `relative`
+              — so the collection-switcher dropdown menu below can
+              continue to position absolutely against this row — and
+              flex, so Pin, name, count, close lay out on one line. */}
+          <div className='relative flex items-center gap-2'>
+            <Pin size={13} className='text-stone-400 flex-shrink-0' />
             <button
               ref={collectionMenuButtonRef}
               onClick={() => setCollectionMenuOpen((v) => !v)}
-              // Drag-to-open: while a paper-drag is in flight, dragging
-              // over the header reveals the menu so the user can drop
-              // onto a destination collection. preventDefault marks
-              // this as a valid drag region (otherwise the dragover
-              // event doesn't reach us cleanly). We don't accept
-              // drops on the header itself — only on collection rows
-              // inside the menu — so no onDrop here; this row is just
-              // a "reveal" gesture.
+              // Drag-to-open: while a paper-drag is in flight,
+              // dragging over the header reveals the menu so the
+              // user can drop onto a destination collection.
+              // preventDefault marks this as a valid drag region;
+              // drops are accepted on individual collection rows
+              // inside the menu, not on this row itself.
               onDragOver={(e) => {
                 if (!draggingPaperId) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
                 if (!collectionMenuOpen) setCollectionMenuOpen(true);
               }}
-              // Section-divider style — horizontal rules flank the
-              // active collection name with a tiny chevron at the far
-              // right as the disclosure cue. This intentionally reads
-              // as a quiet section header rather than a primary menu
-              // button: multi-collection users still get the
-              // affordance, but single-collection users don't feel
-              // like the app is pushing them toward a feature they
-              // don't need. Drag-over swaps the rules to accent + adds
-              // a ring so the drop zone stays unambiguous mid-drag.
-              className={`w-full flex items-center gap-2 py-1.5 px-1 rounded transition group ${
+              // Header-title style — the collection name reads as
+              // the section title with a subtle disclosure chevron.
+              // `flex-1 min-w-0` lets the button absorb the slack
+              // between the Pin icon (left) and the count/close
+              // cluster (right) while still truncating long names.
+              // Hover restores the affordance (text darkens, row
+              // picks up surface-muted bg); drag-over swaps in the
+              // accent ring so the drop zone stays unambiguous.
+              className={`flex-1 min-w-0 inline-flex items-center justify-between gap-1.5 px-1.5 py-1 rounded transition group ${
                 draggingPaperId
                   ? 'ring-1 ring-[var(--accent)]'
                   : 'hover:bg-[var(--surface-muted)]'
@@ -1181,37 +1158,27 @@ export default function PinSidebar({
               aria-haspopup='menu'
               aria-expanded={collectionMenuOpen}
             >
-              <span
-                aria-hidden='true'
-                className={`flex-1 h-px transition ${
-                  draggingPaperId
-                    ? 'bg-[var(--accent)]'
-                    : 'bg-[var(--border-muted)] group-hover:bg-[var(--border-strong)]'
-                }`}
-              />
-              <span className='inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 group-hover:text-stone-900 transition min-w-0 max-w-[60%]'>
-                <Library
-                  size={12}
-                  className='text-stone-400 group-hover:text-stone-500 flex-shrink-0 transition'
-                />
-                <span className='truncate'>
-                  {activeCollection?.name ?? 'Library'}
-                </span>
+              <span className='text-sm font-medium text-stone-700 group-hover:text-stone-900 transition truncate min-w-0'>
+                {activeCollection?.name ?? 'Library'}
               </span>
-              <span
-                aria-hidden='true'
-                className={`flex-1 h-px transition ${
-                  draggingPaperId
-                    ? 'bg-[var(--accent)]'
-                    : 'bg-[var(--border-muted)] group-hover:bg-[var(--border-strong)]'
-                }`}
-              />
               <ChevronDown
-                size={11}
+                size={12}
                 className={`text-stone-400 group-hover:text-stone-600 flex-shrink-0 transition-transform ${
                   collectionMenuOpen ? 'rotate-180' : ''
                 }`}
               />
+            </button>
+            {pinnedPapers.length > 0 && (
+              <span className='text-xs text-stone-400 flex-shrink-0'>
+                {pinnedPapers.length}/{MAX_PINS}
+              </span>
+            )}
+            <button
+              onClick={onToggle}
+              className='p-1 text-stone-400 hover:text-stone-600 rounded transition flex-shrink-0'
+              title='Close'
+            >
+              <ChevronRight size={14} />
             </button>
 
             {collectionMenuOpen && (
