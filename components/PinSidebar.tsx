@@ -1146,12 +1146,12 @@ export default function PinSidebar({
               ref={collectionMenuButtonRef}
               onClick={() => setCollectionMenuOpen((v) => !v)}
               // Drag-to-open: while a paper-drag is in flight, dragging
-              // it over the pill opens the menu so the user can drop
-              // onto a destination row. preventDefault tells the
-              // browser this is a valid drag region (without it the
-              // dragover never reaches us cleanly). We don't accept
-              // drops on the pill itself — only on collection rows
-              // inside the menu — so no onDrop here; the pill is just
+              // over the header reveals the menu so the user can drop
+              // onto a destination collection. preventDefault marks
+              // this as a valid drag region (otherwise the dragover
+              // event doesn't reach us cleanly). We don't accept
+              // drops on the header itself — only on collection rows
+              // inside the menu — so no onDrop here; this row is just
               // a "reveal" gesture.
               onDragOver={(e) => {
                 if (!draggingPaperId) return;
@@ -1159,10 +1159,19 @@ export default function PinSidebar({
                 e.dataTransfer.dropEffect = 'move';
                 if (!collectionMenuOpen) setCollectionMenuOpen(true);
               }}
-              className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border surface-card transition text-left ${
+              // Section-divider style — horizontal rules flank the
+              // active collection name with a tiny chevron at the far
+              // right as the disclosure cue. This intentionally reads
+              // as a quiet section header rather than a primary menu
+              // button: multi-collection users still get the
+              // affordance, but single-collection users don't feel
+              // like the app is pushing them toward a feature they
+              // don't need. Drag-over swaps the rules to accent + adds
+              // a ring so the drop zone stays unambiguous mid-drag.
+              className={`w-full flex items-center gap-2 py-1.5 px-1 rounded transition group ${
                 draggingPaperId
-                  ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]'
-                  : 'border-app hover:border-[var(--border-strong)]'
+                  ? 'ring-1 ring-[var(--accent)]'
+                  : 'hover:bg-[var(--surface-muted)]'
               }`}
               title={
                 draggingPaperId
@@ -1172,15 +1181,34 @@ export default function PinSidebar({
               aria-haspopup='menu'
               aria-expanded={collectionMenuOpen}
             >
-              <span className='flex items-center gap-2 min-w-0'>
-                <Library size={13} className='text-stone-500 flex-shrink-0' />
-                <span className='text-xs font-medium text-stone-700 truncate'>
+              <span
+                aria-hidden='true'
+                className={`flex-1 h-px transition ${
+                  draggingPaperId
+                    ? 'bg-[var(--accent)]'
+                    : 'bg-[var(--border-muted)] group-hover:bg-[var(--border-strong)]'
+                }`}
+              />
+              <span className='inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 group-hover:text-stone-900 transition min-w-0 max-w-[60%]'>
+                <Library
+                  size={12}
+                  className='text-stone-400 group-hover:text-stone-500 flex-shrink-0 transition'
+                />
+                <span className='truncate'>
                   {activeCollection?.name ?? 'Library'}
                 </span>
               </span>
+              <span
+                aria-hidden='true'
+                className={`flex-1 h-px transition ${
+                  draggingPaperId
+                    ? 'bg-[var(--accent)]'
+                    : 'bg-[var(--border-muted)] group-hover:bg-[var(--border-strong)]'
+                }`}
+              />
               <ChevronDown
-                size={12}
-                className={`text-stone-400 flex-shrink-0 transition-transform ${
+                size={11}
+                className={`text-stone-400 group-hover:text-stone-600 flex-shrink-0 transition-transform ${
                   collectionMenuOpen ? 'rotate-180' : ''
                 }`}
               />

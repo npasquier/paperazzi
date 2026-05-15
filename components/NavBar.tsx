@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Search, X, Database } from 'lucide-react';
+import { Search, X, Database, CircleQuestionMark } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import OpenAlexUsageModal from './OpenAlexUsageModal';
@@ -554,26 +554,29 @@ function NavBarContent() {
     setMentionHasMore(false);
     setMentionLoadingMore(false);
     setMentionKind(null);
+    // Adding a chip from the autocomplete is a *pending* filter edit,
+    // exactly like removing one — it shouldn't fire a search by itself.
+    // The act of selecting also strips the `@partial` / `#partial` /
+    // `~partial` token out of the query, which would otherwise flip
+    // `queryDirty` back to false and (with no other dirty signal) make
+    // the submit-glass revert to its inactive look. Mark filters dirty
+    // here so the green "press Enter to apply" state persists from the
+    // moment the chip lands until the user actually commits.
+    if (isSearchPage) setFiltersDirty(true);
     // Keep focus in the input so the user can keep typing (keywords or
     // another @ / # token) without clicking back into the bar.
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  // Remove an author chip — immediately update the URL so results refresh
-  // without that author. Clicking X already expresses the intent "stop
-  // filtering by this".
+  // Remove an author chip — update local chip state only and mark the
+  // filters as dirty. We deliberately do NOT push the URL here: chip
+  // edits behave like query-text edits, accumulating until the user
+  // commits with Enter or the search button. The next handleSearch()
+  // will read the trimmed chip list and produce a single URL push.
   const removeAuthorChip = (id: string) => {
     setChips((prev) => prev.filter((c) => c.id !== id));
     if (!isSearchPage) return;
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    const remaining = (params.get('authors') || '')
-      .split(',')
-      .filter(Boolean)
-      .filter((a) => a !== id);
-    if (remaining.length > 0) params.set('authors', remaining.join(','));
-    else params.delete('authors');
-    params.set('page', '1');
-    router.push(`/search?${params.toString()}`);
+    setFiltersDirty(true);
   };
 
   // Wipe the search bar to a neutral state: clear text, clear all chips,
@@ -596,37 +599,21 @@ function NavBarContent() {
     router.push('/search');
   };
 
-  // Same for journal chips, but routes to the `journals=` URL param.
+  // Same deferred-commit behavior for journal chips — local state only,
+  // mark dirty, wait for explicit submit. See removeAuthorChip for the
+  // rationale.
   const removeJournalChip = (issn: string) => {
     setJournalChips((prev) => prev.filter((j) => j.issn !== issn));
     if (!isSearchPage) return;
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    const remaining = (params.get('journals') || '')
-      .split(',')
-      .filter(Boolean)
-      .filter((j) => j !== issn);
-    if (remaining.length > 0) params.set('journals', remaining.join(','));
-    else params.delete('journals');
-    params.set('page', '1');
-    router.push(`/search?${params.toString()}`);
+    setFiltersDirty(true);
   };
 
-  // Institution chip removal — same pattern as authors / journals.
-  // The URL param is `institutions=` and the id matches the form
-  // PaperazziApp's syncFromURL parses (no `https://openalex.org/`
-  // prefix).
+  // Institution chip removal — same deferred-commit pattern as authors
+  // / journals. Local state only, mark dirty, no URL push.
   const removeInstitutionChip = (id: string) => {
     setInstitutionChips((prev) => prev.filter((i) => i.id !== id));
     if (!isSearchPage) return;
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    const remaining = (params.get('institutions') || '')
-      .split(',')
-      .filter(Boolean)
-      .filter((i) => i !== id);
-    if (remaining.length > 0) params.set('institutions', remaining.join(','));
-    else params.delete('institutions');
-    params.set('page', '1');
-    router.push(`/search?${params.toString()}`);
+    setFiltersDirty(true);
   };
 
   const handleSearch = async () => {
@@ -842,7 +829,15 @@ function NavBarContent() {
                   // (`background-card`) so the bar reads as an inset
                   // card rather than a hard input field; subtle border
                   // + soft shadow + smooth focus ring transition.
-                  className='w-full flex flex-wrap items-center gap-1.5 px-4 py-1.5 min-h-[44px] rounded-full cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
+                  // `overflow-hidden` lets the submit button sit flush
+                  // against the bar's rounded-full right edge with no
+                  // 1px halo when its fill turns green. Safe with
+                  // `focus-within-accent` — that class uses box-shadow,
+                  // which paints outside the border-box and isn't
+                  // clipped by overflow:hidden. The mention dropdown
+                  // is a sibling of this div (in the .relative
+                  // wrapper), so it isn't clipped either.
+                  className='w-full flex flex-wrap items-center gap-1.5 px-4 py-1.5 min-h-[44px] rounded-full cursor-text overflow-hidden shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
                 >
                   {/* Author chips — green (success palette). */}
                   {chips.map((chip) => (
@@ -970,26 +965,38 @@ function NavBarContent() {
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
-                    {/* Standalone submit-glass — sits right of the bar (not
-                  inside it). Same dual-state visual as before: muted
-                  idle, success/green when anything is uncommitted. The
-                  pill button replaces the Google-Scholar-style in-bar
-                  glass; the (i) syntax icon goes back to its old spot
-                  inside the bar. */}
+                  {/* Submit affordance — integrated into the bar's right
+                      pill end. Geometry matches the chip-facade
+                      container so the button reads as part of the bar
+                      rather than an inset element:
+                      • `h-11 w-11`     → 44×44, matching `min-h-[44px]`
+                      • `-my-1.5 -mr-4` → exactly cancels the parent's
+                                          `py-1.5` and right `px-4`, so
+                                          the button bleeds flush with
+                                          the container's inner edges.
+                      • `rounded-r-full`→ right curve matches the bar's
+                                          `rounded-full` exactly (both
+                                          radii = height/2 = 22px), so
+                                          the green fill follows the
+                                          bar's right edge with no
+                                          halo (container is
+                                          `overflow-hidden`).
+                      Idle is a borderless icon — the bar's own border
+                      reads as the button's frame. Dirty fills the
+                      right pill end with `success-bg` for a clear CTA. */}
                   <button
                     type='button'
                     onClick={() => handleSearch()}
-                    className={`relative -my-2 -mr-4 flex-shrink-0 h-10 w-10 rounded-r-full inline-flex items-center justify-center transition ${
+                    className={`-my-1.5 -mr-4 flex-shrink-0 h-11 w-11 rounded-r-full inline-flex items-center justify-center transition ${
                       isDirty
                         ? ''
-                        : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)] border border-[var(--border-muted)]'
+                        : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)]'
                     }`}
                     style={
                       isDirty
                         ? {
                             background: 'var(--success-bg)',
                             color: 'var(--success-foreground)',
-                            border: '1px solid var(--success-border)',
                           }
                         : undefined
                     }
@@ -1160,7 +1167,7 @@ function NavBarContent() {
           title='View help documentation'
           aria-label='Help'
         >
-          Help
+          <CircleQuestionMark size={18} />
         </Link>
         <Link
           href='/about'

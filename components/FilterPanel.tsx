@@ -516,7 +516,7 @@ export default function FilterPanel({
       {/* Scrollable content */}
       <div className='app-scrollbar flex-1 overflow-y-auto'>
         {/* Sort By */}
-        <div className='px-4 py-3 border-b border-app-muted'>
+        <div className='px-4 py-4 border-b border-app-muted'>
           <label className='text-xs text-app-soft block mb-1.5'>Sort by</label>
           <select
             value={filters.sortBy}
@@ -532,99 +532,20 @@ export default function FilterPanel({
 
         {/* Collapsible filter sections */}
         <div className='px-4'>
-          {/* Saved Presets - Collapsible and Discrete */}
-          <div className='-mx-4 px-4 border-b border-app-muted'>
-            <button
-              onClick={() => toggleSection('presets')}
-              className='w-full flex items-center justify-between py-2.5 transition'
-            >
-              <div className='flex items-center gap-2'>
-                {expandedSections.has('presets') ? (
-                  <ChevronDown size={12} className='text-stone-300' />
-                ) : (
-                  <ChevronRight size={12} className='text-stone-300' />
-                )}
-                <span className='text-xs text-stone-400 hover:text-stone-500'>Saved Searches</span>
-              </div>
-              {presets.length > 0 && (
-                <span className='text-xs text-stone-400'>{presets.length}</span>
-              )}
-            </button>
-            {expandedSections.has('presets') && (
-              <div className='pb-2.5 pl-5'>
-                {presets.length > 0 && (
-                  <div className='space-y-0.5 mb-2'>
-                    {presets.map((preset) => (
-                      <div
-                        key={preset.id}
-                        className='flex items-center justify-between gap-2 group'
-                      >
-                        <button
-                          onClick={() => loadPreset(preset)}
-                          className={`flex-1 text-left px-2 py-1 rounded text-xs transition ${
-                            activePresetId === preset.id
-                              ? 'surface-muted text-stone-700'
-                              : 'text-stone-500 hover:bg-[var(--surface-muted)] hover:text-stone-700'
-                          }`}
-                          title={
-                            preset.query ? `Query: ${preset.query}` : 'No query'
-                          }
-                        >
-                          {preset.name}
-                          {preset.query && (
-                            <span className='text-app-soft ml-1 text-[11px]'>
-                              · {preset.query.slice(0, 15)}
-                              {preset.query.length > 15 ? '...' : ''}
-                            </span>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => deletePreset(preset.id)}
-                          className='opacity-0 group-hover:opacity-100 p-0.5 text-stone-300 hover:text-stone-500 transition'
-                          title='Delete'
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {presets.length < MAX_PRESETS && activeFilterCount > 0 && (
-                  <button
-                    onClick={() => setShowSaveModal(true)}
-                    className='inline-flex items-center gap-1 text-[11px] text-app-soft hover:text-app-muted transition'
-                  >
-                    <Save size={11} />
-                    Save Current
-                  </button>
-                )}
-                {presets.length >= MAX_PRESETS && (
-                  <div className='text-[11px] text-app-soft'>
-                    Max {MAX_PRESETS} presets
-                  </div>
-                )}
-                {presets.length === 0 && (
-                  <div className='text-[11px] text-app-soft mb-2'>
-                    No saved filters yet
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* (Saved searches moved to a footer-style block at the
+              bottom of the panel — see the section below Type & Year.
+              Kept out of the primary scan path because it's a power-
+              user / returning-user affordance, not a per-search edit.) */}
           {/* Journals — section header row is a flex container
               instead of one big button, because we want a secondary
               entry point (Personalize ranking → /rankings) next to
               the section title without nesting buttons. The toggle
               button still spans the chevron + label region so the
               click target stays generous. */}
-          <div className='border-b border-app-muted '>
-            <div className='w-full flex items-right justify-between py-3'>
-              
-              <span className='text-xs text-app-soft block mb-1.5'>
-                Journals
-              </span>
-
-              <div className='flex items-center gap-2 pr-1'>
+          <div className='border-b border-app-muted'>
+            <div className='w-full flex items-center justify-between py-4'>
+              <span className='text-xs text-app-soft'>Journals</span>
+              <div className='flex items-center gap-2'>
                 {(() => {
                   const mode = filters.journalFilterMode || 'wide';
                   if (mode === 'wide' && filters.econFilter?.enabled) {
@@ -1068,7 +989,7 @@ export default function FilterPanel({
               `renderSection` calls and the panel works again. */}
         </div>
         {/* Type & Year */}
-        <div className='px-4 py-3 border-t border-app-muted space-y-3'>
+        <div className='px-4 py-4 border-t border-app-muted space-y-4'>
           <div>
             <label className='text-xs text-app-soft block mb-1.5'>Type</label>
             <select
@@ -1109,6 +1030,94 @@ export default function FilterPanel({
               />
             </div>
           </div>
+        </div>
+        {/* Saved searches — footer-style section at the very bottom of
+            the panel. Rendered as a quiet collapsible row so the
+            primary scan path stays focused on per-search controls
+            (Sort, Journals, Type & Year). The disclosure chevron sits
+            on the right, reading as a settings/utility affordance
+            rather than a primary section header. */}
+        <div className='px-4 py-2.5 border-t border-app-muted'>
+          <button
+            onClick={() => toggleSection('presets')}
+            className='w-full flex items-center justify-between gap-2 group'
+            aria-expanded={expandedSections.has('presets')}
+            title='Saved searches'
+          >
+            <span className='text-[11px] uppercase tracking-wider text-app-soft group-hover:text-app-muted transition'>
+              Saved searches
+              {presets.length > 0 && (
+                <span className='ml-1.5 normal-case tracking-normal text-app-soft'>
+                  ({presets.length})
+                </span>
+              )}
+            </span>
+            {expandedSections.has('presets') ? (
+              <ChevronDown size={12} className='text-app-soft' />
+            ) : (
+              <ChevronRight size={12} className='text-app-soft' />
+            )}
+          </button>
+          {expandedSections.has('presets') && (
+            <div className='pt-2'>
+              {presets.length > 0 && (
+                <div className='space-y-0.5 mb-2'>
+                  {presets.map((preset) => (
+                    <div
+                      key={preset.id}
+                      className='flex items-center justify-between gap-2 group'
+                    >
+                      <button
+                        onClick={() => loadPreset(preset)}
+                        className={`flex-1 text-left px-2 py-1 rounded text-xs transition ${
+                          activePresetId === preset.id
+                            ? 'surface-muted text-stone-700'
+                            : 'text-stone-500 hover:bg-[var(--surface-muted)] hover:text-stone-700'
+                        }`}
+                        title={
+                          preset.query ? `Query: ${preset.query}` : 'No query'
+                        }
+                      >
+                        {preset.name}
+                        {preset.query && (
+                          <span className='text-app-soft ml-1 text-[11px]'>
+                            · {preset.query.slice(0, 15)}
+                            {preset.query.length > 15 ? '...' : ''}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deletePreset(preset.id)}
+                        className='opacity-0 group-hover:opacity-100 p-0.5 text-stone-300 hover:text-stone-500 transition'
+                        title='Delete'
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {presets.length < MAX_PRESETS && activeFilterCount > 0 && (
+                <button
+                  onClick={() => setShowSaveModal(true)}
+                  className='inline-flex items-center gap-1 text-[11px] text-app-soft hover:text-app-muted transition'
+                >
+                  <Save size={11} />
+                  Save current
+                </button>
+              )}
+              {presets.length >= MAX_PRESETS && (
+                <div className='text-[11px] text-app-soft'>
+                  Max {MAX_PRESETS} presets
+                </div>
+              )}
+              {presets.length === 0 && (
+                <div className='text-[11px] text-app-soft'>
+                  No saved searches yet
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </aside>
