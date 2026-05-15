@@ -27,6 +27,7 @@ import {
   CheckCircle,
   Maximize2,
   Minimize2,
+  Flag,
 } from 'lucide-react';
 
 function cleanHtml(text: string | null | undefined): string {
@@ -1062,9 +1063,9 @@ export default function SearchResults({
           </div>
           <button
             onClick={toggleAuthorInfo}
-            className='absolute bottom-2 right-2 p-1 text-[var(--accent-border)] hover:text-accent hover:bg-[var(--surface-card)] rounded transition opacity-0 group-hover:opacity-100'
+            className='absolute bottom-2 right-2 p-1 text-[var(--accent-border)] hover:text-accent hover:bg-[var(--surface-card)] rounded transition  group-hover:opacity-100'
           >
-            <Info
+            <Flag
               size={16}
               className={`transition-colors ${isAuthorInfoExpanded ? 'text-accent' : ''}`}
             />
