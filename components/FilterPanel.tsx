@@ -515,19 +515,34 @@ export default function FilterPanel({
       )}
       {/* Scrollable content */}
       <div className='app-scrollbar flex-1 overflow-y-auto'>
-        {/* Sort By */}
+        {/* Sort By — sobered to a borderless inline control that
+            matches the PinSidebar collection-switcher pattern. The
+            native <select> is preserved (browser-native menu, free
+            keyboard nav, mobile-friendly picker); only the chrome is
+            removed. `appearance-none` strips the system chevron, a
+            lucide ChevronDown is overlaid on the right via
+            `pointer-events-none` so it doesn't intercept the click.
+            Hover gives back the affordance: text darkens and the row
+            picks up a subtle `surface-muted` fill. */}
         <div className='px-4 py-4 border-b border-app-muted'>
           <label className='text-xs text-app-soft block mb-1.5'>Sort by</label>
-          <select
-            value={filters.sortBy}
-            onChange={handleSortChange}
-            className='w-full px-2 py-1.5 border border-app rounded focus-accent text-sm surface-card text-stone-700'
-          >
-            <option value='relevance_score'>Relevance</option>
-            <option value='publication_date:desc'>Most Recent</option>
-            <option value='cited_by_count:desc'>Most Cited</option>
-            <option value='publication_date:asc'>Oldest First</option>
-          </select>
+          <div className='relative group'>
+            <select
+              value={filters.sortBy}
+              onChange={handleSortChange}
+              className='w-full appearance-none bg-transparent border-0 pl-1 pr-6 py-1 text-sm text-stone-700 group-hover:text-stone-900 group-hover:bg-[var(--surface-muted)] cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition'
+            >
+              <option value='relevance_score'>Relevance</option>
+              <option value='publication_date:desc'>Most Recent</option>
+              <option value='cited_by_count:desc'>Most Cited</option>
+              <option value='publication_date:asc'>Oldest First</option>
+            </select>
+            <ChevronDown
+              size={12}
+              aria-hidden='true'
+              className='absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 group-hover:text-stone-600 pointer-events-none transition'
+            />
+          </div>
         </div>
 
         {/* Collapsible filter sections */}
@@ -992,17 +1007,27 @@ export default function FilterPanel({
         <div className='px-4 py-4 border-t border-app-muted space-y-4'>
           <div>
             <label className='text-xs text-app-soft block mb-1.5'>Type</label>
-            <select
-              value={filters.publicationType}
-              onChange={handlePublicationTypeChange}
-              className='w-full px-2 py-1.5 border border-app rounded focus-accent text-sm surface-card text-stone-700'
-            >
-              {PUBLICATION_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+            {/* Type — same sobered pattern as Sort By: borderless
+                inline select with a lucide chevron overlay. See the
+                Sort By comment above for rationale. */}
+            <div className='relative group'>
+              <select
+                value={filters.publicationType}
+                onChange={handlePublicationTypeChange}
+                className='w-full appearance-none bg-transparent border-0 pl-1 pr-6 py-1 text-sm text-stone-700 group-hover:text-stone-900 group-hover:bg-[var(--surface-muted)] cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition'
+              >
+                {PUBLICATION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={12}
+                aria-hidden='true'
+                className='absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 group-hover:text-stone-600 pointer-events-none transition'
+              />
+            </div>
           </div>
           <div>
             <label className='text-xs text-app-soft block mb-1.5'>Year</label>

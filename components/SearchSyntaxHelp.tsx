@@ -266,6 +266,66 @@ export default function SearchSyntaxHelp({
                 </details>
               </section>
 
+              {/* Institution — third shortcut, paired with the
+                  `~partial` autocomplete that lives in NavBar. The
+                  ~ key is famously awkward on a few keyboard
+                  layouts, so a typing tip lives right under the
+                  example: it's the single most likely friction
+                  point for users on AZERTY laptops. */}
+              <section>
+                <div className='text-app text-xs font-semibold mb-1'>
+                  Institution —{' '}
+                  <code className='surface-subtle rounded px-1 text-xs'>
+                    ~name
+                  </code>
+                </div>
+                <p>
+                  Same idea, but resolves an institution name against
+                  OpenAlex. The picked institution becomes an amber chip in
+                  the bar.
+                </p>
+                <pre className='surface-subtle rounded px-2 py-1 mt-1 text-xs overflow-x-auto'>
+{`~stanford econ    ~MIT inequality`}
+                </pre>
+                <div className='banner-info rounded p-2 mt-2 text-[11px] leading-relaxed'>
+                  <div className='font-medium text-app mb-0.5'>
+                    Typing the tilde (
+                    <code className='surface-subtle rounded px-1'>~</code>)
+                  </div>
+                  <ul className='list-disc pl-4 space-y-0.5 text-app-muted'>
+                    <li>
+                      <strong>US / UK QWERTY:</strong> top-left key,{' '}
+                      <code className='surface-subtle rounded px-1'>
+                        Shift + `
+                      </code>
+                      .
+                    </li>
+                    <li>
+                      <strong>Mac French AZERTY:</strong>{' '}
+                      <code className='surface-subtle rounded px-1'>
+                        Option + N
+                      </code>
+                      , then press <code className='surface-subtle rounded px-1'>Space</code>.
+                    </li>
+                    <li>
+                      <strong>Windows / Linux French AZERTY:</strong>{' '}
+                      <code className='surface-subtle rounded px-1'>
+                        AltGr + é
+                      </code>{' '}
+                      (the <code className='surface-subtle rounded px-1'>2</code>{' '}
+                      key), then press{' '}
+                      <code className='surface-subtle rounded px-1'>Space</code>.
+                    </li>
+                    <li>
+                      Or copy from here:{' '}
+                      <code className='surface-subtle rounded px-1 select-all'>
+                        ~
+                      </code>
+                    </li>
+                  </ul>
+                </div>
+              </section>
+
               <p className='text-[11px] text-app-soft'>
                 Multiple chips of the same kind are AND-ed (intersection).
                 The rest of the text is searched as keywords.

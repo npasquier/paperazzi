@@ -818,20 +818,123 @@ export default function HelpPage() {
                     <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
                       @name
                     </code>{' '}
-                    for authors and{' '}
+                    for authors,{' '}
                     <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
                       #abbrev
                     </code>{' '}
-                    for journals in the query bar. For example:{' '}
+                    for journals, and{' '}
                     <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
-                      @acemoglu #aer institutions
+                      ~name
+                    </code>{' '}
+                    for institutions in the query bar. For example:{' '}
+                    <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
+                      @acemoglu #aer ~stanford institutions
                     </code>
                     .
                   </p>
                   <p className='mt-2 text-xs leading-relaxed text-accent-strong/85'>
-                    Remaining text is searched as keywords. Multiple authors or
-                    journals are intersected, and in Semantic mode these prefixes
-                    are treated as plain text.
+                    Remaining text is searched as keywords. Multiple chips of
+                    the same kind are intersected (AND), and in Semantic mode
+                    these prefixes are treated as plain text.
+                  </p>
+
+                  {/* Typing-the-tilde tip — AZERTY layouts make `~`
+                      annoying enough to warrant a dedicated note. The
+                      full keyboard-by-keyboard breakdown lives in the
+                      (i) popover next to the search bar; this is the
+                      quick reference. */}
+                  <div className='mt-3 rounded-xl border border-white/40 bg-white/40 p-3 text-xs leading-relaxed text-accent-strong/90'>
+                    <p className='font-semibold text-accent-strong'>
+                      Typing{' '}
+                      <code className='rounded bg-white/55 px-1 py-0.5 font-mono'>
+                        ~
+                      </code>{' '}
+                      on common keyboards
+                    </p>
+                    <ul className='mt-1 list-disc space-y-0.5 pl-5'>
+                      <li>
+                        <strong>US / UK QWERTY:</strong>{' '}
+                        <code className='rounded bg-white/55 px-1 font-mono'>
+                          Shift + `
+                        </code>{' '}
+                        (top-left key).
+                      </li>
+                      <li>
+                        <strong>Mac French AZERTY:</strong>{' '}
+                        <code className='rounded bg-white/55 px-1 font-mono'>
+                          Option + N
+                        </code>
+                        , then{' '}
+                        <code className='rounded bg-white/55 px-1 font-mono'>
+                          Space
+                        </code>
+                        .
+                      </li>
+                      <li>
+                        <strong>Windows / Linux French AZERTY:</strong>{' '}
+                        <code className='rounded bg-white/55 px-1 font-mono'>
+                          AltGr + é
+                        </code>{' '}
+                        (the{' '}
+                        <code className='rounded bg-white/55 px-1 font-mono'>
+                          2
+                        </code>{' '}
+                        key), then{' '}
+                        <code className='rounded bg-white/55 px-1 font-mono'>
+                          Space
+                        </code>
+                        .
+                      </li>
+                      <li>
+                        Or copy from here:{' '}
+                        <code className='select-all rounded bg-white/55 px-1 font-mono'>
+                          ~
+                        </code>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <p className='mt-3 text-xs leading-relaxed text-accent-strong/85'>
+                    The query bar also supports OpenAlex&apos;s full keyword
+                    syntax: Boolean (
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      AND
+                    </code>
+                    ,{' '}
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      OR
+                    </code>
+                    ,{' '}
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      NOT
+                    </code>
+                    ), exact phrases (
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      &quot;horizontal merger&quot;
+                    </code>
+                    ), wildcards (
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      machin*
+                    </code>
+                    ), and proximity / fuzzy (
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      &quot;climate change&quot;~5
+                    </code>
+                    ). The{' '}
+                    <code className='rounded bg-white/55 px-1 font-mono'>
+                      (i)
+                    </code>{' '}
+                    icon inside the search bar opens a popover with the full
+                    syntax reference; the underlying OpenAlex docs are at{' '}
+                    <a
+                      href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='underline underline-offset-2 hover:text-accent-strong'
+                    >
+                      docs.openalex.org
+                    </a>
+                    .
                   </p>
                 </div>
               </div>

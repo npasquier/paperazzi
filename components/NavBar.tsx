@@ -5,6 +5,7 @@ import { Search, X, Database, CircleQuestionMark } from 'lucide-react';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import StorageModal from './StorageModal';
 import OpenAlexUsageModal from './OpenAlexUsageModal';
+import SearchSyntaxHelp from './SearchSyntaxHelp';
 import {
   extractMentions,
   resolveMentions,
@@ -965,6 +966,23 @@ function NavBarContent() {
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
+                  {/* Search-syntax (i) popover — re-mounted at point
+                      of need so users discovering @/#/~ in the
+                      placeholder can immediately learn how to use them
+                      (and, crucially, how to *type* ~ on AZERTY
+                      layouts) without leaving the page. The popover
+                      content (SearchSyntaxHelp) is the single source
+                      of truth for search-syntax docs; the /help page
+                      cross-references back here. The buttonClassName
+                      override turns the default absolutely-positioned
+                      trigger into an inline icon that sits just
+                      before the submit button — tight padding so it
+                      doesn't compete visually with the green CTA. */}
+                  <SearchSyntaxHelp
+                    semantic={semantic}
+                    conflicts={semanticConflicts}
+                    buttonClassName='flex-shrink-0 p-1 text-app-soft hover:text-app transition rounded'
+                  />
                   {/* Submit affordance — integrated into the bar's right
                       pill end. Geometry matches the chip-facade
                       container so the button reads as part of the bar
@@ -1011,11 +1029,11 @@ function NavBarContent() {
                   </button>
                 </div>
 
-                {/* (Search-syntax (i) popover removed from the bar —
-                    the same syntax info now lives in the /help page's
-                    Filters section. The component is still exported in
-                    case we want to re-mount it elsewhere; nothing
-                    imports it from the navbar anymore.) */}
+                {/* (Search-syntax (i) popover is mounted just before
+                    the submit button — see <SearchSyntaxHelp /> above.
+                    The /help page's Filters section cross-references
+                    the same docs for users browsing help instead of
+                    asking from the bar.) */}
 
                 {/* @-mention autocomplete dropdown. Anchored to the input,
                     z-50 so it sits above the search results below but under
