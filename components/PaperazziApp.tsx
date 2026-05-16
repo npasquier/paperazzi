@@ -519,6 +519,30 @@ function PaperazziAppContent() {
         journals: finalJournals,
         institutions: finalInstitutions,
       });
+
+      // Commit non-URL fields (econFilter, journalFilterMode) to
+      // searchFilters now, BEFORE the router.push. The deferred-
+      // commit flow normally relies on syncFromURL to copy these
+      // from filtersRef into searchFilters when the URL changes
+      // — but if the user only edited a non-URL field (e.g. picked
+      // "Cat 1" in the Wide econ filter while chips and query were
+      // already committed), the new URL would be identical to the
+      // current one, router.push would be a no-op, syncFromURL
+      // would not run, and the panel edit would silently fail to
+      // apply. Setting them explicitly here makes Enter behave as
+      // "commit my pending changes" in both cases:
+      //   - URL changed:  syncFromURL re-commits the same values
+      //                   (idempotent, no-op).
+      //   - URL unchanged: this commit is what actually applies
+      //                   the panel edit.
+      // We only touch the two non-URL fields; the rest of
+      // searchFilters is reset by syncFromURL when the URL moves.
+      setSearchFilters((prev) => ({
+        ...prev,
+        econFilter: filters.econFilter,
+        journalFilterMode: filters.journalFilterMode,
+      }));
+
       router.push(`/search?${params.toString()}`);
     };
 
