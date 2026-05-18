@@ -281,27 +281,45 @@ function NavBarContent() {
     [],
   );
 
-  // Sync with URL when on search page. The set-state-in-effect lint
-  // rule wants us to derive `query` from `searchParams` directly, but
-  // `query` is also user-editable via the input — so it's intrinsically
-  // owned by useState and just *seeded* from the URL on entry / back-
-  // forward. Suppress the rule for these two seeding writes.
+  // Seed `query` and `semantic` from the URL when on search page. The
+  // set-state-in-effect lint rule wants us to derive `query` from
+  // `searchParams` directly, but `query` is also user-editable via the
+  // input — so it's intrinsically owned by useState and just *seeded*
+  // from the URL on entry / back-forward. Suppress the rule for these
+  // two seeding writes.
+  //
+  // CRITICAL: this effect depends ONLY on `searchParams` (and the
+  // page guard). It must NOT take `semanticDisabled` as a dep — that
+  // value flips whenever the user toggles a filter that conflicts with
+  // semantic mode (e.g. clicking a wide-filter tier/domain pill flips
+  // `econActive` → `semanticDisabled`), and rerunning this effect on
+  // that transition wipes the user's in-progress typing back to the
+  // URL's `q=` value (usually empty). URL-cleanup for the
+  // semantic+conflict case lives in its own effect below.
   useEffect(() => {
     if (!isSearchPage) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    /* eslint-disable react-hooks/set-state-in-effect */
     setQuery(searchParams.get('q') || '');
+    setSemantic(searchParams.get('semantic') === 'true');
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [searchParams, isSearchPage]);
 
+  // Cleanup: if the URL still has `semantic=true` after a conflict
+  // appeared (e.g. user added a filter while semantic was on), strip
+  // it so the page is in a consistent state. Split out from the seed
+  // effect above so that flipping `semanticDisabled` doesn't reseed
+  // (and wipe) the user's in-progress query text. router.replace
+  // bumps `searchParams`, which re-fires the seed effect — that's
+  // fine, the new URL has the same `q=` so `query` is unchanged.
+  useEffect(() => {
+    if (!isSearchPage) return;
     const urlSemantic = searchParams.get('semantic') === 'true';
-    // Treat URL semantic=true as effective only when no conflicts are active;
-    // if a conflict slipped in (e.g. user added a filter while semantic was on),
-    // clean it out of the URL so the page is in a consistent state.
     if (urlSemantic && semanticDisabled) {
       const params = new URLSearchParams(Array.from(searchParams.entries()));
       params.delete('semantic');
       router.replace(`/search?${params.toString()}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSemantic(false);
-    } else {
-      setSemantic(urlSemantic);
     }
   }, [searchParams, isSearchPage, semanticDisabled, router]);
 

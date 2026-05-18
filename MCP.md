@@ -42,23 +42,32 @@ search in the Paperazzi UI.
 
 ## Adding it to a client
 
-### Claude Desktop (free)
+### Claude Desktop / Cowork (free)
 
-Edit your `claude_desktop_config.json` (find it via Settings → Developer
-→ Edit Config) and add:
+Edit your `claude_desktop_config.json` (on macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`). Add
+an `mcpServers` block as a sibling of whatever's already in the file —
+don't replace anything:
 
 ```json
 {
   "mcpServers": {
     "paperazzi": {
-      "url": "https://paperazzi.vercel.app/api/mcp",
-      "transport": "http"
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://paperazzi.vercel.app/api/mcp"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. Ask: *"Find me recent papers on digital
+This uses [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) — a
+tiny bridge that turns the remote HTTP server into a local stdio process
+the app can talk to. It's the most compatible config across app
+versions; the native HTTP-transport JSON shape varies and isn't worth
+chasing. Requires [Node.js](https://nodejs.org) on your machine
+(`node --version` to check).
+
+Fully quit and reopen the app. Ask: *"Find me recent papers on digital
 agriculture in Industrial Organization journals."*
 
 ### Mistral Le Chat
