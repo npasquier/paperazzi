@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
+  ArrowDown,
   ArrowRight,
   ArrowUpRight,
   AtSign,
@@ -15,9 +16,11 @@ import {
   ListOrdered,
   Network,
   Pin,
+  Plug,
   Search,
   StickyNote,
   Tag,
+  Terminal,
   Upload,
   type LucideIcon,
 } from 'lucide-react';
@@ -99,6 +102,12 @@ const jumpLinks: JumpLink[] = [
     icon: Flag,
     title: 'Improve OpenAlex',
     body: 'Report missing or incorrect data.',
+  },
+  {
+    id: 'mcp',
+    icon: Plug,
+    title: 'Connect an LLM',
+    body: 'Use Paperazzi from Claude, ChatGPT, Cursor, and other MCP clients.',
   },
   {
     id: 'tips',
@@ -605,6 +614,50 @@ function ContributeArtwork() {
               OpenAlex ID copied and ready to paste
             </div>
           </div>
+        </div>
+      </div>
+    </ArtFrame>
+  );
+}
+
+function McpArtwork() {
+  return (
+    <ArtFrame label='Integration' title='LLM clients → Paperazzi'>
+      <div className='space-y-3'>
+        <div className='rounded-2xl border border-app bg-[rgba(255,253,248,0.82)] p-3'>
+          <p className='text-xs font-medium text-stone-900'>MCP clients</p>
+          <div className='mt-3 grid grid-cols-2 gap-1.5 text-[11px] text-stone-600'>
+            <div className='rounded-xl surface-muted px-2.5 py-1.5'>
+              Claude Desktop
+            </div>
+            <div className='rounded-xl surface-muted px-2.5 py-1.5'>
+              ChatGPT
+            </div>
+            <div className='rounded-xl surface-muted px-2.5 py-1.5'>Cursor</div>
+            <div className='rounded-xl surface-muted px-2.5 py-1.5'>
+              Le Chat &amp; others
+            </div>
+          </div>
+        </div>
+        <div className='flex items-center justify-center'>
+          <ArrowDown size={14} className='text-stone-400' />
+        </div>
+        <div className='rounded-2xl border border-app bg-[rgba(255,253,248,0.82)] p-3'>
+          <div className='flex items-center justify-between gap-3'>
+            <p className='text-xs font-medium text-stone-900'>
+              /api/mcp endpoint
+            </p>
+            <span className='rounded-full banner-info px-2 py-1 text-[10px] text-accent-strong'>
+              Streamable HTTP
+            </span>
+          </div>
+          <div className='mt-3 rounded-xl surface-muted px-3 py-2 text-[11px] font-mono text-stone-700'>
+            paperazzi_search(...)
+          </div>
+        </div>
+        <div className='rounded-2xl border border-dashed border-app-strong px-3 py-3 text-xs leading-relaxed text-stone-500'>
+          The same search backend the website uses — CNRS tier and domain
+          filters included.
         </div>
       </div>
     </ArtFrame>
@@ -1741,6 +1794,228 @@ export default function HelpPage() {
                 </p>
               </div>
             </div>
+          </DocSection>
+
+          <DocSection
+            id='mcp'
+            icon={Plug}
+            eyebrow='Connect an LLM'
+            title='Use Paperazzi from Claude, ChatGPT, and other MCP clients'
+            intro={
+              <p>
+                Paperazzi exposes its economics-aware search as an{' '}
+                <a
+                  href='https://modelcontextprotocol.io'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='underline underline-offset-2'
+                >
+                  MCP
+                </a>{' '}
+                (Model Context Protocol) server, so any MCP-capable assistant
+                can run the same search you use here. The model gets a single
+                tool, <code className='rounded surface-muted px-1 text-xs font-mono text-stone-700'>paperazzi_search</code>,
+                with arguments for query, CNRS tiers and domains, top-5
+                shortcut, year range, semantic mode, sort, and limit.
+              </p>
+            }
+            art={<McpArtwork />}
+          >
+            <article className='surface-panel rounded-2xl border border-app p-5'>
+              <div className='inline-flex items-center gap-2 text-base font-semibold text-stone-900'>
+                <Terminal size={16} className='text-stone-500' />
+                The endpoint
+              </div>
+              <p className='mt-3 text-sm leading-relaxed text-stone-700'>
+                One URL, Streamable HTTP transport. Same auth model as the
+                public site (no key required), same OpenAlex backend, same
+                ranking schemes.
+              </p>
+              <pre className='mt-3 overflow-x-auto rounded surface-muted px-3 py-2 text-[12px] font-mono text-stone-700'>
+                {`https://paperazzi.vercel.app/api/mcp`}
+              </pre>
+              <p className='mt-3 text-xs leading-relaxed text-stone-500'>
+                If you self-host, replace the host with your own deployment.
+                The route handles POST (tool calls), GET (response stream), and
+                DELETE (session teardown) on the same path.
+              </p>
+            </article>
+
+            {/* Per-client setup — collapsed by default so the section
+                stays compact. Each client lives in its own native
+                <details> so users only expand the one they need; the
+                chevron rotates 180° on open via group-open utilities.
+                Claude is open by default (most-likely audience) — drop
+                the `open` attribute below if you'd prefer everything
+                collapsed on first load. */}
+            <div className='space-y-2'>
+              <p className='text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-500'>
+                Pick your client
+              </p>
+
+              <details
+                className='group surface-panel rounded-2xl border border-app p-5'
+              >
+                <summary className='flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden'>
+                  <h3 className='text-base font-semibold text-stone-900'>
+                    Claude Desktop &amp; Claude.ai
+                  </h3>
+                  <ChevronDown
+                    size={18}
+                    className='shrink-0 text-stone-400 transition-transform group-open:rotate-180'
+                  />
+                </summary>
+                <ol className='mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-stone-700'>
+                  <li>
+                    Open <strong>Settings → Connectors</strong> (Claude
+                    Desktop) or <strong>Settings → Connectors</strong> on
+                    claude.ai.
+                  </li>
+                  <li>
+                    Click <strong>Add custom connector</strong>.
+                  </li>
+                  <li>
+                    Name it <em>Paperazzi</em> and paste the endpoint URL
+                    above as the server URL. Leave authentication empty.
+                  </li>
+                  <li>
+                    Save. The{' '}
+                    <code className='rounded surface-muted px-1 text-xs font-mono text-stone-700'>
+                      paperazzi_search
+                    </code>{' '}
+                    tool will appear in new chats — enable it from the tool
+                    picker before asking a research question.
+                  </li>
+                </ol>
+                <div className='mt-4 rounded-2xl banner-info p-4 text-[13px] leading-relaxed text-accent-strong'>
+                  Older versions of Claude Desktop only support local{' '}
+                  <code className='rounded bg-white/55 px-1.5 py-0.5 text-[12px] font-mono text-accent-strong'>
+                    stdio
+                  </code>{' '}
+                  MCP servers via the desktop config file. Update to the
+                  latest build to use the remote-connector flow above.
+                </div>
+              </details>
+
+              <details className='group surface-panel rounded-2xl border border-app p-5'>
+                <summary className='flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden'>
+                  <h3 className='text-base font-semibold text-stone-900'>
+                    ChatGPT
+                  </h3>
+                  <ChevronDown
+                    size={18}
+                    className='shrink-0 text-stone-400 transition-transform group-open:rotate-180'
+                  />
+                </summary>
+                <ol className='mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-stone-700'>
+                  <li>
+                    Go to <strong>Settings → Connectors</strong> in ChatGPT
+                    (available on plans that include custom connectors).
+                  </li>
+                  <li>
+                    Choose <strong>Add a custom MCP server</strong>.
+                  </li>
+                  <li>
+                    Paste the Paperazzi endpoint URL, leave the auth blank,
+                    and save.
+                  </li>
+                  <li>
+                    In a new chat, open the tools menu and enable Paperazzi.
+                    Connector availability varies by plan and region — if the
+                    option is missing, check OpenAI&apos;s docs for the
+                    current rollout.
+                  </li>
+                </ol>
+              </details>
+
+              <details className='group surface-panel rounded-2xl border border-app p-5'>
+                <summary className='flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden'>
+                  <h3 className='text-base font-semibold text-stone-900'>
+                    Cursor
+                  </h3>
+                  <ChevronDown
+                    size={18}
+                    className='shrink-0 text-stone-400 transition-transform group-open:rotate-180'
+                  />
+                </summary>
+                <p className='mt-3 text-sm leading-relaxed text-stone-700'>
+                  Cursor supports remote MCP servers out of the box. Open{' '}
+                  <strong>Settings → MCP</strong>, click <strong>Add</strong>,
+                  pick the <em>HTTP / SSE</em> transport, and paste the
+                  endpoint URL. The tool becomes available in agent chats
+                  once the connection turns green.
+                </p>
+                <pre className='mt-3 overflow-x-auto rounded surface-muted px-3 py-2 text-[12px] font-mono text-stone-700'>
+                  {`{
+  "mcpServers": {
+    "paperazzi": {
+      "url": "https://paperazzi.vercel.app/api/mcp"
+    }
+  }
+}`}
+                </pre>
+                <p className='mt-3 text-xs leading-relaxed text-stone-500'>
+                  The JSON form above is what Cursor (and most config-driven
+                  clients like Claude Code, Windsurf, Continue, and Zed)
+                  write to their MCP config. The shape is identical across
+                  clients — only the file location changes.
+                </p>
+              </details>
+
+              <details className='group surface-panel rounded-2xl border border-app p-5'>
+                <summary className='flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden'>
+                  <h3 className='text-base font-semibold text-stone-900'>
+                    Mistral Le Chat, Cline &amp; other MCP clients
+                  </h3>
+                  <ChevronDown
+                    size={18}
+                    className='shrink-0 text-stone-400 transition-transform group-open:rotate-180'
+                  />
+                </summary>
+                <p className='mt-3 text-sm leading-relaxed text-stone-700'>
+                  Any client that speaks MCP over Streamable HTTP can use
+                  the same endpoint. Look for <em>Custom connectors</em>,{' '}
+                  <em>Add MCP server</em>, or an equivalent setting, pick
+                  the HTTP transport, and paste the URL. No API key is
+                  needed.
+                </p>
+              </details>
+            </div>
+
+            <article className='surface-panel rounded-2xl border border-app p-5'>
+              <h3 className='text-base font-semibold text-stone-900'>
+                What the model can ask for
+              </h3>
+              <p className='mt-3 text-sm leading-relaxed text-stone-700'>
+                The tool description teaches the model when to reach for it,
+                so a natural-language prompt is usually enough. A few examples:
+              </p>
+              <ul className='mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-stone-700'>
+                <li>
+                  <em>
+                    Find the most-cited Top 5 papers on minimum wage
+                    employment effects published since 2015.
+                  </em>
+                </li>
+                <li>
+                  <em>
+                    Show recent macro papers in tier-1 journals about
+                    monetary-policy transmission.
+                  </em>
+                </li>
+                <li>
+                  <em>
+                    Search Econometrica and the QJE for work on instrumental
+                    variables with weak instruments.
+                  </em>
+                </li>
+              </ul>
+              <p className='mt-3 text-xs leading-relaxed text-stone-500'>
+                Each tool response includes a link back to the same search in
+                the Paperazzi UI, so you can open the citation graph, pin
+                papers, and keep working from the model&apos;s starting point.
+              </p>
+            </article>
           </DocSection>
 
           <DocSection
