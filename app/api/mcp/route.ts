@@ -36,6 +36,10 @@ import { NextRequest } from 'next/server';
 import { GET as searchGET } from '../search/route';
 import domains from '@/data/domains';
 import { loadCnrsScheme, CNRS_TOP5_ISSNS } from '@/data/cnrsScheme';
+import {
+  JOURNAL_SHORTCUTS,
+  JOURNAL_SHORTCUTS_LIST,
+} from '@/data/journalAbbreviations';
 
 // ─── Vocabulary the LLM sees in the parameter schema ─────────────────
 //
@@ -87,13 +91,138 @@ const DOMAIN_CODES = [
   }
 }
 
-const DOMAIN_DESCRIPTION = `Restrict to journals in these CNRS-Economics domain codes. Codes and meanings: ${domains
-  .filter((d) => d.value)
-  .map((d) => `${d.value} = ${d.translation || d.value}`)
-  .join('; ')}.`;
+const BATCH_REMINDER =
+  ' Pass every value you want to filter by in a SINGLE call as one ' +
+  'array — entries are OR-combined within this parameter, so one ' +
+  'call covers all of them. Do NOT loop with one value per call.';
+
+const DOMAIN_DESCRIPTION =
+  `Restrict to journals in these CNRS-Economics domain codes. Codes and meanings: ${domains
+    .filter((d) => d.value)
+    .map((d) => `${d.value} = ${d.translation || d.value}`)
+    .join('; ')}.` + BATCH_REMINDER;
 
 const TIER_DESCRIPTION =
-  "Restrict to journals in these CNRS tiers, where '1' is the most selective (top journals) and '4' the least. Omit to include all tiers.";
+  "Restrict to journals in these CNRS tiers, where '1' is the most " +
+  "selective (top journals) and '4' the least. Omit to include all " +
+  'tiers.' +
+  BATCH_REMINDER;
+
+// ─── Journal short-code vocabulary ───────────────────────────────────
+//
+// `JOURNAL_CODES` mirrors the keys of JOURNAL_SHORTCUTS (data/
+// journalAbbreviations.ts), uppercased so the schema reads like the
+// canonical academic shorthand (IJIO, JEMS, RAND, AER, …). The literal
+// tuple is the single source of truth for the `journal_codes`
+// parameter's enum, and is sanity-checked against JOURNAL_SHORTCUTS at
+// module load so the two cannot drift silently.
+
+const JOURNAL_CODES = [
+  // ── Top 5 ──
+  'AER',
+  'QJE',
+  'JPE',
+  'ECMA',
+  'RESTUD',
+  // ── American Economic Journal series ──
+  'AEJMACRO',
+  'AEJMICRO',
+  'AEJAPPLIED',
+  'AEJPOLICY',
+  // ── Top general / second-tier general ──
+  'JEEA',
+  'RESTAT',
+  'EJ',
+  'IER',
+  'MS',
+  'JEL',
+  'JEP',
+  'QE',
+  'TE',
+  'RAND',
+  // ── Field journals ──
+  'JET',
+  'JME',
+  'JINTEC',
+  'JPUBE',
+  'JDE',
+  'JHE',
+  'JUE',
+  'JHR',
+  'JOLE',
+  'JEEM',
+  'JOE',
+  // ── Industrial Organization ──
+  'JIE',
+  'IJIO',
+  'JEMS',
+  'RIO',
+  // ── Theory / behavioral ──
+  'GEB',
+  'JEBO',
+  'EE',
+  // ── Finance ──
+  'JF',
+  'JFE',
+  'RFS',
+  'JBF',
+  'MATHFIN',
+] as const;
+
+// Boot-time drift check: every JOURNAL_CODES entry must correspond to a
+// JOURNAL_SHORTCUTS key, and vice versa. Mismatches log a warning so
+// they show up in `vercel build` rather than silently shrinking the
+// vocabulary the LLM sees.
+{
+  const fromShortcuts = new Set(
+    Object.keys(JOURNAL_SHORTCUTS).map((k) => k.toUpperCase()),
+  );
+  const fromTuple = new Set<string>(JOURNAL_CODES);
+  for (const code of fromShortcuts) {
+    if (!fromTuple.has(code)) {
+      console.warn(
+        `[MCP] Journal shortcut "${code.toLowerCase()}" exists in JOURNAL_SHORTCUTS but is missing from JOURNAL_CODES in app/api/mcp/route.ts — it will not be exposed via journal_codes.`,
+      );
+    }
+  }
+  for (const code of fromTuple) {
+    if (!fromShortcuts.has(code)) {
+      console.warn(
+        `[MCP] Journal code "${code}" is in JOURNAL_CODES but has no matching shortcut in data/journalAbbreviations.ts — calls passing it will produce empty filters.`,
+      );
+    }
+  }
+}
+
+const JOURNAL_CODES_LIST_FOR_DESC = JOURNAL_CODES.slice(0, 12).join(', ');
+
+const JOURNAL_CODES_DESCRIPTION =
+  'Restrict to journals identified by canonical short code (' +
+  `${JOURNAL_CODES_LIST_FOR_DESC}, …). Resolves directly to the ` +
+  "journal's ISSN — no substring matching, so 'IJIO' and 'JEMS' work " +
+  "as you'd expect even though their full display names don't contain " +
+  'those letters. Union-combined with any ISSNs resolved from ' +
+  '`journal_names`; AND-combined with `domains` and `tiers`. Call ' +
+  '`paperazzi_list_journals` with `codes_only: true` to see every ' +
+  'accepted code with its full display name.' +
+  BATCH_REMINDER;
+
+const JOURNAL_NAMES_DESCRIPTION =
+  "Restrict to journals whose display name contains any of these " +
+  "substrings (case-insensitive). IMPORTANT: this is substring " +
+  "matching on the FULL display name — abbreviations like 'IJIO' or " +
+  "'JEMS' will NOT match 'International Journal of Industrial " +
+  "Organization' or 'Journal of Economics & Management Strategy' on " +
+  "their own. As a convenience, any token that exactly matches a " +
+  "known short code (AER, QJE, IJIO, JEMS, RAND, …) is auto-resolved " +
+  "to that journal's ISSN before substring matching is attempted. " +
+  "Tokens that match neither a code nor any journal name are reported " +
+  "in the response's `unmatched_journal_names` field. Prefer " +
+  "`journal_codes` for canonical short codes (it's a typed enum, so " +
+  "the LLM can't typo it), or `domains: ['OrgInd']` for broad " +
+  "industrial-organization coverage. AND-combined with `domains` and " +
+  '`tiers` when both are set.' +
+  BATCH_REMINDER;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -110,53 +239,141 @@ function mapSort(sort: 'relevance' | 'citations' | 'date' | undefined): string {
   }
 }
 
+/** Outcome of resolving the high-level filters into ISSNs. The extra
+ *  fields beyond `issns` are surfaced back to the caller so the LLM
+ *  sees what we expanded and what we couldn't recognise — preventing
+ *  the silent-fail mode where a typo'd or abbreviated journal token
+ *  matched nothing and the model assumed the journal had no papers. */
+interface ResolvedFilter {
+  issns: string[];
+  /** journal_names tokens that matched neither a short code nor any
+   *  journal display name as a substring. Empty when everything
+   *  resolved or no journal_names were supplied. */
+  unmatched_journal_names: string[];
+  /** Tokens we auto-expanded via the shortcut catalog, plus tokens
+   *  resolved via the explicit `journal_codes` enum. Useful for the
+   *  model to confirm intent and for transparency in the response. */
+  recognized_aliases: Array<{ token: string; name: string; issn: string }>;
+}
+
 /**
- * Resolve high-level filters (domains, tiers, journal_names, top5_only)
- * into a concrete OpenAlex ISSN whitelist by walking the baseline CNRS
- * scheme. Returns [] when no filter applies (caller doesn't want an
- * econ whitelist at all).
+ * Resolve high-level filters (domains, tiers, journal_names,
+ * journal_codes, top5_only) into a concrete OpenAlex ISSN whitelist by
+ * walking the baseline CNRS scheme. Returns issns=[] when no filter
+ * applies (caller doesn't want an econ whitelist at all).
  *
  * Precedence:
  *   • top5_only wins unconditionally.
- *   • Otherwise, domains/tiers/journal_names are AND-combined: a
+ *   • Otherwise, domains/tiers/(names+codes) are AND-combined: a
  *     journal must satisfy every non-empty filter to make the list.
- *   • journal_names matches by case-insensitive substring on the
- *     journal's display name — generous on purpose so the model can
- *     pass "Econometrica" or "econometrica" or "Quarterly Journal of
- *     Economics" without exact-string anxiety.
+ *   • Within the names-and-codes filter, `journal_names` tokens and
+ *     `journal_codes` entries are OR-combined: any matching journal
+ *     qualifies.
+ *   • Each `journal_names` token is first checked against the
+ *     JOURNAL_SHORTCUTS catalog (case-insensitive exact match on
+ *     abbreviation). A hit resolves directly to that journal's ISSN —
+ *     this is what makes "IJIO" / "JEMS" / "RAND" filter correctly.
+ *     A miss falls back to case-insensitive substring matching on the
+ *     full display name. Tokens that match neither are reported in
+ *     `unmatched_journal_names` so the model can react.
  */
 async function resolveIssns(args: {
   domains?: string[];
   tiers?: string[];
   journal_names?: string[];
+  journal_codes?: string[];
   top5_only?: boolean;
-}): Promise<string[]> {
-  if (args.top5_only) return [...CNRS_TOP5_ISSNS];
+}): Promise<ResolvedFilter> {
+  if (args.top5_only) {
+    const aliases = (['AER', 'ECMA', 'JPE', 'QJE', 'RESTUD'] as const).map(
+      (code) => {
+        const sc = JOURNAL_SHORTCUTS[code.toLowerCase()];
+        return { token: code, name: sc.name, issn: sc.issn };
+      },
+    );
+    return {
+      issns: [...CNRS_TOP5_ISSNS],
+      unmatched_journal_names: [],
+      recognized_aliases: aliases,
+    };
+  }
+
+  const recognized: Array<{ token: string; name: string; issn: string }> = [];
+  const orIssnSet = new Set<string>();
+
+  // 1. journal_codes — enum-validated, so every entry is guaranteed to
+  //    exist in JOURNAL_SHORTCUTS (the boot-time drift check enforces
+  //    the invariant). Resolve directly to ISSN.
+  for (const code of args.journal_codes ?? []) {
+    const sc = JOURNAL_SHORTCUTS[code.toLowerCase()];
+    if (!sc) continue; // defensive — drift check should prevent this
+    orIssnSet.add(sc.issn);
+    recognized.push({ token: code, name: sc.name, issn: sc.issn });
+  }
+
+  // 2. journal_names — alias-first, substring fallback.
+  const nameNeedles: string[] = [];
+  for (const raw of args.journal_names ?? []) {
+    const token = raw.trim();
+    if (!token) continue;
+    const sc = JOURNAL_SHORTCUTS[token.toLowerCase()];
+    if (sc) {
+      orIssnSet.add(sc.issn);
+      recognized.push({ token, name: sc.name, issn: sc.issn });
+    } else {
+      nameNeedles.push(token.toLowerCase());
+    }
+  }
 
   const hasAny =
     (args.domains?.length ?? 0) > 0 ||
     (args.tiers?.length ?? 0) > 0 ||
-    (args.journal_names?.length ?? 0) > 0;
-  if (!hasAny) return [];
+    orIssnSet.size > 0 ||
+    nameNeedles.length > 0;
+  if (!hasAny) {
+    return {
+      issns: [],
+      unmatched_journal_names: [],
+      recognized_aliases: recognized,
+    };
+  }
 
   const scheme = await loadCnrsScheme();
   const domainSet = args.domains?.length ? new Set(args.domains) : null;
   const tierSet = args.tiers?.length ? new Set(args.tiers) : null;
-  const nameNeedles = (args.journal_names || []).map((s) => s.toLowerCase());
 
-  return scheme.journals
-    .filter((j) => {
-      if (domainSet && !domainSet.has(j.domain)) return false;
-      if (tierSet && !tierSet.has(j.tier)) return false;
-      if (
-        nameNeedles.length &&
-        !nameNeedles.some((n) => j.name.toLowerCase().includes(n))
-      ) {
-        return false;
+  // Per-needle match audit — a needle that matches no display name
+  // anywhere in the catalog is flagged for the caller.
+  const matchedNeedles = new Set<string>();
+  for (const j of scheme.journals) {
+    const lowName = j.name.toLowerCase();
+    for (const n of nameNeedles) {
+      if (!matchedNeedles.has(n) && lowName.includes(n)) {
+        matchedNeedles.add(n);
       }
-      return true;
-    })
-    .map((j) => j.issn);
+    }
+  }
+  const unmatched_journal_names = nameNeedles.filter(
+    (n) => !matchedNeedles.has(n),
+  );
+
+  const filtered = scheme.journals.filter((j) => {
+    if (domainSet && !domainSet.has(j.domain)) return false;
+    if (tierSet && !tierSet.has(j.tier)) return false;
+    const hasNameOrCodeFilter = orIssnSet.size > 0 || nameNeedles.length > 0;
+    if (hasNameOrCodeFilter) {
+      if (orIssnSet.has(j.issn)) return true;
+      const lowName = j.name.toLowerCase();
+      return nameNeedles.some((n) => lowName.includes(n));
+    }
+    return true;
+  });
+
+  return {
+    issns: filtered.map((j) => j.issn),
+    unmatched_journal_names,
+    recognized_aliases: recognized,
+  };
 }
 
 /** Build the URL we'd hand to /api/search internally. The origin is
@@ -224,7 +441,45 @@ const handler = createMcpHandler(
         'economics literature, or specific journals/tiers. Returns ' +
         'ranked results with title, authors, journal, year, citation ' +
         'count, and abstract, plus a link to open the same search in ' +
-        "Paperazzi's full UI.",
+        "Paperazzi's full UI. " +
+        'To filter to specific journals, prefer `journal_codes` for ' +
+        'canonical short codes (IJIO, JEMS, RAND, AER, QJE, JPE, ECMA, ' +
+        'RESTUD, …) — it is a typed enum that resolves directly to the ' +
+        "right journal regardless of how the journal's full title is " +
+        'spelled. Use `journal_names` for substring matching on full ' +
+        'display names (with abbreviation aliases as a fallback). For ' +
+        'broader industrial-organization coverage, use ' +
+        "`domains: ['OrgInd']`. The companion tool " +
+        '`paperazzi_list_journals` returns the catalog with codes, ' +
+        'domains, and tiers — call it when you need to discover the ' +
+        'exact code or full name for a journal before filtering.\n\n' +
+        'Behavior — read this before calling:\n' +
+        "• Clarify when scope is ambiguous. If the user's request " +
+        'leaves real ambiguity about (a) which journals or tiers to ' +
+        'cover, (b) what time range, (c) how broad the survey should ' +
+        'be, or (d) how many papers to retrieve, ask ONE concise ' +
+        'clarifying question BEFORE calling. A request like ' +
+        '"summarize the literature on aftermarkets in IO journals" is ' +
+        'usually clear enough to proceed (domain = OrgInd, no year ' +
+        'cap, topic = aftermarket); a request like "give me the key ' +
+        'papers on inflation" usually is not (which decade? which ' +
+        'tier? Top 5 only? include monetary-policy field journals?). ' +
+        'Each call returns up to 50 papers and consumes a search ' +
+        'slot, so the cost of one extra question is much lower than ' +
+        'the cost of an under-scoped search.\n' +
+        '• Batch, do not loop. Every array parameter ' +
+        '(`journal_codes`, `journal_names`, `domains`, `tiers`) is ' +
+        'OR-combined within itself, so a single call with ' +
+        "`journal_codes: ['IJIO','JEMS','RAND']` covers all three " +
+        'journals at once. Do NOT call once per journal, once per ' +
+        'domain, or once per tier — that wastes calls and produces ' +
+        'a worse synthesis than one well-scoped query. A typical ' +
+        'literature review is 1–3 well-scoped calls (e.g., one ' +
+        'sorted by `citations` for seminal work, one sorted by ' +
+        '`date` for recent work). If you find yourself about to make ' +
+        'a fourth call, stop and re-plan instead.\n' +
+        '• Prefer one wide call over many narrow ones. `limit: 50` ' +
+        'with the right filter beats five calls at `limit: 10`.',
       {
         query: z
           .string()
@@ -242,14 +497,14 @@ const handler = createMcpHandler(
           .array(z.enum(['1', '2', '3', '4']))
           .optional()
           .describe(TIER_DESCRIPTION),
+        journal_codes: z
+          .array(z.enum(JOURNAL_CODES))
+          .optional()
+          .describe(JOURNAL_CODES_DESCRIPTION),
         journal_names: z
           .array(z.string())
           .optional()
-          .describe(
-            'Restrict to journals whose display name contains any of ' +
-              'these strings (case-insensitive substring match). ' +
-              'AND-combined with `domains`/`tiers` when both are set.',
-          ),
+          .describe(JOURNAL_NAMES_DESCRIPTION),
         top5_only: z
           .boolean()
           .optional()
@@ -258,7 +513,7 @@ const handler = createMcpHandler(
               'journals: American Economic Review, Econometrica, ' +
               'Journal of Political Economy, Quarterly Journal of ' +
               'Economics, Review of Economic Studies. Overrides ' +
-              'domains/tiers/journal_names.',
+              'domains/tiers/journal_names/journal_codes.',
           ),
         year_from: z
           .number()
@@ -304,10 +559,53 @@ const handler = createMcpHandler(
       },
       async (args) => {
         try {
-          const issns = await resolveIssns(args);
+          const resolved = await resolveIssns(args);
+          const { issns, unmatched_journal_names, recognized_aliases } =
+            resolved;
           const mode = args.mode ?? 'keyword';
           const limit = args.limit ?? 20;
           const sortStr = mapSort(args.sort);
+
+          // Guardrail: a filter that intended to restrict (codes/names
+          // or top5) but resolved to zero ISSNs is almost always an
+          // LLM intent error. Returning an empty result with a clear
+          // explanation is more useful than silently searching the
+          // whole catalog or returning no papers without context.
+          const requestedRestriction =
+            (args.journal_codes?.length ?? 0) > 0 ||
+            (args.journal_names?.length ?? 0) > 0 ||
+            args.top5_only === true;
+          if (requestedRestriction && issns.length === 0) {
+            const warnLines: string[] = [];
+            warnLines.push(
+              'Paperazzi search did not run: the journal filter ' +
+                'resolved to zero journals.',
+            );
+            if (unmatched_journal_names.length) {
+              warnLines.push('');
+              warnLines.push(
+                `Unmatched journal_names tokens: ${unmatched_journal_names
+                  .map((s) => `"${s}"`)
+                  .join(', ')}. These matched no short code and no ` +
+                  'journal display name as a substring. Use ' +
+                  '`journal_codes` for canonical short codes (IJIO, ' +
+                  'JEMS, RAND, AER, …) or call ' +
+                  '`paperazzi_list_journals` to discover exact names.',
+              );
+            }
+            return {
+              content: [{ type: 'text', text: warnLines.join('\n') }],
+              structuredContent: {
+                query: args.query,
+                filter_issns: [],
+                count: 0,
+                unmatched_journal_names,
+                recognized_aliases,
+                results: [],
+              },
+              isError: true,
+            };
+          }
 
           const url = buildSearchUrl({
             query: args.query,
@@ -369,6 +667,28 @@ const handler = createMcpHandler(
           lines.push(
             `Found ${data.results.length} paper${data.results.length === 1 ? '' : 's'} for "${args.query}"${filterNote}.`,
           );
+          if (recognized_aliases.length) {
+            lines.push('');
+            lines.push(
+              'Resolved journal codes: ' +
+                recognized_aliases
+                  .map((a) => `${a.token} → ${a.name}`)
+                  .join('; ') +
+                '.',
+            );
+          }
+          if (unmatched_journal_names.length) {
+            lines.push('');
+            lines.push(
+              'Warning: the following `journal_names` tokens matched ' +
+                `neither a known short code nor any journal display ` +
+                `name and were ignored: ${unmatched_journal_names
+                  .map((s) => `"${s}"`)
+                  .join(', ')}. Use \`journal_codes\` for canonical ` +
+                'abbreviations (IJIO, JEMS, RAND, …) or call ' +
+                '`paperazzi_list_journals` to find exact names.',
+            );
+          }
           lines.push('');
           data.results.forEach((p, i) => {
             const authors =
@@ -403,6 +723,8 @@ const handler = createMcpHandler(
               filter_issns: issns,
               count: data.results.length,
               share_url: shareUrl,
+              unmatched_journal_names,
+              recognized_aliases,
               results: data.results.map((p) => ({
                 openalex_id: p.id,
                 title: p.title,
@@ -420,6 +742,168 @@ const handler = createMcpHandler(
           return {
             content: [
               { type: 'text', text: `Paperazzi MCP tool error: ${msg}` },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // ─── paperazzi_list_journals ─────────────────────────────────
+    //
+    // Companion to paperazzi_search: returns the catalog of journals
+    // Paperazzi knows about, with their canonical short code (when
+    // registered), CNRS domain, tier, and ISSN. The model calls this
+    // when it needs to disambiguate a journal name before filtering —
+    // typically because the user asked about a less-famous outlet or
+    // because a previous search returned `unmatched_journal_names`.
+    //
+    // Filters are AND-combined and all optional. Default response is
+    // capped at 100 journals; raise `limit` (max 500) for the full
+    // catalog.
+
+    server.tool(
+      'paperazzi_list_journals',
+      'List the economics & management journals known to Paperazzi, ' +
+        'with their canonical short code (IJIO, JEMS, RAND, AER, …) ' +
+        'when registered, CNRS domain, CNRS tier, and ISSN. Use this ' +
+        'tool to discover exact journal names or short codes before ' +
+        'filtering a `paperazzi_search` call — especially after a ' +
+        'previous search returned `unmatched_journal_names`, or when ' +
+        'the user mentions a journal whose canonical name you are ' +
+        'unsure about. Filters are optional and AND-combined; pass ' +
+        '`codes_only: true` to see just the journals that have a ' +
+        'short code registered for `journal_codes`.',
+      {
+        domains: z
+          .array(z.enum(DOMAIN_CODES))
+          .optional()
+          .describe(
+            'Restrict to journals in these CNRS-Economics domain ' +
+              'codes. See `paperazzi_search` for the full list of ' +
+              'codes and meanings.' +
+              BATCH_REMINDER,
+          ),
+        tiers: z
+          .array(z.enum(['1', '2', '3', '4']))
+          .optional()
+          .describe(TIER_DESCRIPTION),
+        query: z
+          .string()
+          .optional()
+          .describe(
+            'Case-insensitive substring filter on the journal display ' +
+              "name (e.g., 'industrial' or 'monetary').",
+          ),
+        codes_only: z
+          .boolean()
+          .optional()
+          .describe(
+            'If true, return only journals that have a registered ' +
+              'short code (i.e., the values accepted by ' +
+              "`paperazzi_search`'s `journal_codes` parameter).",
+          ),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe(
+            'Maximum number of journals to return (1–500, default ' +
+              '100). The response indicates when the result was ' +
+              'truncated so the caller can re-query with a tighter ' +
+              'filter.',
+          ),
+      },
+      async (args) => {
+        try {
+          const scheme = await loadCnrsScheme();
+          // Widen the Set's element type to `string` so it can be
+          // queried against the catalogue's `string`-typed domain/tier
+          // fields. The zod enum already validated inputs upstream.
+          const domainSet = args.domains?.length
+            ? new Set<string>(args.domains)
+            : null;
+          const tierSet = args.tiers?.length
+            ? new Set<string>(args.tiers)
+            : null;
+          const needle = args.query?.toLowerCase().trim() ?? '';
+          const codesOnly = !!args.codes_only;
+          const limit = args.limit ?? 100;
+
+          // ISSN → uppercase code lookup, built once per call.
+          const codeByIssn = new Map<string, string>();
+          for (const s of JOURNAL_SHORTCUTS_LIST) {
+            codeByIssn.set(s.issn, s.abbrev.toUpperCase());
+          }
+
+          const all = scheme.journals.filter((j) => {
+            if (domainSet && !domainSet.has(j.domain)) return false;
+            if (tierSet && !tierSet.has(j.tier)) return false;
+            if (needle && !j.name.toLowerCase().includes(needle)) {
+              return false;
+            }
+            if (codesOnly && !codeByIssn.has(j.issn)) return false;
+            return true;
+          });
+
+          const truncated = all.length > limit;
+          const rows = all.slice(0, limit).map((j) => ({
+            code: codeByIssn.get(j.issn) ?? null,
+            name: j.name,
+            domain: j.domain,
+            tier: j.tier,
+            issn: j.issn,
+          }));
+
+          const lines: string[] = [];
+          const filterBits: string[] = [];
+          if (args.domains?.length)
+            filterBits.push(`domains=${args.domains.join(',')}`);
+          if (args.tiers?.length)
+            filterBits.push(`tiers=${args.tiers.join(',')}`);
+          if (needle) filterBits.push(`query="${needle}"`);
+          if (codesOnly) filterBits.push('codes_only=true');
+          const filterDesc = filterBits.length
+            ? ` (filters: ${filterBits.join('; ')})`
+            : '';
+          lines.push(
+            `Listing ${rows.length}${truncated ? ` of ${all.length}` : ''} ` +
+              `journal${rows.length === 1 ? '' : 's'}${filterDesc}.`,
+          );
+          if (truncated) {
+            lines.push(
+              'Result truncated — re-query with a tighter filter or a ' +
+                'larger `limit` to see more.',
+            );
+          }
+          lines.push('');
+          lines.push('| Code | Name | Domain | Tier | ISSN |');
+          lines.push('|------|------|--------|------|------|');
+          for (const r of rows) {
+            lines.push(
+              `| ${r.code ?? '—'} | ${r.name} | ${r.domain} | ${r.tier} | ${r.issn} |`,
+            );
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            structuredContent: {
+              count: rows.length,
+              total_matched: all.length,
+              truncated,
+              journals: rows,
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `paperazzi_list_journals error: ${msg}`,
+              },
             ],
             isError: true,
           };
