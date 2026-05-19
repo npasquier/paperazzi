@@ -9,6 +9,8 @@ import {
   BookOpen,
   Edit2,
   Check,
+  CheckCircle,
+  Copy,
   Trash2,
   Plus,
   Tag,
@@ -25,7 +27,13 @@ import PinButton from './ui/PinButton';
 import { cleanAbstract } from '@/utils/abstract';
 import { usePins } from '@/contexts/PinContext';
 import { normalizeId } from '@/utils/normalizeId';
-import { PAPER_CORRECTION_FORM_URL } from '@/utils/correctionForms';
+import { reportedPaperKey } from '@/utils/storageKeys';
+import { emit } from '@/utils/eventBus';
+import {
+  PAPER_CORRECTION_FORM_URL,
+  copyWorkIdAndOpenCorrectionForm,
+  toOpenAlexWorkId,
+} from '@/utils/correctionForms';
 
 interface PaperInfoModalProps {
   paper: Paper;
@@ -44,6 +52,80 @@ export default function PaperInfoModal({
 }: PaperInfoModalProps) {
   const [abstract, setAbstract] = useState<string>('');
   const [isLoadingAbstract, setIsLoadingAbstract] = useState(false);
+
+  // Bare OpenAlex work id (e.g. `W2741809807`) — paired with the
+  // correction form so the user can copy or submit it without having
+  // to dig the id out of the URL themselves.
+  const workId = toOpenAlexWorkId(paper.id);
+
+  // Report-flag dropdown state. Mirrors the bottom-right flag panel
+  // on the SearchResults paper card so the contribution affordance
+  // looks and behaves the same wherever it shows up.
+  //   - `isInfoExpanded` toggles the panel open/closed.
+  //   - `isCopied` flashes a check after the inline "Copy ID" press.
+  //   - `hasReported` is the optimistic in-session toggle.
+  //   - `isReportedStored` snapshots localStorage on mount so the
+  //     panel remembers a previous report after a reload.
+  const [isInfoExpanded, setIsInfoExpanded] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
+  const reportedKey = reportedPaperKey(workId);
+  const [isReportedStored] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(reportedKey) === 'true';
+    }
+    return false;
+  });
+  const isReported = hasReported || isReportedStored;
+
+  const toggleInfoPanel = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsInfoExpanded((open) => !open);
+  };
+
+  const copyWorkId = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(workId);
+      setIsCopied(true);
+      window.setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Shared click handler for the inline "help add it"/"Help add one"
+  // CTAs and the dropdown's "Submit correction" button. Copies the
+  // work id to the clipboard and opens the correction form so the
+  // user can paste the id straight into the form's paper-id field.
+  const handleReportClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void copyWorkIdAndOpenCorrectionForm(workId);
+  };
+
+  const handleReportedToggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!hasReported && !isReportedStored) {
+      // First time reporting — persist and let the rest of the app
+      // celebrate (the SearchResults flow listens for this and shows
+      // a one-off animation).
+      setHasReported(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(reportedKey, 'true');
+      }
+      emit('paper-reported', { paperId: workId });
+    } else {
+      // Toggle off.
+      setHasReported(false);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(reportedKey);
+      }
+    }
+  };
 
   // Notes + keywords are only meaningful for pinned papers — the
   // modal is also opened from the citations-network view, where the
@@ -73,9 +155,12 @@ export default function PaperInfoModal({
   useEffect(() => {
     if (!isOpen) {
       // Reset state when the modal closes so opening it again on a
-      // different paper doesn't leak the previous draft.
+      // different paper doesn't leak the previous draft or the
+      // expanded report panel from the last view.
       setIsEditingNote(false);
       setNoteDraft('');
+      setIsInfoExpanded(false);
+      setIsCopied(false);
     }
   }, [isOpen]);
 
@@ -231,6 +316,7 @@ export default function PaperInfoModal({
                     href={PAPER_CORRECTION_FORM_URL}
                     target='_blank'
                     rel='noopener noreferrer'
+                    onClick={handleReportClick}
                     className='text-[12px] not-italic font-medium text-accent-strong underline underline-offset-2 hover:no-underline inline-flex items-center gap-1'
                   >
                     <Flag size={11} />
@@ -309,6 +395,7 @@ export default function PaperInfoModal({
                     href={PAPER_CORRECTION_FORM_URL}
                     target='_blank'
                     rel='noopener noreferrer'
+                    onClick={handleReportClick}
                     className='text-accent-strong font-medium underline underline-offset-2 hover:no-underline'
                   >
                     Help add one →
@@ -508,16 +595,99 @@ export default function PaperInfoModal({
               the same low-key invitation to flag data issues. Sits at
               the bottom so it doesn't compete with primary content,
               but is reliably reachable from any paper view. */}
+          {/* Report-flag dropdown — mirrors the SearchResults paper
+              card's bottom-right flag. Collapsed by default to a bare
+              flag icon pinned to the right so it stays out of the way
+              of primary content; clicking it reveals the same
+              "spot a problem" copy, the OpenAlex work id with a copy
+              button, and the Submit / Mark-as-reported actions. */}
           <div className='mt-6 pt-3 border-t border-app'>
-            <a
-              href={PAPER_CORRECTION_FORM_URL}
-              target='_blank'
-              rel='noopener noreferrer'
-              className='inline-flex items-center gap-1.5 text-[11px] text-stone-500 hover:text-stone-800 transition'
+            <div className='flex justify-end'>
+              <button
+                type='button'
+                onClick={toggleInfoPanel}
+                aria-expanded={isInfoExpanded}
+                aria-label='Report a data error to OpenAlex'
+                title='Report a data error to OpenAlex'
+                className={`p-1 inline-flex items-center rounded transition ${
+                  isInfoExpanded
+                    ? 'text-stone-700 bg-[var(--surface-muted)]'
+                    : 'text-stone-400 hover:text-stone-600'
+                }`}
+              >
+                <Flag size={12} />
+              </button>
+            </div>
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                isInfoExpanded
+                  ? 'max-h-56 opacity-100 mt-2'
+                  : 'max-h-0 opacity-0'
+              }`}
             >
-              <Flag size={11} />
-              Spot a data error? Report it to OpenAlex.
-            </a>
+              <div className='space-y-2'>
+                <p className='text-xs text-stone-600 leading-snug'>
+                  <span className='font-medium text-stone-800'>
+                    Spot a problem with this paper?
+                  </span>{' '}
+                  Wrong author, missing PDF, garbled title, off citation
+                  count? OpenAlex is open and improves with corrections from
+                  researchers like you.
+                </p>
+                <div className='flex items-center gap-2 text-xs'>
+                  <span className='text-stone-500'>ID:</span>
+                  <code className='px-1.5 py-0.5 surface-muted rounded text-stone-600 font-mono text-[11px]'>
+                    {workId}
+                  </code>
+                  <button
+                    type='button'
+                    onClick={copyWorkId}
+                    className='p-0.5 text-stone-400 hover:text-stone-600 transition'
+                    title='Copy Work ID'
+                  >
+                    {isCopied ? (
+                      <Check size={12} className='text-success' />
+                    ) : (
+                      <Copy size={12} />
+                    )}
+                  </button>
+                </div>
+                <div className='flex items-center gap-3 pt-1'>
+                  <a
+                    href={PAPER_CORRECTION_FORM_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    onClick={handleReportClick}
+                    className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'
+                  >
+                    <ExternalLink size={11} />
+                    Submit correction
+                  </a>
+                  <button
+                    type='button'
+                    onClick={handleReportedToggle}
+                    className={`inline-flex items-center gap-1 text-xs transition ${
+                      isReported
+                        ? 'text-success'
+                        : 'text-stone-400 hover:text-stone-600'
+                    }`}
+                    title={
+                      isReported ? 'Unmark as reported' : 'Mark as reported'
+                    }
+                  >
+                    <CheckCircle
+                      size={12}
+                      className={
+                        isReported
+                          ? 'fill-[var(--success-foreground)] text-[var(--foreground-inverse)]'
+                          : ''
+                      }
+                    />
+                    <span>{isReported ? 'Reported' : 'Mark as reported'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

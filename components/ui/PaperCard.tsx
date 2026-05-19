@@ -16,7 +16,7 @@ import PinButton from './PinButton';
 import { reportedPaperKey } from '@/utils/storageKeys';
 import PaperInfoModal from '@/components/PaperInfoModal';
 import { emit } from '@/utils/eventBus';
-import { PAPER_CORRECTION_FORM_URL } from '@/utils/correctionForms';
+import { copyWorkIdAndOpenCorrectionForm } from '@/utils/correctionForms';
 
 interface PaperCardProps {
   paper: Paper;
@@ -140,10 +140,14 @@ export default function PaperCard({
     }
   };
 
+  // Copy the OpenAlex work id to the clipboard before opening the
+  // correction form so the user can paste it straight into the form's
+  // paper-id field — clicking "Submit correction" used to drop the
+  // user on a generic form with no clue which paper they meant.
   const openOpenAlexForm = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    window.open(PAPER_CORRECTION_FORM_URL, '_blank');
+    void copyWorkIdAndOpenCorrectionForm(workId);
   };
 
   const handleReportedToggle = (e: React.MouseEvent) => {
