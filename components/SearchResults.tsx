@@ -95,9 +95,6 @@ interface Props {
   // router.push directly so the reset side-effects (paperazzi-reset-search)
   // live with the rest of the navigation logic.
   onExitNetwork?: () => void;
-  // Semantic search mode (OpenAlex `search.semantic=`). When true the API
-  // returns ≤50 results sorted by similarity and pagination is suppressed.
-  semantic?: boolean;
   // Network-view fullscreen toggle: collapses both side panels to give the
   // graph the full main column. Wired by PaperazziApp.
   sidebarsCollapsed?: boolean;
@@ -130,7 +127,6 @@ export default function SearchResults({
   onAuthorSearch,
   onClearAuthor,
   onExitNetwork,
-  semantic = false,
   sidebarsCollapsed = false,
   onToggleSidebars,
 }: Props) {
@@ -421,9 +417,6 @@ export default function SearchResults({
             params.set('econIssns', econResolvedIssns.join(','));
         }
 
-        // Semantic mode — server uses search.semantic= and caps at 50 results.
-        if (semantic) params.set('semantic', 'true');
-
         // cachedFetch: in-session memo of identical URLs (page-flip,
         // chip-toggle round-trips, browser back/forward) come back without
         // a network round-trip. Error envelopes (5xx) are returned but
@@ -472,7 +465,6 @@ export default function SearchResults({
     econResolvedIssns,
     journalFilterMode,
     networkId,
-    semantic,
   ]);
 
   // ── Network view fetch ───────────────────────────────────────────
@@ -1234,15 +1226,6 @@ export default function SearchResults({
           <span>
             No results found{isEconActive ? ' in economics journals' : ''}
           </span>
-        ) : semantic ? (
-          <span>
-            Top {totalCount} by semantic similarity
-            {isEconActive ? ' (economics journals)' : ''}
-            <span className='text-app-soft'>
-              {' '}
-              · OpenAlex caps semantic search at 50 results
-            </span>
-          </span>
         ) : (
           <span>
             Showing {(page - 1) * RESULTS_PER_PAGE + 1}–
@@ -1294,7 +1277,7 @@ export default function SearchResults({
         </div>
       )}
 
-      {totalPages > 1 && !semantic && (
+      {totalPages > 1 && (
         <div className='flex items-center justify-center gap-1 pt-4 pb-3 border-t border-app surface-card'>
           <button
             onClick={() => handlePageChange(page - 1)}

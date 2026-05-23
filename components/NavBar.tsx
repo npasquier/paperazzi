@@ -31,10 +31,6 @@ import { openAlexFetch } from '@/utils/openAlexClient';
 // of `@` for authors — single character, visually distinct, rare in
 // research-query text so it doesn't collide with literal content.
 const TRAILING_SHORTCUT_RE = /(?:^|\s)([@#~])([A-Za-z][A-Za-z0-9-]{1,})$/;
-// (The SHORTCUT_ANYWHERE_RE companion regex used to detect "shortcut
-// typed while semantic mode is on" so we could show a hint. The
-// Semantic toggle no longer has a UI affordance, so that hint and its
-// regex went away.)
 
 type Suggestion =
   | {
@@ -66,11 +62,6 @@ function NavBarContent() {
 
   // Local search query state (only for search page)
   const [query, setQuery] = useState('');
-  // Semantic search mode (OpenAlex `search.semantic=`).
-  const [semantic, setSemantic] = useState(false);
-  // Econ-filter activeness, broadcast by PaperazziApp (lives in component
-  // state, not URL params — see `semantic-conflict-econ` event).
-  const [econActive, setEconActive] = useState(false);
   // Stored-data viewer modal — direct trigger in the navbar.
   const [showStorage, setShowStorage] = useState(false);
 
@@ -251,99 +242,24 @@ function NavBarContent() {
     };
   }, []);
 
-  // Compute the list of human-readable conflicts that make semantic search
-  // unavailable. Mirrors OpenAlex's "use keyword when you need filters /
-  // sorting / specific fields" guidance.
-  const semanticConflicts = (() => {
-    const c: string[] = [];
-    if (searchParams.get('journals')) c.push('journal filter');
-    if (searchParams.get('authors')) c.push('author filter');
-    if (searchParams.get('institutions')) c.push('institution filter');
-    if (searchParams.get('type')) c.push('publication type');
-    if (searchParams.get('from') || searchParams.get('to'))
-      c.push('date range');
-    const sort = searchParams.get('sort');
-    if (sort && sort !== 'relevance_score') c.push('custom sort');
-    if (searchParams.get('citing') || searchParams.get('citingAll'))
-      c.push('citation constraint');
-    if (searchParams.get('referencedBy') || searchParams.get('referencesAll'))
-      c.push('reference constraint');
-    if (searchParams.get('network')) c.push('network view');
-    if (econActive) c.push('economics journal whitelist');
-    return c;
-  })();
-  const semanticDisabled = semanticConflicts.length > 0;
-
-  // Listen for econ-filter activeness from PaperazziApp.
-  useEffect(
-    () =>
-      on('semantic-conflict-econ', ({ econActive }) => {
-        setEconActive(!!econActive);
-      }),
-    [],
-  );
-
-  // Seed `query` and `semantic` from the URL when on search page. The
+  // Seed `query` from the URL when on search page. The
   // set-state-in-effect lint rule wants us to derive `query` from
   // `searchParams` directly, but `query` is also user-editable via the
   // input — so it's intrinsically owned by useState and just *seeded*
-  // from the URL on entry / back-forward. Suppress the rule for these
-  // two seeding writes.
-  //
-  // CRITICAL: this effect depends ONLY on `searchParams` (and the
-  // page guard). It must NOT take `semanticDisabled` as a dep — that
-  // value flips whenever the user toggles a filter that conflicts with
-  // semantic mode (e.g. clicking a wide-filter tier/domain pill flips
-  // `econActive` → `semanticDisabled`), and rerunning this effect on
-  // that transition wipes the user's in-progress typing back to the
-  // URL's `q=` value (usually empty). URL-cleanup for the
-  // semantic+conflict case lives in its own effect below.
+  // from the URL on entry / back-forward. Suppress the rule for this
+  // seeding write.
   useEffect(() => {
     if (!isSearchPage) return;
     /* eslint-disable react-hooks/set-state-in-effect */
     setQuery(searchParams.get('q') || '');
-    setSemantic(searchParams.get('semantic') === 'true');
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [searchParams, isSearchPage]);
-
-  // Cleanup: if the URL still has `semantic=true` after a conflict
-  // appeared (e.g. user added a filter while semantic was on), strip
-  // it so the page is in a consistent state. Split out from the seed
-  // effect above so that flipping `semanticDisabled` doesn't reseed
-  // (and wipe) the user's in-progress query text. router.replace
-  // bumps `searchParams`, which re-fires the seed effect — that's
-  // fine, the new URL has the same `q=` so `query` is unchanged.
-  useEffect(() => {
-    if (!isSearchPage) return;
-    const urlSemantic = searchParams.get('semantic') === 'true';
-    if (urlSemantic && semanticDisabled) {
-      const params = new URLSearchParams(Array.from(searchParams.entries()));
-      params.delete('semantic');
-      router.replace(`/search?${params.toString()}`);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSemantic(false);
-    }
-  }, [searchParams, isSearchPage, semanticDisabled, router]);
-
-  // (handleToggleSemantic was removed alongside the Semantic icon
-  // toggle. The `semantic` state still tracks `?semantic=true` from
-  // the URL so deep links keep working and the mode flows through to
-  // the API; there's just no UI affordance to flip it from the
-  // navbar anymore. The semantic-disabled conflict detection
-  // (`semanticDisabled`, `semanticConflicts`) is retained because the
-  // search-syntax (i) popover lists them so a power user with a
-  // semantic deep link can see why the chips/filters they're seeing
-  // would conflict.)
 
   // Debounced suggestion update. Triggers only when the query ends in
   // `@xxx` or `#xxx` (xxx ≥ 2 chars), so the dropdown is fully opt-in to a
   // shortcut prefix and never fires on plain keyword searches.
   //   @ → fetch /authors?search= (300ms debounce, network)
   //   # → filter the static JOURNAL_SHORTCUTS map (no debounce, no network)
-  // Semantic mode disables the dropdown entirely — OpenAlex's semantic
-  // endpoint expects a bare concept query, so author/journal shortcuts
-  // would defeat the point. Users can still *type* `@x` or `#y`; those
-  // characters just stay in the query as literal text.
   // Fetch one page of mention suggestions from OpenAlex. Handles both
   // /authors (kind='author') and /institutions (kind='institution')
   // because they share an identical paged-response shape; only the
@@ -437,10 +353,6 @@ function NavBarContent() {
       setMentionKind(null);
     };
 
-    if (semantic) {
-      resetAll();
-      return;
-    }
     const m = query.match(TRAILING_SHORTCUT_RE);
     if (!m) {
       resetAll();
@@ -514,7 +426,7 @@ function NavBarContent() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [query, semantic]);
+  }, [query]);
 
   // Load the next page of mention suggestions and append. Invoked by
   // the scroll handler on the dropdown when the list nears its bottom
@@ -683,78 +595,61 @@ function NavBarContent() {
       // On search page: dispatch the full chip state (authors,
       // journals, institutions) and let PaperazziApp's listener
       // resolve any leftover @text / #text tokens before pushing the
-      // URL. In semantic mode we skip the shortcut machinery
-      // entirely — the OpenAlex semantic endpoint expects a bare
-      // concept query, so we send the raw text untouched and zero
-      // chips.
+      // URL.
       emit('navbar-search', {
         query: query.trim(),
-        semantic,
-        chipAuthors: semantic
-          ? []
-          : chips.map((c) => ({ id: c.id, name: c.name })),
-        chipJournals: semantic
-          ? []
-          : journalChips.map((j) => ({ issn: j.issn, name: j.name })),
-        chipInstitutions: semantic
-          ? []
-          : institutionChips.map((i) => ({
-              id: i.id,
-              display_name: i.display_name,
-            })),
+        chipAuthors: chips.map((c) => ({ id: c.id, name: c.name })),
+        chipJournals: journalChips.map((j) => ({ issn: j.issn, name: j.name })),
+        chipInstitutions: institutionChips.map((i) => ({
+          id: i.id,
+          display_name: i.display_name,
+        })),
       });
     } else {
       // Off search page: build the URL ourselves. Resolve @ tokens via API
-      // and # tokens via the static map, then assemble the params — unless
-      // semantic mode is on, in which case the query goes through as-is
-      // with no filter resolution. `~institution` shortcuts don't have a
-      // static resolver yet, so off-page we just forward the existing
-      // `institutionChips` (set via the dropdown autocomplete).
+      // and # tokens via the static map, then assemble the params.
+      // `~institution` shortcuts don't have a static resolver yet, so
+      // off-page we just forward the existing `institutionChips` (set via
+      // the dropdown autocomplete).
       if (
         query.trim() ||
-        (!semantic &&
-          (chips.length > 0 ||
-            journalChips.length > 0 ||
-            institutionChips.length > 0))
+        chips.length > 0 ||
+        journalChips.length > 0 ||
+        institutionChips.length > 0
       ) {
         const params = new URLSearchParams();
 
-        if (semantic) {
-          if (query.trim()) params.set('q', query.trim());
-          params.set('semantic', 'true');
-        } else {
-          const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
-            query.trim(),
+        const { cleanQuery, mentions, journalAbbrevs } = extractMentions(
+          query.trim(),
+        );
+        if (cleanQuery) params.set('q', cleanQuery);
+
+        const allAuthorIds = chips.map((c) => c.id);
+        if (mentions.length > 0) {
+          const { resolved } = await resolveMentions(mentions);
+          for (const r of resolved)
+            if (!allAuthorIds.includes(r.id)) allAuthorIds.push(r.id);
+        }
+        if (allAuthorIds.length > 0) {
+          params.set('authors', allAuthorIds.join(','));
+        }
+
+        const allJournalIssns = journalChips.map((j) => j.issn);
+        if (journalAbbrevs.length > 0) {
+          const { resolved } = resolveJournalShortcuts(journalAbbrevs);
+          for (const r of resolved)
+            if (!allJournalIssns.includes(r.issn))
+              allJournalIssns.push(r.issn);
+        }
+        if (allJournalIssns.length > 0) {
+          params.set('journals', allJournalIssns.join(','));
+        }
+
+        if (institutionChips.length > 0) {
+          params.set(
+            'institutions',
+            institutionChips.map((i) => i.id).join(','),
           );
-          if (cleanQuery) params.set('q', cleanQuery);
-
-          const allAuthorIds = chips.map((c) => c.id);
-          if (mentions.length > 0) {
-            const { resolved } = await resolveMentions(mentions);
-            for (const r of resolved)
-              if (!allAuthorIds.includes(r.id)) allAuthorIds.push(r.id);
-          }
-          if (allAuthorIds.length > 0) {
-            params.set('authors', allAuthorIds.join(','));
-          }
-
-          const allJournalIssns = journalChips.map((j) => j.issn);
-          if (journalAbbrevs.length > 0) {
-            const { resolved } = resolveJournalShortcuts(journalAbbrevs);
-            for (const r of resolved)
-              if (!allJournalIssns.includes(r.issn))
-                allJournalIssns.push(r.issn);
-          }
-          if (allJournalIssns.length > 0) {
-            params.set('journals', allJournalIssns.join(','));
-          }
-
-          if (institutionChips.length > 0) {
-            params.set(
-              'institutions',
-              institutionChips.map((i) => i.id).join(','),
-            );
-          }
         }
 
         params.set('page', '1');
@@ -1020,9 +915,7 @@ function NavBarContent() {
                       journalChips.length > 0 ||
                       institutionChips.length > 0
                         ? ''
-                        : semantic
-                          ? 'Describe a concept...'
-                          : 'Search papers, @authors, #journals, ~institutions…'
+                        : 'Search papers, @authors, #journals, ~institutions…'
                     }
                     className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
                   />
@@ -1202,12 +1095,6 @@ function NavBarContent() {
                     submit-glass is sufficient signal. Discard is still
                     reachable via the event bus if we later want to wire
                     it to a context-menu / keyboard shortcut.) */}
-
-                {/* (The semantic-mode shortcut hint was removed along
-                    with the Semantic toggle in the navbar. The
-                    semantic= URL param still flows through to the API
-                    if set, but there's no UI affordance to enable it
-                    here anymore.) */}
               </div>
             </div>
           </>

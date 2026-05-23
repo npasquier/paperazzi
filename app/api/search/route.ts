@@ -79,13 +79,6 @@ export async function GET(req: NextRequest) {
     .split(',')
     .filter(Boolean);
 
-  // Semantic mode (OpenAlex `search.semantic=` beta endpoint).
-  // Constraints: max 50 results per query, 1 req/s rate limit, single call.
-  // Only applies to the plain "find papers about X" path; graph traversals
-  // (referencedBy / citingAll / referencesAll / citing) keep the keyword
-  // path.
-  const semantic = searchParams.get('semantic') === 'true';
-
   // Econ filter — the wide-mode whitelist of allowed ISSNs. The client is
   // responsible for resolving whatever it has (tiers + domains, an
   // ISSN-based preset like Top 5, etc.) into this final ISSN list using
@@ -128,7 +121,6 @@ export async function GET(req: NextRequest) {
     sort,
     page,
     perPage,
-    semantic,
     issnBatches,
     getKey,
   };

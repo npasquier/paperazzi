@@ -111,9 +111,6 @@ function PaperazziAppContent() {
   const [page, setPage] = useState(1);
   // Focal-paper id for the network view; null when not in network mode.
   const [networkId, setNetworkId] = useState<string | null>(null);
-  // Semantic search mode (OpenAlex `search.semantic=`); URL-synced via
-  // `?semantic=true`. Forwarded to /api/search and propagated to the navbar.
-  const [semantic, setSemantic] = useState(false);
 
   // Listen for paper-reported events to show celebration
   useEffect(
@@ -154,16 +151,6 @@ function PaperazziAppContent() {
       for (const off of offs) off();
     };
   }, []);
-
-  // Broadcast econ-filter activeness for the navbar's semantic toggle.
-  // The econ filter lives in component state (not URL-synced), so the navbar
-  // can't detect it from useSearchParams alone — this event fills that gap.
-  useEffect(() => {
-    const econActive =
-      filters.journalFilterMode === 'wide' &&
-      filters.econFilter?.enabled === true;
-    emit('semantic-conflict-econ', { econActive });
-  }, [filters.journalFilterMode, filters.econFilter]);
 
   // Keep the navbar's chip facade in sync with filters.authors /
   // filters.journals. syncFromURL already broadcasts these when URL params
@@ -266,7 +253,6 @@ function PaperazziAppContent() {
       const referencesAll =
         searchParams.get('referencesAll')?.split(',').filter(Boolean) || [];
       const network = searchParams.get('network') || '';
-      const isSemantic = searchParams.get('semantic') === 'true';
 
       const journals = await mapIssnsToJournals(journalIssns);
 
@@ -359,7 +345,6 @@ function PaperazziAppContent() {
       setSearchQuery(q);
       setPage(p);
       setNetworkId(network || null);
-      setSemantic(isSemantic);
 
       // Broadcast the resolved author list (with display names) so the
       // navbar's chip facade can render the same authors that are actually
@@ -378,19 +363,13 @@ function PaperazziAppContent() {
   // identity only changes when `filters` or `searchParams` actually move.
   const buildURLParams = useCallback((
     overrides: Partial<
-      Filters & { query?: string; page?: number; semantic?: boolean }
+      Filters & { query?: string; page?: number }
     > = {},
   ) => {
     const params = new URLSearchParams();
 
     const q = overrides.query ?? (searchParams.get('q') || '');
     if (q) params.set('q', q);
-
-    // Preserve semantic mode across re-searches unless explicitly overridden.
-    const sem =
-      overrides.semantic ??
-      (searchParams.get('semantic') === 'true');
-    if (sem) params.set('semantic', 'true');
 
     const journals = overrides.journals ?? filters.journals;
     if (journals.length) {
@@ -453,25 +432,16 @@ function PaperazziAppContent() {
     // of merging on top of the existing filters.
     const handleNavbarSearch = async ({
       query: rawQuery,
-      semantic: isSemantic,
       chipAuthors,
       chipJournals,
       chipInstitutions,
     }: {
       query: string;
-      semantic: boolean;
       chipAuthors: Array<{ id: string; name?: string }>;
       chipJournals: Array<{ issn: string; name?: string }>;
       chipInstitutions: Array<{ id: string; display_name: string }>;
     }) => {
-      // In semantic mode the @/# shortcuts are inert — OpenAlex's semantic
-      // endpoint expects a bare concept query, so we skip extraction and
-      // resolution and let the raw text through. NavBar already sends
-      // empty chip arrays in this case; this guard is the server-side
-      // mirror so the literal `@tirole` tokens remain part of the query.
-      const { cleanQuery, mentions, journalAbbrevs } = isSemantic
-        ? { cleanQuery: rawQuery, mentions: [], journalAbbrevs: [] }
-        : extractMentions(rawQuery);
+      const { cleanQuery, mentions, journalAbbrevs } = extractMentions(rawQuery);
 
       const seenAuthors = new Set(chipAuthors.map((a) => a.id));
       const finalAuthors: SelectedAuthor[] = chipAuthors.map((a) => ({
@@ -517,8 +487,6 @@ function PaperazziAppContent() {
       const params = buildURLParams({
         query: cleanQuery,
         page: 1,
-        // Honor the explicit semantic flag from the navbar (toggle pill).
-        semantic: isSemantic,
         // Chips are always authoritative — even when empty (the user may
         // have just removed all of them).
         authors: finalAuthors,
@@ -851,7 +819,6 @@ function PaperazziAppContent() {
             journalFilterMode={searchFilters.journalFilterMode}
             networkId={networkId}
             onPresetTile={handlePresetTile}
-            semantic={semantic}
             sidebarsCollapsed={sidebarsCollapsed}
             onToggleSidebars={handleToggleSidebars}
           />

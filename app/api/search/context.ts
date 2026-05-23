@@ -21,7 +21,6 @@ export interface SearchContext {
   sort: string;
   page: number;
   perPage: number;
-  semantic: boolean;
   /**
    * Either the chunked ECON whitelist (when wide econ filter is active and
    * no manual journals override it), or `null` to mean "no econ batching".

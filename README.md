@@ -2,7 +2,7 @@
 
 > Find papers that matter — a focused, citation-aware search tool for economics literature.
 
-Paperazzi is a web app that searches academic papers via the [OpenAlex](https://openalex.org/) API and adds a research workflow on top: editable journal ranking schemes, keyword and semantic search, forward + backward citation exploration, a year × log-citations citation network, and a per-collection pin sidebar with notes, keywords, and import/export. It also ships an [MCP](https://modelcontextprotocol.io/) server so LLM clients can drive the same ranking-aware search.
+Paperazzi is a web app that searches academic papers via the [OpenAlex](https://openalex.org/) API and adds a research workflow on top: editable journal ranking schemes, keyword search, forward + backward citation exploration, a year × log-citations citation network, and a per-collection pin sidebar with notes, keywords, and import/export. It also ships an [MCP](https://modelcontextprotocol.io/) server so LLM clients can drive the same ranking-aware search.
 
 **Link to the app:** <https://paperazzi.vercel.app>
 
@@ -27,7 +27,7 @@ Paperazzi is a web app that searches academic papers via the [OpenAlex](https://
 ## Features
 
 - **Ranking-aware journal filtering.** Start with the built-in CNRS economics scheme, or fork, edit, import, export, and replace ranking schemes on `/rankings`. Journal filtering supports `Wide`, `Specific`, and `Off` modes plus saved journal filters such as `Top 5`.
-- **Search bar shortcuts and semantic mode.** Type `@`, `#`, or `~` in the query bar to summon author / journal / institution autocomplete; `@name` and `#abbrev` also resolve directly on submit. Switch to Semantic search for concept-based retrieval when no filter conflicts are active.
+- **Search bar shortcuts.** Type `@`, `#`, or `~` in the query bar to summon author / journal / institution autocomplete; `@name` and `#abbrev` also resolve directly on submit. The rest of the text is sent to OpenAlex's keyword search (supports Boolean operators, quoted phrases, wildcards, and proximity).
 - **Forward + backward citation exploration.** From any result, search papers that cite it, papers it references, or visualize both as a network in year × log-citations space.
 - **Pin sidebar with collections.** Pin papers into named libraries (e.g. *Job-market paper*, *Lit review – pricing*), drag-and-drop into colour-coded groups, and switch between collections without losing state.
 - **Per-paper notes & keywords.** Annotate pinned papers with a free-text note and up to six tags; both round-trip through export/import.
@@ -145,7 +145,7 @@ paperazzi/
 │   ├── OnboardingOverlay.tsx
 │   ├── ErrorBoundary.tsx
 │   ├── EmptyState.tsx
-│   ├── SearchSyntaxHelp.tsx   # Keyword / semantic syntax + shortcut help
+│   ├── SearchSyntaxHelp.tsx   # Keyword syntax + shortcut help
 │   ├── rankings/
 │   │   └── RankingsEditor.tsx
 │   └── ui/                    # Reusable building blocks
@@ -227,7 +227,7 @@ Persistence rules of thumb: anything user-authored (pins, groups, notes, keyword
 
 Paperazzi exposes a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint at `/api/mcp` so any MCP-capable LLM client can run the same ranking-aware search the web app uses. Two tools are registered:
 
-- `paperazzi_search` — search peer-reviewed economics/management papers with CNRS domain, tier, journal-code, and Top-5 filters, keyword or semantic mode, and year/sort controls. Returns ranked results plus a link that reopens the query in the Paperazzi UI.
+- `paperazzi_search` — search peer-reviewed economics/management papers with CNRS domain, tier, journal-code, and Top-5 filters, plus year/sort controls. Returns ranked results plus a link that reopens the query in the Paperazzi UI.
 - `paperazzi_list_journals` — list the journals Paperazzi knows about (short code, CNRS domain, tier, ISSN), for discovering exact names/codes before filtering.
 
 The endpoint is open (no token) and reuses the `OPENALEX_KEYS` rotation pool. Full setup — including ready-to-paste configs for Claude Desktop, Cursor, and others — lives in [MCP.md](./MCP.md).

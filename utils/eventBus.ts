@@ -68,7 +68,6 @@ export type AppEvents = {
    */
   'navbar-search': {
     query: string;
-    semantic: boolean;
     chipAuthors: Array<{ id: string; name?: string }>;
     chipJournals: Array<{ issn: string; name?: string }>;
     chipInstitutions: Array<{ id: string; display_name: string }>;
@@ -79,13 +78,6 @@ export type AppEvents = {
    * navbar itself handles the URL navigation.
    */
   'paperazzi-reset-search': undefined;
-  /**
-   * Broadcast whenever the wide-mode econ filter toggles. The navbar uses
-   * this to decide whether the Semantic toggle should be disabled, since
-   * the econ filter lives in component state (not URL params) and the
-   * navbar has no other way to detect it.
-   */
-  'semantic-conflict-econ': { econActive: boolean };
   /**
    * True iff the user has pending filter changes that haven't been
    * committed yet — i.e. they edited the FilterPanel without hitting

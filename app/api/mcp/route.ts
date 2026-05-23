@@ -383,7 +383,6 @@ function buildSearchUrl(args: {
   issns: string[];
   year_from?: number;
   year_to?: number;
-  mode: 'keyword' | 'semantic';
   limit: number;
   sort: string;
 }): URL {
@@ -393,7 +392,6 @@ function buildSearchUrl(args: {
   if (args.year_to) params.set('to', String(args.year_to));
   params.set('perPage', String(args.limit));
   params.set('sort', args.sort);
-  if (args.mode === 'semantic') params.set('semantic', 'true');
   if (args.issns.length) {
     params.set('econEnabled', 'true');
     params.set('econIssns', args.issns.join(','));
@@ -413,7 +411,6 @@ function buildShareUrl(args: {
   issns: string[];
   year_from?: number;
   year_to?: number;
-  mode: 'keyword' | 'semantic';
 }): string {
   const base =
     process.env.NEXT_PUBLIC_BASE_URL ||
@@ -423,7 +420,6 @@ function buildShareUrl(args: {
   if (args.query) p.set('q', args.query);
   if (args.year_from) p.set('from', String(args.year_from));
   if (args.year_to) p.set('to', String(args.year_to));
-  if (args.mode === 'semantic') p.set('semantic', 'true');
   if (args.issns.length) p.set('journals', args.issns.join(','));
   return `${base}/search?${p.toString()}`;
 }
@@ -529,15 +525,6 @@ const handler = createMcpHandler(
           .max(2100)
           .optional()
           .describe('Latest publication year (inclusive).'),
-        mode: z
-          .enum(['keyword', 'semantic'])
-          .optional()
-          .describe(
-            '`keyword` (default) is OpenAlex standard ranked search. ' +
-              '`semantic` uses concept-based retrieval — better for ' +
-              'vague topic questions, but capped at 50 results and ' +
-              'rate-limited to ~1 req/s upstream.',
-          ),
         limit: z
           .number()
           .int()
@@ -545,8 +532,7 @@ const handler = createMcpHandler(
           .max(50)
           .optional()
           .describe(
-            'Maximum number of papers to return (1–50, default 20). ' +
-              'Semantic mode is hard-capped at 50 by OpenAlex.',
+            'Maximum number of papers to return (1–50, default 20).',
           ),
         sort: z
           .enum(['relevance', 'citations', 'date'])
@@ -562,7 +548,6 @@ const handler = createMcpHandler(
           const resolved = await resolveIssns(args);
           const { issns, unmatched_journal_names, recognized_aliases } =
             resolved;
-          const mode = args.mode ?? 'keyword';
           const limit = args.limit ?? 20;
           const sortStr = mapSort(args.sort);
 
@@ -612,7 +597,6 @@ const handler = createMcpHandler(
             issns,
             year_from: args.year_from,
             year_to: args.year_to,
-            mode,
             limit,
             sort: sortStr,
           });
@@ -654,7 +638,6 @@ const handler = createMcpHandler(
             issns,
             year_from: args.year_from,
             year_to: args.year_to,
-            mode,
           });
 
           // Markdown summary the model will paraphrase. Kept compact

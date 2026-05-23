@@ -3,8 +3,7 @@
 Paperazzi exposes an [MCP](https://modelcontextprotocol.io/) endpoint at
 `/api/mcp` so any MCP-capable LLM client can search peer-reviewed
 economics papers through the same engine that powers the web app —
-ranking-aware journal filtering, CNRS tier/domain whitelists, semantic
-search, the lot.
+ranking-aware journal filtering, CNRS tier/domain whitelists, the lot.
 
 The endpoint is **open**: no token, no account. The deployed URL is:
 
@@ -28,7 +27,6 @@ paperazzi_search({
   top5_only?:    boolean,                        // AER, ECMA, JPE, QJE, ReStud
   year_from?:    number,
   year_to?:      number,
-  mode?:         "keyword" | "semantic",         // default keyword
   limit?:        number,                         // 1..50, default 20
   sort?:         "relevance" | "citations" | "date",
 })

@@ -1,17 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Info, Sparkles } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { JOURNAL_SHORTCUTS_LIST } from '@/data/journalAbbreviations';
 
 interface SearchSyntaxHelpProps {
-  /** Render the Semantic-mode docs instead of Keyword. */
-  semantic?: boolean;
-  /**
-   * Active filter / sort settings that block Semantic mode. When non-empty,
-   * we surface a banner inside the Keyword popover explaining why Semantic
-   * is currently disabled. Caller computes this list (see NavBar).
-   */
-  conflicts?: string[];
   /**
    * Override the trigger button's className. By default the button is
    * absolutely positioned at the right edge of its containing relative
@@ -25,12 +17,9 @@ interface SearchSyntaxHelpProps {
  * Subtle (i)-icon popover anchored to the search input. Click-outside / Esc
  * closes. Uses position: fixed because the layout shell has overflow-hidden,
  * which would otherwise clip an absolutely-positioned popover hanging below
- * the navbar. The popover content is split into two views (Keyword vs.
- * Semantic) since the syntax that applies to each is genuinely different.
+ * the navbar.
  */
 export default function SearchSyntaxHelp({
-  semantic = false,
-  conflicts = [],
   buttonClassName,
 }: SearchSyntaxHelpProps) {
   const [open, setOpen] = useState(false);
@@ -111,9 +100,7 @@ export default function SearchSyntaxHelp({
           style={{ top: coords.top, right: coords.right }}
         >
           <div className='flex items-center justify-between px-4 pt-4 pb-2 border-b border-app flex-shrink-0'>
-            <span className='font-medium text-app'>
-              {semantic ? 'Semantic search (Beta)' : 'Search syntax'}
-            </span>
+            <span className='font-medium text-app'>Search syntax</span>
             <a
               href='https://docs.openalex.org/how-to-use-the-api/get-lists-of-entities/search-entities'
               target='_blank'
@@ -124,72 +111,7 @@ export default function SearchSyntaxHelp({
             </a>
           </div>
 
-          {semantic ? (
-            <div className='space-y-3 text-app-muted overflow-y-auto overscroll-contain px-4 py-3'>
-              <p>
-                Describe a concept in natural language — even a sentence or
-                paragraph. Results are returned by similarity, so conceptually
-                related work surfaces even when it uses different vocabulary.
-              </p>
-              <pre className='surface-subtle rounded px-2 py-1 text-xs overflow-x-auto whitespace-pre-wrap'>
-{`how do firms respond to minimum wage increases in low-income labor markets`}
-              </pre>
-              <ul className='list-disc pl-5 space-y-1 text-xs'>
-                <li>
-                  <code className='surface-subtle rounded px-1 text-xs'>
-                    @
-                  </code>{' '}
-                  and{' '}
-                  <code className='surface-subtle rounded px-1 text-xs'>
-                    #
-                  </code>{' '}
-                  shortcuts are inactive — author/journal filters are not
-                  supported by this endpoint, and the tokens stay as
-                  literal text in the query.
-                </li>
-                <li>
-                  Boolean operators, wildcards, and quotes don&apos;t apply here.
-                </li>
-                <li>
-                  Capped at <strong>50 results</strong> per query — pagination
-                  is disabled.
-                </li>
-                <li>
-                  Filters (year, journal, type, etc.) and citation / reference
-                  constraints <strong>disable</strong> Semantic — the
-                  endpoint expects a bare concept query. Clear them to use
-                  Semantic, or stay on Keyword if you need filtering.
-                </li>
-                <li>
-                  Rate-limited to <strong>1 request/second</strong> upstream.
-                </li>
-              </ul>
-              <p className='text-xs text-app-soft pt-1 border-t border-app'>
-                Switch back to Keyword for exact-term search, full filtering,
-                and unlimited pagination.
-              </p>
-            </div>
-          ) : (
           <div className='space-y-4 text-app-muted overflow-y-auto overscroll-contain px-4 py-3'>
-            {conflicts.length > 0 && (
-              <div className='banner-info rounded p-2 text-xs flex gap-2'>
-                <Sparkles
-                  size={14}
-                  className='flex-shrink-0 mt-0.5 text-accent-strong'
-                />
-                <div>
-                  <div className='font-medium text-app mb-0.5'>
-                    Semantic search is disabled
-                  </div>
-                  <p>
-                    OpenAlex&apos;s semantic endpoint expects a bare concept query.
-                    Currently active: {conflicts.join(', ')}. Clear them to
-                    re-enable Semantic.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* ─── SHORTCUTS group ─────────────────────────────────── */}
             <div className='space-y-3'>
               <div className='text-[10px] uppercase tracking-wider text-app-soft font-semibold'>
@@ -442,7 +364,6 @@ export default function SearchSyntaxHelp({
               by default — a blend of text similarity and citation count.
             </p>
           </div>
-          )}
         </div>
       )}
     </>

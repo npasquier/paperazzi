@@ -1816,7 +1816,7 @@ export default function HelpPage() {
                 can run the same search you use here. The model gets a single
                 tool, <code className='rounded surface-muted px-1 text-xs font-mono text-stone-700'>paperazzi_search</code>,
                 with arguments for query, CNRS tiers and domains, top-5
-                shortcut, year range, semantic mode, sort, and limit.
+                shortcut, year range, sort, and limit.
               </p>
             }
             art={<McpArtwork />}
