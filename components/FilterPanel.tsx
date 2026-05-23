@@ -61,56 +61,74 @@ export default function FilterPanel({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['journals']),
   );
-  // Load presets from localStorage on mount. Both reads go through
-  // `migrate*` helpers so legacy entries (Journal.category: number,
-  // econFilter.categories: number[]) are coerced to the new tier-string
-  // shape — saved presets survive the schema migration.
-  const [presets, setPresets] = useState<FilterPreset[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.filterPresets);
-      if (!saved) return [];
-      const parsed: unknown = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-      return (parsed as unknown[])
-        .map((p): FilterPreset | null => {
-          if (!p || typeof p !== 'object') return null;
-          const o = p as Record<string, unknown>;
-          if (typeof o.id !== 'string' || typeof o.name !== 'string')
-            return null;
-          return {
-            id: o.id,
-            name: o.name,
-            query: typeof o.query === 'string' ? o.query : '',
-            filters: migrateFilters(o.filters),
-          };
-        })
-        .filter((p): p is FilterPreset => p !== null);
-    } catch {
-      return [];
-    }
-  });
+  // Saved searches + journal presets. These are loaded from localStorage
+  // in a post-mount effect (below) rather than a lazy useState initializer:
+  // FilterPanel is part of the server-rendered shell, so reading storage
+  // during the initial render made the server (empty) and client (saved)
+  // first renders disagree — a hydration mismatch that showed up in the
+  // always-visible "Saved searches (N)" count and the journal-presets list.
+  // Starting empty keeps both first renders identical; the effect fills
+  // them a tick later. Both reads go through the `migrate*` helpers so
+  // legacy entries (Journal.category: number, econFilter.categories:
+  // number[]) are coerced to the new tier-string shape.
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
 
   // ── Saved journal filters (Wide + Manual snapshot) ───────────────────
   const [journalPresets, setJournalPresets] = useState<JournalFilterPreset[]>(
-    () => {
-      if (typeof window === 'undefined') return [];
-      try {
-        const saved = localStorage.getItem(STORAGE_KEYS.journalPresets);
-        if (!saved) return [];
-        const parsed: unknown = JSON.parse(saved);
-        if (!Array.isArray(parsed)) return [];
-        return (parsed as unknown[])
-          .map((p) => migrateJournalFilterPreset(p))
-          .filter((p): p is JournalFilterPreset => p !== null);
-      } catch {
-        return [];
-      }
-    },
+    [],
   );
+
+  // Hydrate both preset lists from localStorage after mount (see the note
+  // on the `presets` declaration above for why this isn't a lazy
+  // initializer). Runs once.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.filterPresets);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setPresets(
+            (parsed as unknown[])
+              .map((p): FilterPreset | null => {
+                if (!p || typeof p !== 'object') return null;
+                const o = p as Record<string, unknown>;
+                if (typeof o.id !== 'string' || typeof o.name !== 'string')
+                  return null;
+                return {
+                  id: o.id,
+                  name: o.name,
+                  query: typeof o.query === 'string' ? o.query : '',
+                  filters: migrateFilters(o.filters),
+                };
+              })
+              .filter((p): p is FilterPreset => p !== null),
+          );
+        }
+      }
+    } catch {
+      // Corrupt entry — leave presets empty.
+    }
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.journalPresets);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setJournalPresets(
+            (parsed as unknown[])
+              .map((p) => migrateJournalFilterPreset(p))
+              .filter((p): p is JournalFilterPreset => p !== null),
+          );
+        }
+      }
+    } catch {
+      // Corrupt entry — leave journal presets empty.
+    }
+  }, []);
+
   const [showSaveJournalModal, setShowSaveJournalModal] = useState(false);
   const [journalPresetName, setJournalPresetName] = useState('');
   const [activeJournalPresetId, setActiveJournalPresetId] = useState<

@@ -532,7 +532,7 @@ export default function PaperCard({
                   title={
                     isAbstractExpanded ? 'Hide abstract' : 'Show abstract'
                   }
-                  className='inline-flex items-center gap-1 px-2.5 py-1 banner-info rounded-lg text-accent-strong transition text-xs font-medium whitespace-nowrap'
+                  className='inline-flex items-center gap-1 px-2.5 py-1 button-secondary rounded-lg transition text-xs font-medium whitespace-nowrap'
                 >
                   <ChevronDown
                     size={12}
@@ -544,14 +544,14 @@ export default function PaperCard({
                 </button>
               ) : (
                 // No abstract on OpenAlex → keep the same button slot
-                // but turn it into a contribution prompt. Subdued
-                // styling (italic, lighter text) signals "missing"
-                // while the flag icon links the affordance to the
-                // existing report flow.
+                // but turn it into a contribution prompt. Green
+                // (banner-success) sets it apart from the blue
+                // "Abstract" toggle and frames adding one as a positive
+                // contribution rather than a missing-data warning.
                 <button
                   onClick={openReportPanel}
                   title='No abstract on OpenAlex — help add one'
-                  className='inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition text-xs font-medium whitespace-nowrap button-secondary text-stone-500 italic'
+                  className='inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition text-xs font-medium whitespace-nowrap banner-info text-accent-strong'
                 >
                   <Flag size={12} />
                   Add abstract
