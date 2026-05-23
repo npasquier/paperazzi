@@ -46,13 +46,29 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const sort = searchParams.get('sort') || 'relevance_score';
-  const page = Number(searchParams.get('page') || 1);
+  // Parse a positive-integer query param, clamping to [min, max] and
+  // falling back to `fallback` for anything non-finite (e.g. ?page=abc,
+  // which Number() turns into NaN — that used to flow straight into the
+  // OpenAlex URL and produce an opaque upstream 400).
+  const clampInt = (
+    raw: string | null,
+    fallback: number,
+    min: number,
+    max: number,
+  ): number => {
+    // Absent / empty param → use the fallback. This guard matters because
+    // Number(null) and Number('') are both 0 (not NaN), so without it an
+    // omitted `perPage` would clamp up to `min` (1) instead of defaulting
+    // to 20 — which silently capped the results list at one paper a page.
+    if (raw === null || raw.trim() === '') return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.floor(n)));
+  };
+  const page = clampInt(searchParams.get('page'), 1, 1, 1_000_000);
   // perPage: 1..100, default 20. Used by graph mode (100) to fit more dots
-  // in a single round-trip. Maxvalue by OpenAlex is 100.
-  const perPage = Math.min(
-    100,
-    Math.max(1, Number(searchParams.get('perPage') || 20)),
-  );
+  // in a single round-trip. Max value by OpenAlex is 100.
+  const perPage = clampInt(searchParams.get('perPage'), 20, 1, 100);
 
   const citing = searchParams.get('citing');
   const citingAll = (searchParams.get('citingAll') || '')
@@ -125,8 +141,17 @@ export async function GET(req: NextRequest) {
     return await handleRegular(ctx, citing);
   } catch (error) {
     console.error('Search API error:', error);
-    const errorMessage =
+    const rawMessage =
       error instanceof Error ? error.message : 'Unknown error';
+    // Defense-in-depth: this message is returned to the client, so scrub
+    // any api_key=… that a current or future code path might embed in an
+    // error before it leaves the server. fetch.ts already keeps the key
+    // off the URL it throws, but this guarantees the invariant at the
+    // boundary regardless of upstream changes.
+    const errorMessage = rawMessage.replace(
+      /api_key=[^&\s]+/gi,
+      'api_key=REDACTED',
+    );
     const isServiceUnavailable = errorMessage.includes(
       'temporarily unavailable',
     );

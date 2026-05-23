@@ -1,12 +1,18 @@
-export default function buildAbstract(abstractIndex: any): string {
-  if (!abstractIndex) return '';
+// Accepts `unknown` because the inverted index comes straight from
+// untyped OpenAlex JSON (the OpenAlexWork type stores it as `unknown`).
+// We narrow defensively rather than trust the shape.
+export default function buildAbstract(abstractIndex: unknown): string {
+  if (!abstractIndex || typeof abstractIndex !== 'object') return '';
 
   const words: string[] = [];
-  Object.entries(abstractIndex).forEach(([word, positions]: any) => {
-    positions.forEach((pos: number) => {
-      words[pos] = word;
-    });
-  });
+  for (const [word, positions] of Object.entries(
+    abstractIndex as Record<string, unknown>,
+  )) {
+    if (!Array.isArray(positions)) continue;
+    for (const pos of positions) {
+      if (typeof pos === 'number') words[pos] = word;
+    }
+  }
 
   return cleanAbstract(words.join(' '));
 }

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper } from '@/types/interfaces';
+import { normalizeId } from '@/utils/normalizeId';
 import { Maximize2, Plus, Minus, ExternalLink, FileText } from 'lucide-react';
 import PinButton from './PinButton';
 import PaperInfoModal from '@/components/PaperInfoModal';
@@ -33,10 +34,6 @@ const MAX_K = 8;
 const WHEEL_ZOOM_RATE = 0.0012;
 // Step size for explicit +/- buttons.
 const BUTTON_ZOOM_FACTOR = 1.3;
-
-function normalizeId(id: string): string {
-  return id.replace('https://openalex.org/', '');
-}
 
 function paperLink(p: Paper): string {
   if (p.doi) {

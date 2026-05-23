@@ -9,6 +9,13 @@ import EmptyState, { PresetTileId } from './EmptyState';
 import { reportedAuthorKey } from '@/utils/storageKeys';
 import { cachedFetch } from '@/utils/searchCache';
 import { emit, on } from '@/utils/eventBus';
+import { normalizeId } from '@/utils/normalizeId';
+import cleanHtml from '@/utils/cleanHtml';
+import {
+  openAlexFetch,
+  withMailto,
+  fetchWorkAsPaper,
+} from '@/utils/openAlexClient';
 import { AUTHOR_CORRECTION_FORM_URL } from '@/utils/correctionForms';
 import {
   resolveIssns,
@@ -20,7 +27,6 @@ import {
   Library,
   BookOpen,
   User,
-  Info,
   Copy,
   Check,
   ExternalLink,
@@ -30,12 +36,20 @@ import {
   Flag,
 } from 'lucide-react';
 
-function cleanHtml(text: string | null | undefined): string {
-  if (!text) return '';
-  return text
-    .replace(/<[^>]*>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+// Shape of the author summary card built from OpenAlex /authors/{id}.
+// Only the fields the panel actually reads — everything optional because
+// OpenAlex omits stats for thinly-indexed authors.
+interface AuthorInfo {
+  id: string;
+  display_name: string;
+  orcid?: string;
+  works_count?: number;
+  cited_by_count?: number;
+  h_index?: number;
+  i10_index?: number;
+  last_known_institution?: string;
+  last_known_institution_country?: string;
+  affiliations: Array<{ institution?: { display_name?: string } }>;
 }
 
 interface Props {
@@ -136,8 +150,9 @@ export default function SearchResults({
   const [referencesAllPapers, setReferencesAllPapers] = useState<Paper[]>([]);
   const [loadingReferencesAllPapers, setLoadingReferencesAllPapers] =
     useState(false);
-  const [authorInfo, setAuthorInfo] = useState<any>(null);
-  const [loadingAuthorInfo, setLoadingAuthorInfo] = useState(false);
+  const [authorInfo, setAuthorInfo] = useState<AuthorInfo | null>(null);
+  // Only the setter is used (the loading value isn't surfaced in the UI).
+  const [, setLoadingAuthorInfo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState<string>(
     'Searching OpenAlex...',
@@ -214,7 +229,7 @@ export default function SearchResults({
   useEffect(() => {
     const offs = [
       on('paper-citing-click', ({ paper }) => {
-        const paperId = paper.id.replace('https://openalex.org/', '');
+        const paperId = normalizeId(paper.id);
         const params = new URLSearchParams();
         params.set('citing', paperId);
         params.set('sort', 'cited_by_count:desc');
@@ -222,7 +237,7 @@ export default function SearchResults({
         router.push(`/search?${params.toString()}`);
       }),
       on('paper-refs-click', ({ paper }) => {
-        const paperId = paper.id.replace('https://openalex.org/', '');
+        const paperId = normalizeId(paper.id);
         const params = new URLSearchParams();
         params.set('referencedBy', paperId);
         params.set('sort', 'cited_by_count:desc');
@@ -230,7 +245,7 @@ export default function SearchResults({
         router.push(`/search?${params.toString()}`);
       }),
       on('paper-network-click', ({ paper }) => {
-        const paperId = paper.id.replace('https://openalex.org/', '');
+        const paperId = normalizeId(paper.id);
         const params = new URLSearchParams();
         params.set('network', paperId);
         router.push(`/search?${params.toString()}`);
@@ -250,8 +265,14 @@ export default function SearchResults({
     }
     const authorId = authors[0].id;
     setLoadingAuthorInfo(true);
-    fetch(`https://api.openalex.org/authors/${authorId}`)
-      .then((res) => res.json())
+    openAlexFetch(`https://api.openalex.org/authors/${authorId}`)
+      .then((res) => {
+        // Guard res.ok: a 429/5xx returns an error body without these
+        // fields, which would otherwise paint the author panel with
+        // undefined name / stats. Throw so the .catch clears it instead.
+        if (!res.ok) throw new Error(`OpenAlex ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
         setAuthorInfo({
           id: data.id,
@@ -271,30 +292,17 @@ export default function SearchResults({
       .finally(() => setLoadingAuthorInfo(false));
   }, [authors]);
 
-  // Fetch citing paper
+  // Fetch citing paper. fetchWorkAsPaper folds in the OpenAlex→Paper
+  // mapping and per-call error handling that all four of these citation
+  // banner effects used to repeat inline.
   useEffect(() => {
     if (!citing) {
       setCitingPaper(null);
       return;
     }
     setLoadingCitingPaper(true);
-    fetch(`https://api.openalex.org/works/${citing}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setCitingPaper({
-          id: data.id,
-          title: cleanHtml(data.title),
-          authors:
-            data.authorships?.map((a: any) => a.author.display_name) || [],
-          publication_year: data.publication_year,
-          journal_name:
-            data.primary_location?.source?.display_name || 'Unknown',
-          doi: data.doi,
-          cited_by_count: data.cited_by_count,
-          abstract: '',
-        });
-      })
-      .catch(() => setCitingPaper(null))
+    fetchWorkAsPaper(citing)
+      .then(setCitingPaper)
       .finally(() => setLoadingCitingPaper(false));
   }, [citing]);
 
@@ -305,23 +313,8 @@ export default function SearchResults({
       return;
     }
     setLoadingReferencedByPaper(true);
-    fetch(`https://api.openalex.org/works/${referencedBy}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setReferencedByPaper({
-          id: data.id,
-          title: cleanHtml(data.title),
-          authors:
-            data.authorships?.map((a: any) => a.author.display_name) || [],
-          publication_year: data.publication_year,
-          journal_name:
-            data.primary_location?.source?.display_name || 'Unknown',
-          doi: data.doi,
-          cited_by_count: data.cited_by_count,
-          abstract: '',
-        });
-      })
-      .catch(() => setReferencedByPaper(null))
+    fetchWorkAsPaper(referencedBy)
+      .then(setReferencedByPaper)
       .finally(() => setLoadingReferencedByPaper(false));
   }, [referencedBy]);
 
@@ -332,27 +325,7 @@ export default function SearchResults({
       return;
     }
     setLoadingCitingAllPapers(true);
-    Promise.all(
-      citingAll.map((id) =>
-        fetch(`https://api.openalex.org/works/${id}`)
-          .then((res) => res.json())
-          .then(
-            (data): Paper => ({
-              id: data.id,
-              title: cleanHtml(data.title),
-              authors:
-                data.authorships?.map((a: any) => a.author.display_name) || [],
-              publication_year: data.publication_year,
-              journal_name:
-                data.primary_location?.source?.display_name || 'Unknown',
-              doi: data.doi,
-              cited_by_count: data.cited_by_count,
-              abstract: '',
-            }),
-          )
-          .catch(() => null),
-      ),
-    )
+    Promise.all(citingAll.map((id) => fetchWorkAsPaper(id)))
       .then((papers) =>
         setCitingAllPapers(papers.filter((p): p is Paper => p !== null)),
       )
@@ -366,27 +339,7 @@ export default function SearchResults({
       return;
     }
     setLoadingReferencesAllPapers(true);
-    Promise.all(
-      referencesAll.map((id) =>
-        fetch(`https://api.openalex.org/works/${id}`)
-          .then((res) => res.json())
-          .then(
-            (data): Paper => ({
-              id: data.id,
-              title: cleanHtml(data.title),
-              authors:
-                data.authorships?.map((a: any) => a.author.display_name) || [],
-              publication_year: data.publication_year,
-              journal_name:
-                data.primary_location?.source?.display_name || 'Unknown',
-              doi: data.doi,
-              cited_by_count: data.cited_by_count,
-              abstract: '',
-            }),
-          )
-          .catch(() => null),
-      ),
-    )
+    Promise.all(referencesAll.map((id) => fetchWorkAsPaper(id)))
       .then((papers) =>
         setReferencesAllPapers(papers.filter((p): p is Paper => p !== null)),
       )
@@ -440,7 +393,7 @@ export default function SearchResults({
           params.set(
             'institutions',
             institutions
-              .map((i) => i.id.replace('https://openalex.org/', ''))
+              .map((i) => normalizeId(i.id))
               .join(','),
           );
         if (publicationType) params.set('type', publicationType);
@@ -595,7 +548,9 @@ export default function SearchResults({
       error?: string;
     };
     Promise.all([
-      cachedFetch<FocalRaw>(`https://api.openalex.org/works/${networkId}`),
+      cachedFetch<FocalRaw>(
+        withMailto(`https://api.openalex.org/works/${networkId}`),
+      ),
       cachedFetch<SearchResp>(`/api/search?${refsParams.toString()}`),
       cachedFetch<SearchResp>(`/api/search?${citesParams.toString()}`),
     ])
@@ -619,7 +574,7 @@ export default function SearchResults({
           referenced_works_count: focalRaw.referenced_works_count || 0,
           abstract: '',
           referenced_works: (focalRaw.referenced_works || []).map((id) =>
-            id.replace('https://openalex.org/', ''),
+            normalizeId(id),
           ),
         };
         setNetworkFocal(focal);
@@ -646,7 +601,7 @@ export default function SearchResults({
   const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
   const copyAuthorId = async () => {
     if (!authorInfo) return;
-    const id = authorInfo.id.replace('https://openalex.org/', '');
+    const id = normalizeId(authorInfo.id);
     try {
       await navigator.clipboard.writeText(id);
       setIsAuthorIdCopied(true);
@@ -657,14 +612,24 @@ export default function SearchResults({
     window.open(AUTHOR_CORRECTION_FORM_URL, '_blank');
   };
   const authorReportedKey = authorInfo
-    ? reportedAuthorKey(
-        authorInfo.id.replace('https://openalex.org/', ''),
-      )
+    ? reportedAuthorKey(normalizeId(authorInfo.id))
     : '';
-  const isAuthorReportedStored =
-    typeof window !== 'undefined' && authorReportedKey
-      ? localStorage.getItem(authorReportedKey) === 'true'
-      : false;
+  // Seed the "already reported" flag from localStorage in an effect rather
+  // than reading storage during render — a render-phase read risks an
+  // SSR/client hydration mismatch and re-runs on every render. Reseeding
+  // when the focused author changes also clears the in-session toggle so a
+  // report on one author doesn't visually bleed onto the next.
+  const [isAuthorReportedStored, setIsAuthorReportedStored] = useState(false);
+  useEffect(() => {
+    setHasAuthorReported(false);
+    if (typeof window === 'undefined' || !authorReportedKey) {
+      setIsAuthorReportedStored(false);
+      return;
+    }
+    setIsAuthorReportedStored(
+      localStorage.getItem(authorReportedKey) === 'true',
+    );
+  }, [authorReportedKey]);
   const handleAuthorReportedToggle = () => {
     if (!hasAuthorReported && !isAuthorReportedStored) {
       setHasAuthorReported(true);
@@ -757,7 +722,7 @@ export default function SearchResults({
     );
   }
 
-  const authorId = authorInfo?.id?.replace('https://openalex.org/', '') || '';
+  const authorId = authorInfo?.id ? normalizeId(authorInfo.id) : '';
 
   // ── Network view short-circuits the rest of the page ────────────
   if (networkId) {
@@ -979,7 +944,8 @@ export default function SearchResults({
                       Also affiliated with:
                     </span>{' '}
                     {authorInfo.affiliations
-                      .map((aff: any) => aff.institution.display_name)
+                      .map((aff) => aff.institution?.display_name)
+                      .filter(Boolean)
                       .join(', ')}
                   </p>
                 )}

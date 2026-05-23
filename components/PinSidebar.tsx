@@ -24,6 +24,7 @@ import {
 import { usePins } from '@/contexts/PinContext';
 import { Paper, MAX_PINS } from '@/types/interfaces';
 import PaperCard from './ui/PaperCard';
+import { normalizeId } from '@/utils/normalizeId';
 import { STORAGE_KEYS, collectionPapersKey } from '@/utils/storageKeys';
 import { on } from '@/utils/eventBus';
 import {
@@ -387,8 +388,6 @@ export default function PinSidebar({
 
   const newGroupInputRef = useRef<HTMLInputElement>(null);
   const editGroupInputRef = useRef<HTMLInputElement>(null);
-
-  const normalizeId = (id: string) => id.replace('https://openalex.org/', '');
 
   // Resize handlers
   useEffect(() => {

@@ -68,6 +68,8 @@ export interface OpenAlexResultsPage<T> {
     page?: number;
     per_page?: number;
     db_response_time_ms?: number;
+    /** Cursor pagination — present when the request used `cursor=`. */
+    next_cursor?: string | null;
   };
 }
 

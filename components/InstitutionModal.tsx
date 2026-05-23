@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Search, Check, Loader2, Building2 } from 'lucide-react';
 import { Institution } from '@/types/interfaces';
+import { openAlexFetch } from '@/utils/openAlexClient';
 
 interface InstitutionModalProps {
   isOpen: boolean;
@@ -83,9 +84,13 @@ export default function InstitutionModal({
 
     setIsSearching(true);
     try {
-      const res = await fetch(
+      const res = await openAlexFetch(
         `https://api.openalex.org/institutions?search=${encodeURIComponent(query)}&per-page=20`
       );
+      if (!res.ok) {
+        setSearchResults([]);
+        return;
+      }
       const data = await res.json();
       setSearchResults(data.results || []);
     } catch (error) {

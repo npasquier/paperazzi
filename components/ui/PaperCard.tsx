@@ -16,6 +16,7 @@ import PinButton from './PinButton';
 import { reportedPaperKey } from '@/utils/storageKeys';
 import PaperInfoModal from '@/components/PaperInfoModal';
 import { emit } from '@/utils/eventBus';
+import { normalizeId } from '@/utils/normalizeId';
 import { copyWorkIdAndOpenCorrectionForm } from '@/utils/correctionForms';
 
 interface PaperCardProps {
@@ -49,7 +50,7 @@ export default function PaperCard({
   const [isCopied, setIsCopied] = useState(false);
   const [hasReported, setHasReported] = useState(false);
 
-  const workId = paper.id.replace('https://openalex.org/', '');
+  const workId = normalizeId(paper.id);
 
   // Check if abstract exists
   const hasAbstract = paper.abstract && paper.abstract.trim().length > 0;

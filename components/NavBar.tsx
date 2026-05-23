@@ -20,6 +20,8 @@ import {
   abbrevForIssn,
 } from '@/data/journalAbbreviations';
 import { emit, on } from '@/utils/eventBus';
+import { normalizeId } from '@/utils/normalizeId';
+import { openAlexFetch } from '@/utils/openAlexClient';
 
 // Trailing shortcut pattern: matches `@xxx` (author), `#xxx` (journal) or
 // `~xxx` (institution) at the end of the query, where xxx starts with a
@@ -360,7 +362,7 @@ function NavBarContent() {
       const url = `https://api.openalex.org/${endpoint}?search=${encodeURIComponent(
         partial,
       )}&per-page=${MENTION_PAGE_SIZE}&page=${page}`;
-      const res = await fetch(url);
+      const res = await openAlexFetch(url);
       if (!res.ok) return null;
       if (kind === 'author') {
         const data: {
@@ -375,7 +377,7 @@ function NavBarContent() {
         } = await res.json();
         const results: Suggestion[] = (data.results || []).map((a) => ({
           kind: 'author' as const,
-          id: a.id.replace('https://openalex.org/', ''),
+          id: normalizeId(a.id),
           display_name: a.display_name,
           works_count: a.works_count || 0,
           hint:
@@ -405,7 +407,7 @@ function NavBarContent() {
           const hint = [country, type].filter(Boolean).join(' · ') || undefined;
           return {
             kind: 'institution' as const,
-            id: i.id.replace('https://openalex.org/', ''),
+            id: normalizeId(i.id),
             display_name: i.display_name,
             works_count: i.works_count || 0,
             hint,
@@ -768,15 +770,14 @@ function NavBarContent() {
     if (mentionOpen && mentionSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setMentionIdx((i) => (i + 1) % mentionSuggestions.length);
+        // Clamp at the last item — don't wrap back to the top.
+        setMentionIdx((i) => Math.min(i + 1, mentionSuggestions.length - 1));
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setMentionIdx(
-          (i) =>
-            (i - 1 + mentionSuggestions.length) % mentionSuggestions.length,
-        );
+        // Clamp at the first item — don't wrap down to the bottom.
+        setMentionIdx((i) => Math.max(i - 1, 0));
         return;
       }
       if (e.key === 'Enter' || e.key === 'Tab') {

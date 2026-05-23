@@ -3,21 +3,14 @@
 // test in isolation.
 
 import buildAbstract from '@/utils/abstract';
+import cleanHtml from '@/utils/cleanHtml';
+import { normalizeId } from '@/utils/normalizeId';
 import type { OpenAlexWork } from '@/types/openalex';
 
-/** Strip HTML tags + collapse whitespace from a free-text field. */
-export function cleanHtml(text: string | null | undefined): string {
-  if (!text) return '';
-  return text
-    .replace(/<[^>]*>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Strip the OpenAlex URL prefix from an entity ID, leaving the bare W123…. */
-export function normalizeId(id: string): string {
-  return id.replace('https://openalex.org/', '');
-}
+// Re-export the shared helpers so existing handler imports
+// (`from '../lib/format'`) keep working without each one reaching into
+// utils directly. Single source of truth lives in @/utils.
+export { cleanHtml, normalizeId };
 
 /** Add the OpenAlex URL prefix to a bare ID (no-op if already prefixed). */
 export function toFullId(id: string): string {

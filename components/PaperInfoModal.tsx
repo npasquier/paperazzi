@@ -27,6 +27,7 @@ import PinButton from './ui/PinButton';
 import { cleanAbstract } from '@/utils/abstract';
 import { usePins } from '@/contexts/PinContext';
 import { normalizeId } from '@/utils/normalizeId';
+import { openAlexFetch } from '@/utils/openAlexClient';
 import { reportedPaperKey } from '@/utils/storageKeys';
 import { emit } from '@/utils/eventBus';
 import {
@@ -247,12 +248,14 @@ export default function PaperInfoModal({
     const fetchAbstract = async () => {
       setIsLoadingAbstract(true);
       try {
-        const paperId = paper.id.replace('https://openalex.org/', '');
-        const res = await fetch(
-          `https://api.openalex.org/works/${paperId}?mailto=${
-            process.env.NEXT_PUBLIC_MAIL_ID || ''
-          }`
+        const paperId = normalizeId(paper.id);
+        const res = await openAlexFetch(
+          `https://api.openalex.org/works/${paperId}`,
         );
+        if (!res.ok) {
+          if (!cancelled) setIsLoadingAbstract(false);
+          return;
+        }
         const data = (await res.json()) as OpenAlexWorkDetails;
 
         if (data.abstract_inverted_index) {

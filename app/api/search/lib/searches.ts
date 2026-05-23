@@ -145,18 +145,43 @@ export async function searchWithinIds(
   if (workIds.length === 0) return { results: [], count: 0 };
 
   if (query) {
-    const filters = buildFilters(filterParams);
-    let searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=200`;
-    if (filters.length) searchUrl += `&filter=${filters.join(',')}`;
+    // Search WITHIN the work-id subset, batched, rather than running one
+    // global keyword search and intersecting its top-200 results. The old
+    // approach silently dropped any matching paper that ranked beyond the
+    // 200th global keyword hit — so a query over a large reference /
+    // citation set could miss valid matches. Pushing the ids into the
+    // filter (≤50 per batch, the OR-cap-safe size) lets OpenAlex match
+    // across the whole subset; within a 50-id batch at most 50 can match,
+    // so per-page=200 never truncates.
+    const extraFilters = buildFilters(filterParams);
 
-    const searchData = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
-      searchUrl,
-      getKey,
+    const ID_BATCH_SIZE = 50;
+    const idBatches: string[][] = [];
+    for (let i = 0; i < workIds.length; i += ID_BATCH_SIZE) {
+      idBatches.push(workIds.slice(i, i + ID_BATCH_SIZE));
+    }
+
+    const matchedSets = await Promise.all(
+      idBatches.map(async (batch) => {
+        const filters = [
+          `openalex_id:${batch.map(toFullId).join('|')}`,
+          ...extraFilters,
+        ];
+        const url =
+          `https://api.openalex.org/works?search=${encodeURIComponent(query)}` +
+          `&filter=${filters.join(',')}&per-page=200&select=id`;
+        const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+          url,
+          getKey,
+        );
+        return (data.results || []).map((w) => normalizeId(w.id));
+      }),
     );
-    const searchIds = (searchData.results || []).map((w) =>
-      normalizeId(w.id),
-    );
-    const intersectedIds = workIds.filter((id) => searchIds.includes(id));
+
+    // Preserve the caller's id order (keeps the user's manual reference
+    // ordering meaningful and matches the no-query path's behaviour).
+    const matched = new Set(matchedSets.flat());
+    const intersectedIds = workIds.filter((id) => matched.has(id));
 
     if (intersectedIds.length === 0) return { results: [], count: 0 };
 

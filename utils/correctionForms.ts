@@ -3,6 +3,8 @@
 // links in different components — every "Submit correction" entry
 // point should pull from here.
 
+import { normalizeId } from '@/utils/normalizeId';
+
 /**
  * Per-paper correction form (Google Form). Submitted reports are
  * triaged and forwarded to OpenAlex by the project maintainer.
@@ -30,7 +32,7 @@ export const OPENALEX_FIX_ERRORS_URL =
  * with the bare work id (e.g. `W2741809807`).
  */
 export const toOpenAlexWorkId = (paperId: string): string =>
-  paperId.replace('https://openalex.org/', '');
+  normalizeId(paperId);
 
 /**
  * Copy the OpenAlex work id to the clipboard and open the correction

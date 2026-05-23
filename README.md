@@ -161,7 +161,6 @@ paperazzi/
 │   ├── storageKeys.ts            # Single source of truth for localStorage keys
 │   ├── eventBus.ts               # Tiny pub/sub (paper-citing-click, etc.)
 │   ├── normalizeId.ts            # OpenAlex ID canonicalisation
-│   ├── parsePapers.ts            # OpenAlex → Paper shape
 │   ├── abstract.ts               # Inverted-index → text
 │   ├── cleanHtml.ts              # Sanitize OpenAlex titles/abstracts
 │   ├── correctionForms.ts        # OpenAlex correction-form links
@@ -193,7 +192,7 @@ User →  │ NavBar + FilterPanel      │ ────────────
                     ▲                                               │
                     │ paper events                                  ▼ shaped JSON
         ┌──────────────────────────┐                      ┌──────────────────┐
-        │ SearchResults            │ ◀─────────────────── │ parsePapers      │
+        │ SearchResults            │ ◀─────────────────── │ mapToPapers      │
         └──────────────────────────┘                      └──────────────────┘
                     │ pin
                     ▼

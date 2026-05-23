@@ -28,16 +28,22 @@ export async function fetchOpenAlex<T = unknown>(
   retries = 3,
 ): Promise<T> {
   const apiKey = getKey();
-  if (apiKey) {
-    url += (url.includes('?') ? '&' : '?') + `api_key=${apiKey}`;
-  }
+  // Append the key ONLY to the URL we actually fetch (`requestUrl`),
+  // never to `url`. `url` is what we log and embed in thrown error
+  // messages, and route.ts forwards error.message verbatim to the
+  // client — so a key on `url` would leak a live credential to the
+  // browser on any upstream 4xx. Keeping the key on a separate string
+  // means every diagnostic below is automatically key-free.
+  const requestUrl = apiKey
+    ? url + (url.includes('?') ? '&' : '?') + `api_key=${apiKey}`
+    : url;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       // Tiny jitter (≤40ms) to desynchronize the parallel batched-search
       // calls. Keeps OpenAlex's per-IP burst limit happier.
       await new Promise((r) => setTimeout(r, Math.random() * 40));
-      const res = await fetch(url);
+      const res = await fetch(requestUrl);
       recordKeyCall(apiKey);
 
       if (res.status === 503 && attempt < retries) {
@@ -70,16 +76,20 @@ export async function fetchOpenAlex<T = unknown>(
             'OpenAlex API is temporarily unavailable. Please try again in a moment.',
           );
         }
-        if (res.status === 400 && url.length > 6000) {
+        if (res.status === 400 && requestUrl.length > 6000) {
           // Most common cause when filtering a network view by a wide
           // category — the openalex_id list + ISSN whitelist exceeds the
-          // upstream URL limit. Report it explicitly.
+          // upstream URL limit. Report it explicitly. (Length is measured
+          // on requestUrl — the actual request — but the key is never
+          // included in the message.)
           throw new Error(
-            `OpenAlex returned 400 (request URL too long: ${url.length} chars). Try narrowing the journal filter or use Specific mode with a smaller list.`,
+            `OpenAlex returned 400 (request URL too long: ${requestUrl.length} chars). Try narrowing the journal filter or use Specific mode with a smaller list.`,
           );
         }
+        // `url` here is the key-free URL — safe to surface. requestUrl
+        // (with the key) is deliberately never interpolated into errors.
         throw new Error(
-          `OpenAlex API returned ${res.status}, ${res.statusText}, URL length: ${url.length}, body: ${bodyPreview}, URL: ${url}`,
+          `OpenAlex API returned ${res.status}, ${res.statusText}, URL length: ${requestUrl.length}, body: ${bodyPreview}, URL: ${url}`,
         );
       }
 

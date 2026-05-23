@@ -13,6 +13,8 @@
 // decide whether to surface "couldn't find X" hints.
 
 import { SelectedAuthor } from '@/types/interfaces';
+import { normalizeId } from '@/utils/normalizeId';
+import { openAlexFetch } from '@/utils/openAlexClient';
 import {
   JOURNAL_SHORTCUTS,
   JournalShortcut,
@@ -98,7 +100,7 @@ export async function resolveMentions(
         const url = `https://api.openalex.org/authors?search=${encodeURIComponent(
           name,
         )}&per-page=1`;
-        const res = await fetch(url);
+        const res = await openAlexFetch(url);
         if (!res.ok) {
           unresolved.push(name);
           return;
@@ -107,7 +109,7 @@ export async function resolveMentions(
         const top = data?.results?.[0];
         if (top?.id) {
           resolved.push({
-            id: top.id.replace('https://openalex.org/', ''),
+            id: normalizeId(top.id),
             name: top.display_name,
             worksCount: top.works_count,
           });

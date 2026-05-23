@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
 } from 'react';
 import {
   MAX_PAPER_COMMENT_LENGTH,
@@ -19,6 +20,7 @@ import {
 import buildAbstract from '@/utils/abstract';
 import cleanHtml from '@/utils/cleanHtml';
 import { normalizeId } from '@/utils/normalizeId';
+import { openAlexFetch } from '@/utils/openAlexClient';
 import {
   buildCollectionTransfer,
   buildCollectionTransferFilename,
@@ -386,9 +388,16 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
         const idsFilter = ids
           .map((id) => `https://openalex.org/${id}`)
           .join('|');
-        const res = await fetch(
+        const res = await openAlexFetch(
           `https://api.openalex.org/works?filter=openalex_id:${idsFilter}&per-page=50`,
         );
+        // On a non-OK response keep the cached copy (already shown) rather
+        // than parsing an error body — the sidebar should never blank out
+        // just because the refresh hit a rate limit.
+        if (!res.ok) {
+          if (!cancelled) setIsLoading(false);
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
 
@@ -653,11 +662,25 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
 
   // ── Pinning / grouping (operate on active collection only) ────────
 
-  const pinnedIds = pinnedPapers.map((p) => normalizeId(p.id));
+  const pinnedIds = useMemo(
+    () => pinnedPapers.map((p) => normalizeId(p.id)),
+    [pinnedPapers],
+  );
 
-  const isPinned = (id: string) => pinnedIds.includes(normalizeId(id));
+  // O(1) membership for isPinned — the list `.includes` version was
+  // rescanned on every PaperCard / PinButton render.
+  const pinnedIdSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
 
-  const togglePin = (paper: Paper) => {
+  const isPinned = useCallback(
+    (id: string) => pinnedIdSet.has(normalizeId(id)),
+    [pinnedIdSet],
+  );
+
+  // The mutating helpers below all use functional state updates, so they
+  // capture no render-scoped values and are safe to memoise with an empty
+  // dep array — their identities stay stable across renders, which is what
+  // lets the context value (and thus consumers) avoid needless re-renders.
+  const togglePin = useCallback((paper: Paper) => {
     const id = normalizeId(paper.id);
     setPinnedPapers((prev) => {
       if (prev.find((p) => normalizeId(p.id) === id)) {
@@ -666,86 +689,107 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
       if (prev.length >= MAX_PINS) return prev;
       return [...prev, { ...paper, id, title: cleanHtml(paper.title) }];
     });
-  };
+  }, []);
 
-  const removePin = (id: string) => {
+  const removePin = useCallback((id: string) => {
     const normalized = normalizeId(id);
     setPinnedPapers((prev) =>
       prev.filter((p) => normalizeId(p.id) !== normalized),
     );
-  };
+  }, []);
 
-  const clearPins = () => {
+  const clearPins = useCallback(() => {
     setPinnedPapers([]);
     setGroups([]);
-  };
+  }, []);
 
-  const createGroup = (name: string): string => {
+  const createGroup = useCallback((name: string): string => {
     const id = `group-${Date.now()}`;
     setGroups((prev) => [...prev, { id, name, paperIds: [] }]);
     return id;
-  };
+  }, []);
 
-  const renameGroup = (groupId: string, name: string) => {
+  const renameGroup = useCallback((groupId: string, name: string) => {
     setGroups((prev) =>
       prev.map((g) => (g.id === groupId ? { ...g, name } : g)),
     );
-  };
+  }, []);
 
-  const deleteGroup = (groupId: string) => {
+  const deleteGroup = useCallback((groupId: string) => {
     setGroups((prev) => prev.filter((g) => g.id !== groupId));
-  };
+  }, []);
 
-  const movePaperToGroup = (paperId: string, groupId: string | null) => {
-    const normalized = normalizeId(paperId);
-    setGroups((prev) => {
-      const cleaned = prev.map((g) => ({
-        ...g,
-        paperIds: g.paperIds.filter((id) => id !== normalized),
-      }));
-      if (groupId) {
-        return cleaned.map((g) =>
-          g.id === groupId
-            ? { ...g, paperIds: [...g.paperIds, normalized] }
-            : g,
+  const movePaperToGroup = useCallback(
+    (paperId: string, groupId: string | null) => {
+      const normalized = normalizeId(paperId);
+      setGroups((prev) => {
+        const cleaned = prev.map((g) => ({
+          ...g,
+          paperIds: g.paperIds.filter((id) => id !== normalized),
+        }));
+        if (groupId) {
+          return cleaned.map((g) =>
+            g.id === groupId
+              ? { ...g, paperIds: [...g.paperIds, normalized] }
+              : g,
+          );
+        }
+        return cleaned;
+      });
+    },
+    [],
+  );
+
+  // Defined before reorderPapersInGroup because that callback lists it as
+  // a dependency — the dep array is evaluated at render time, so the
+  // binding must already exist (no temporal-dead-zone reference).
+  const getUngroupedPapers = useCallback((): Paper[] => {
+    const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
+    return pinnedPapers.filter((p) => !groupedIds.has(normalizeId(p.id)));
+  }, [groups, pinnedPapers]);
+
+  const getPapersInGroup = useCallback(
+    (groupId: string): Paper[] => {
+      const group = groups.find((g) => g.id === groupId);
+      if (!group) return [];
+      return group.paperIds
+        .map((id) => pinnedPapers.find((p) => normalizeId(p.id) === id))
+        .filter((p): p is Paper => !!p);
+    },
+    [groups, pinnedPapers],
+  );
+
+  const reorderPapersInGroup = useCallback(
+    (groupId: string | null, fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return;
+
+      if (groupId === null) {
+        const ungrouped = getUngroupedPapers();
+        const [moved] = ungrouped.splice(fromIndex, 1);
+        ungrouped.splice(toIndex, 0, moved);
+        const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
+        const nonUngrouped = pinnedPapers.filter((p) =>
+          groupedIds.has(normalizeId(p.id)),
+        );
+        setPinnedPapers([...nonUngrouped, ...ungrouped]);
+      } else {
+        setGroups((prev) =>
+          prev.map((g) => {
+            if (g.id === groupId) {
+              const next = [...g.paperIds];
+              const [moved] = next.splice(fromIndex, 1);
+              next.splice(toIndex, 0, moved);
+              return { ...g, paperIds: next };
+            }
+            return g;
+          }),
         );
       }
-      return cleaned;
-    });
-  };
+    },
+    [getUngroupedPapers, groups, pinnedPapers],
+  );
 
-  const reorderPapersInGroup = (
-    groupId: string | null,
-    fromIndex: number,
-    toIndex: number,
-  ) => {
-    if (fromIndex === toIndex) return;
-
-    if (groupId === null) {
-      const ungrouped = getUngroupedPapers();
-      const [moved] = ungrouped.splice(fromIndex, 1);
-      ungrouped.splice(toIndex, 0, moved);
-      const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
-      const nonUngrouped = pinnedPapers.filter((p) =>
-        groupedIds.has(normalizeId(p.id)),
-      );
-      setPinnedPapers([...nonUngrouped, ...ungrouped]);
-    } else {
-      setGroups((prev) =>
-        prev.map((g) => {
-          if (g.id === groupId) {
-            const next = [...g.paperIds];
-            const [moved] = next.splice(fromIndex, 1);
-            next.splice(toIndex, 0, moved);
-            return { ...g, paperIds: next };
-          }
-          return g;
-        }),
-      );
-    }
-  };
-
-  const reorderGroups = (fromIndex: number, toIndex: number) => {
+  const reorderGroups = useCallback((fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return;
     setGroups((prev) => {
       if (
@@ -761,80 +805,73 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
       next.splice(toIndex, 0, moved);
       return next;
     });
-  };
+  }, []);
 
-  const getUngroupedPapers = (): Paper[] => {
-    const groupedIds = new Set(groups.flatMap((g) => g.paperIds));
-    return pinnedPapers.filter((p) => !groupedIds.has(normalizeId(p.id)));
-  };
+  const updatePaperComment = useCallback(
+    (paperId: string, comment: string) => {
+      const normalized = normalizeId(paperId);
+      const trimmed = comment.trim().slice(0, MAX_PAPER_COMMENT_LENGTH);
+      setPinnedPapers((prev) =>
+        prev.map((p) => {
+          if (normalizeId(p.id) !== normalized) return p;
+          // Empty input deletes the field rather than persisting "" —
+          // keeps storage tidy and avoids "exists but empty" branches in
+          // consumers. JSON.stringify drops `undefined` values, so a
+          // shallow copy with the key cleared serialises identically to
+          // a destructured rest.
+          if (!trimmed) {
+            if (p.comment === undefined) return p;
+            const next = { ...p };
+            delete next.comment;
+            return next;
+          }
+          if (p.comment === trimmed) return p;
+          return { ...p, comment: trimmed };
+        }),
+      );
+    },
+    [],
+  );
 
-  const getPapersInGroup = (groupId: string): Paper[] => {
-    const group = groups.find((g) => g.id === groupId);
-    if (!group) return [];
-    return group.paperIds
-      .map((id) => pinnedPapers.find((p) => normalizeId(p.id) === id))
-      .filter((p): p is Paper => !!p);
-  };
+  const updatePaperKeywords = useCallback(
+    (paperId: string, keywords: string[]) => {
+      const normalized = normalizeId(paperId);
+      // Trim, clamp length, drop empties, dedupe (case-insensitive,
+      // preserving the first-seen casing), then cap the list. Same
+      // shape as the import normaliser so the two paths agree.
+      const seen = new Set<string>();
+      const cleaned: string[] = [];
+      for (const raw of keywords) {
+        const k = raw.trim().slice(0, MAX_PAPER_KEYWORD_LENGTH);
+        if (!k) continue;
+        const key = k.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cleaned.push(k);
+        if (cleaned.length >= MAX_PAPER_KEYWORDS) break;
+      }
 
-  const updatePaperComment = (paperId: string, comment: string) => {
-    const normalized = normalizeId(paperId);
-    const trimmed = comment.trim().slice(0, MAX_PAPER_COMMENT_LENGTH);
-    setPinnedPapers((prev) =>
-      prev.map((p) => {
-        if (normalizeId(p.id) !== normalized) return p;
-        // Empty input deletes the field rather than persisting "" —
-        // keeps storage tidy and avoids "exists but empty" branches in
-        // consumers. JSON.stringify drops `undefined` values, so a
-        // shallow copy with the key cleared serialises identically to
-        // a destructured rest.
-        if (!trimmed) {
-          if (p.comment === undefined) return p;
-          const next = { ...p };
-          delete next.comment;
-          return next;
-        }
-        if (p.comment === trimmed) return p;
-        return { ...p, comment: trimmed };
-      }),
-    );
-  };
-
-  const updatePaperKeywords = (paperId: string, keywords: string[]) => {
-    const normalized = normalizeId(paperId);
-    // Trim, clamp length, drop empties, dedupe (case-insensitive,
-    // preserving the first-seen casing), then cap the list. Same
-    // shape as the import normaliser so the two paths agree.
-    const seen = new Set<string>();
-    const cleaned: string[] = [];
-    for (const raw of keywords) {
-      const k = raw.trim().slice(0, MAX_PAPER_KEYWORD_LENGTH);
-      if (!k) continue;
-      const key = k.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      cleaned.push(k);
-      if (cleaned.length >= MAX_PAPER_KEYWORDS) break;
-    }
-
-    setPinnedPapers((prev) =>
-      prev.map((p) => {
-        if (normalizeId(p.id) !== normalized) return p;
-        if (cleaned.length === 0) {
-          if (p.keywords === undefined) return p;
-          const next = { ...p };
-          delete next.keywords;
-          return next;
-        }
-        // Skip the rewrite if the new list is identical — saves a
-        // localStorage churn on rapid edits.
-        const same =
-          p.keywords?.length === cleaned.length &&
-          p.keywords.every((k, i) => k === cleaned[i]);
-        if (same) return p;
-        return { ...p, keywords: cleaned };
-      }),
-    );
-  };
+      setPinnedPapers((prev) =>
+        prev.map((p) => {
+          if (normalizeId(p.id) !== normalized) return p;
+          if (cleaned.length === 0) {
+            if (p.keywords === undefined) return p;
+            const next = { ...p };
+            delete next.keywords;
+            return next;
+          }
+          // Skip the rewrite if the new list is identical — saves a
+          // localStorage churn on rapid edits.
+          const same =
+            p.keywords?.length === cleaned.length &&
+            p.keywords.every((k, i) => k === cleaned[i]);
+          if (same) return p;
+          return { ...p, keywords: cleaned };
+        }),
+      );
+    },
+    [],
+  );
 
   // ── Collection management ─────────────────────────────────────────
 
@@ -1269,41 +1306,79 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     [index, flushPending],
   );
 
+  // Memoise the context value so consumers only re-render when something
+  // they actually depend on changes. Every method above is a stable
+  // useCallback, so this object's identity now tracks the real state
+  // (pins, groups, collections, loading) rather than churning on every
+  // provider render.
+  const value = useMemo<PinContextType>(
+    () => ({
+      pinnedPapers,
+      pinnedIds,
+      groups,
+      isPinned,
+      togglePin,
+      removePin,
+      clearPins,
+      isLoading,
+      createGroup,
+      renameGroup,
+      deleteGroup,
+      movePaperToGroup,
+      reorderPapersInGroup,
+      reorderGroups,
+      getUngroupedPapers,
+      getPapersInGroup,
+      updatePaperComment,
+      updatePaperKeywords,
+      collections: index.collections,
+      activeCollectionId: index.activeId,
+      switchCollection,
+      createCollection,
+      renameCollection,
+      deleteCollection,
+      movePaperToCollection,
+      collectionsAtCap: index.collections.length >= MAX_COLLECTIONS,
+      exportActiveCollection,
+      exportAllCollections,
+      importCollection,
+      importLibrary,
+    }),
+    [
+      pinnedPapers,
+      pinnedIds,
+      groups,
+      isPinned,
+      togglePin,
+      removePin,
+      clearPins,
+      isLoading,
+      createGroup,
+      renameGroup,
+      deleteGroup,
+      movePaperToGroup,
+      reorderPapersInGroup,
+      reorderGroups,
+      getUngroupedPapers,
+      getPapersInGroup,
+      updatePaperComment,
+      updatePaperKeywords,
+      index.collections,
+      index.activeId,
+      switchCollection,
+      createCollection,
+      renameCollection,
+      deleteCollection,
+      movePaperToCollection,
+      exportActiveCollection,
+      exportAllCollections,
+      importCollection,
+      importLibrary,
+    ],
+  );
+
   return (
-    <PinContext.Provider
-      value={{
-        pinnedPapers,
-        pinnedIds,
-        groups,
-        isPinned,
-        togglePin,
-        removePin,
-        clearPins,
-        isLoading,
-        createGroup,
-        renameGroup,
-        deleteGroup,
-        movePaperToGroup,
-        reorderPapersInGroup,
-        reorderGroups,
-        getUngroupedPapers,
-        getPapersInGroup,
-        updatePaperComment,
-        updatePaperKeywords,
-        collections: index.collections,
-        activeCollectionId: index.activeId,
-        switchCollection,
-        createCollection,
-        renameCollection,
-        deleteCollection,
-        movePaperToCollection,
-        collectionsAtCap: index.collections.length >= MAX_COLLECTIONS,
-        exportActiveCollection,
-        exportAllCollections,
-        importCollection,
-        importLibrary,
-      }}
-    >
+    <PinContext.Provider value={value}>
       {children}
     </PinContext.Provider>
   );

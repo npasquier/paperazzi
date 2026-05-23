@@ -22,6 +22,8 @@ import { Filters, Institution, SelectedAuthor } from '../types/interfaces';
 import { loadActiveRanking } from '@/utils/activeRanking';
 import { mapIssnsToJournalsAsync as mapIssnsToJournals } from '@/utils/loadJournals';
 import { usePersistedBoolean } from '@/utils/usePersistedBoolean';
+import { normalizeId } from '@/utils/normalizeId';
+import { openAlexFetch } from '@/utils/openAlexClient';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
 import type { PresetTileId } from './EmptyState';
 import {
@@ -272,7 +274,10 @@ function PaperazziAppContent() {
       const authors = await Promise.all(
         authorIds.map(async (id) => {
           try {
-            const res = await fetch(`https://api.openalex.org/authors/${id}`);
+            const res = await openAlexFetch(
+              `https://api.openalex.org/authors/${id}`,
+            );
+            if (!res.ok) throw new Error(`OpenAlex ${res.status}`);
             const data = await res.json();
             return { id, name: data.display_name || 'Unknown Author' };
           } catch {
@@ -285,9 +290,10 @@ function PaperazziAppContent() {
       const institutions: Institution[] = await Promise.all(
         institutionIds.map(async (id) => {
           try {
-            const res = await fetch(
+            const res = await openAlexFetch(
               `https://api.openalex.org/institutions/${id}`,
             );
+            if (!res.ok) throw new Error(`OpenAlex ${res.status}`);
             const data = await res.json();
             return {
               id: data.id,
@@ -401,7 +407,7 @@ function PaperazziAppContent() {
       params.set(
         'institutions',
         institutions
-          .map((i) => i.id.replace('https://openalex.org/', ''))
+          .map((i) => normalizeId(i.id))
           .join(','),
       );
     }
@@ -711,17 +717,18 @@ function PaperazziAppContent() {
     setIsSearchingAuthor(true);
 
     try {
-      const response = await fetch(
+      const response = await openAlexFetch(
         `https://api.openalex.org/authors?search=${encodeURIComponent(
           authorName,
         )}`,
-        { next: { revalidate: 3600 } }, // Cache for 1 hour
+        { next: { revalidate: 3600 } } as RequestInit, // Cache for 1 hour
       );
+      if (!response.ok) return;
       const data = await response.json();
 
       if (data.results && data.results.length > 0) {
         const author = data.results[0];
-        const authorId = author.id.replace('https://openalex.org/', '');
+        const authorId = normalizeId(author.id);
 
         // Cache the result
         authorCacheRef.current.set(authorName, authorId);

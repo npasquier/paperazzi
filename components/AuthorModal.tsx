@@ -4,6 +4,8 @@ import Modal from 'react-modal';
 import axios from 'axios';
 import { SelectedAuthor } from '../types/interfaces';
 import { Search } from 'lucide-react';
+import { withMailto } from '@/utils/openAlexClient';
+import { normalizeId } from '@/utils/normalizeId';
 
 interface Props {
   isOpen: boolean;
@@ -27,19 +29,29 @@ export default function AuthorModal({
     setLoading(true);
     try {
       const res = await axios.get(
-        `https://api.openalex.org/authors?filter=display_name.search:${encodeURIComponent(
-          query
-        )}&mailto=${process.env.NEXT_PUBLIC_MAIL_ID}`
+        withMailto(
+          `https://api.openalex.org/authors?filter=display_name.search:${encodeURIComponent(
+            query
+          )}`
+        )
       );
-      const authors: SelectedAuthor[] = res.data.results.map((a: any) => ({
-        id: a.id.split('/').pop(),
-        name: a.display_name,
-        orcid: a.orcid,
-        institution:
-          a.last_known_institutions && a.last_known_institutions.length > 0
-            ? a.last_known_institutions[0].display_name
-            : 'Unknown',
-      }));
+      interface RawAuthor {
+        id: string;
+        display_name: string;
+        orcid?: string;
+        last_known_institutions?: Array<{ display_name?: string }>;
+      }
+      const authors: SelectedAuthor[] = (res.data.results as RawAuthor[]).map(
+        (a) => ({
+          id: normalizeId(a.id),
+          name: a.display_name,
+          orcid: a.orcid,
+          institution:
+            a.last_known_institutions && a.last_known_institutions.length > 0
+              ? a.last_known_institutions[0].display_name
+              : 'Unknown',
+        }),
+      );
       setResults(authors);
     } finally {
       setLoading(false);
