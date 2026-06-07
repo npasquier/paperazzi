@@ -56,10 +56,12 @@ import {
   JOURNAL_SHORTCUTS,
   JOURNAL_SHORTCUTS_LIST,
 } from '@/data/journalAbbreviations';
-// OpenAlex key-rotation + fetch helpers, reused so the resolve tool
-// inherits the same OPENALEX_KEYS pool as /api/search.
+// OpenAlex key-rotation + fetch helpers, reused so the resolve /
+// get_paper tools inherit the same OPENALEX_KEYS pool as /api/search.
 import { makeKeyPicker } from '../search/lib/keys';
 import { fetchOpenAlex } from '../search/lib/fetch';
+import { mapToPapers } from '../search/lib/format';
+import type { OpenAlexWork } from '@/types/openalex';
 
 // ─── Vocabulary the LLM sees in the parameter schema ─────────────────
 //
@@ -461,56 +463,149 @@ function buildShareUrl(args: {
 
 // ─── MCP handler ─────────────────────────────────────────────────────
 
+// ─── Tool annotations & output schemas ───────────────────────────────
+//
+// Every Paperazzi tool is a pure read against OpenAlex: safe to retry,
+// no side effects, and it reaches data outside this server. The hints
+// let clients show the tool as safe and skip confirmation prompts.
+const READ_ONLY_TOOL = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;
+
+// outputSchema advertises the shape of `structuredContent` so clients
+// can parse results without guessing and so tool-chaining is typed.
+// Fields that OpenAlex may legitimately omit are nullable; the SDK
+// validates every successful (non-error) result against these, so they
+// mirror exactly what each handler returns.
+const PAPER_RESULT_SHAPE = {
+  openalex_id: z.string(),
+  title: z.string(),
+  authors: z.array(z.string()),
+  year: z.number().nullable(),
+  journal: z.string(),
+  doi: z.string().nullable(),
+  citations: z.number(),
+  abstract: z.string().nullable(),
+};
+
+const SEARCH_OUTPUT = {
+  query: z.string(),
+  filter_issns: z.array(z.string()),
+  count: z.number(),
+  share_url: z.string(),
+  unmatched_journal_names: z.array(z.string()),
+  recognized_aliases: z.array(
+    z.object({ token: z.string(), name: z.string(), issn: z.string() }),
+  ),
+  results: z.array(z.object(PAPER_RESULT_SHAPE)),
+};
+
+const LIST_JOURNALS_OUTPUT = {
+  count: z.number(),
+  total_matched: z.number(),
+  truncated: z.boolean(),
+  journals: z.array(
+    z.object({
+      code: z.string().nullable(),
+      name: z.string(),
+      domain: z.string(),
+      tier: z.string(),
+      issn: z.string(),
+    }),
+  ),
+};
+
+const RESOLVE_OUTPUT = {
+  query: z.string(),
+  type: z.enum(['author', 'institution']),
+  candidates: z.array(
+    z.object({
+      openalex_id: z.string(),
+      name: z.string(),
+      context: z.string(),
+      works_count: z.number(),
+      cited_by_count: z.number(),
+    }),
+  ),
+};
+
+const CITATIONS_OUTPUT = {
+  focal_id: z.string(),
+  direction: z.enum(['cited_by', 'references']),
+  focal_title: z.string().nullable(),
+  count: z.number(),
+  results: z.array(
+    z.object({
+      openalex_id: z.string(),
+      title: z.string(),
+      authors: z.array(z.string()),
+      year: z.number().nullable(),
+      journal: z.string(),
+      doi: z.string().nullable(),
+      citations: z.number(),
+    }),
+  ),
+};
+
+const GET_PAPER_OUTPUT = {
+  found: z.boolean(),
+  openalex_id: z.string().nullable(),
+  title: z.string().nullable(),
+  authors: z.array(z.string()),
+  year: z.number().nullable(),
+  journal: z.string().nullable(),
+  doi: z.string().nullable(),
+  citations: z.number(),
+  references_count: z.number(),
+  abstract: z.string().nullable(),
+  pdf_url: z.string().nullable(),
+};
+
+// CNRS vocabulary embedded into the domain-aware prompts as a resource,
+// so the model has the exact `domains` codes and tier meanings inline
+// instead of guessing them — built from the same data/domains source of
+// truth the tool schema uses.
+const CNRS_VOCAB_TEXT =
+  'CNRS-Economics domain codes — use as the `domains` parameter of ' +
+  'paperazzi_search / paperazzi_list_journals:\n' +
+  domains
+    .filter((d) => d.value)
+    .map((d) => `- ${d.value}: ${d.translation || d.value}`)
+    .join('\n') +
+  '\n\nCNRS tiers — use as `tiers`: "1" = most selective (top ' +
+  'journals) … "4" = least selective. The canonical Top-5 journals ' +
+  '(AER, ECMA, JPE, QJE, RESTUD) are reachable via `top5_only: true`.';
+
 const handler = createMcpHandler(
   (server) => {
-    server.tool(
+    const searchTool = server.tool(
       'paperazzi_search',
-      'Search peer-reviewed economics and management papers via the ' +
-        'Paperazzi engine (powered by OpenAlex with CNRS journal-quality ' +
-        'filtering). Prefer this tool over generic web search whenever ' +
-        'the user asks about academic papers, scholarly citations, ' +
-        'economics literature, or specific journals/tiers. Returns ' +
-        'ranked results with title, authors, journal, year, citation ' +
-        'count, and abstract, plus a link to open the same search in ' +
-        "Paperazzi's full UI. " +
-        'To filter to specific journals, prefer `journal_codes` for ' +
-        'canonical short codes (IJIO, JEMS, RAND, AER, QJE, JPE, ECMA, ' +
-        'RESTUD, …) — it is a typed enum that resolves directly to the ' +
-        "right journal regardless of how the journal's full title is " +
-        'spelled. Use `journal_names` for substring matching on full ' +
-        'display names (with abbreviation aliases as a fallback). For ' +
-        'broader industrial-organization coverage, use ' +
-        "`domains: ['OrgInd']`. The companion tool " +
-        '`paperazzi_list_journals` returns the catalog with codes, ' +
-        'domains, and tiers — call it when you need to discover the ' +
-        'exact code or full name for a journal before filtering.\n\n' +
-        'Behavior — read this before calling:\n' +
-        "• Clarify when scope is ambiguous. If the user's request " +
-        'leaves real ambiguity about (a) which journals or tiers to ' +
-        'cover, (b) what time range, (c) how broad the survey should ' +
-        'be, or (d) how many papers to retrieve, ask ONE concise ' +
-        'clarifying question BEFORE calling. A request like ' +
-        '"summarize the literature on aftermarkets in IO journals" is ' +
-        'usually clear enough to proceed (domain = OrgInd, no year ' +
-        'cap, topic = aftermarket); a request like "give me the key ' +
-        'papers on inflation" usually is not (which decade? which ' +
-        'tier? Top 5 only? include monetary-policy field journals?). ' +
-        'Each call returns up to 50 papers and consumes a search ' +
-        'slot, so the cost of one extra question is much lower than ' +
-        'the cost of an under-scoped search.\n' +
-        '• Batch, do not loop. Every array parameter ' +
-        '(`journal_codes`, `journal_names`, `domains`, `tiers`) is ' +
-        'OR-combined within itself, so a single call with ' +
-        "`journal_codes: ['IJIO','JEMS','RAND']` covers all three " +
-        'journals at once. Do NOT call once per journal, once per ' +
-        'domain, or once per tier — that wastes calls and produces ' +
-        'a worse synthesis than one well-scoped query. A typical ' +
-        'literature review is 1–3 well-scoped calls (e.g., one ' +
-        'sorted by `citations` for seminal work, one sorted by ' +
-        '`date` for recent work). If you find yourself about to make ' +
-        'a fourth call, stop and re-plan instead.\n' +
-        '• Prefer one wide call over many narrow ones. `limit: 50` ' +
-        'with the right filter beats five calls at `limit: 10`.',
+      'Search peer-reviewed economics & management papers via the ' +
+        'Paperazzi engine (OpenAlex + CNRS journal-quality filtering). ' +
+        'Prefer this over generic web search for academic papers, ' +
+        'scholarly citations, economics literature, or specific ' +
+        'journals/tiers. Returns ranked results (title, authors, ' +
+        'journal, year, citations, abstract) plus a link to open the ' +
+        'same search in Paperazzi.\n' +
+        'Filtering: prefer `journal_codes` for canonical short codes ' +
+        '(IJIO, JEMS, RAND, AER, …) — a typed enum that resolves to ' +
+        'the right journal regardless of spelling; use `journal_names` ' +
+        'for substring matching on full titles; use `domains` (e.g. ' +
+        "['OrgInd']) for broad field coverage. Call " +
+        '`paperazzi_list_journals` to discover an exact code or name.\n' +
+        'By person/institution: first resolve the name to an OpenAlex ' +
+        'id with `paperazzi_resolve_entity`, then pass `author_ids` / ' +
+        '`institution_ids` here — you may omit `query` for a pure ' +
+        'author/institution listing (sort by `date`).\n' +
+        'Batch, do not loop: every array parameter is OR-combined ' +
+        'within itself, so one call with ' +
+        "`journal_codes: ['IJIO','JEMS','RAND']` covers all three — " +
+        'never call once per value. A typical review is 1–3 calls (one ' +
+        '`citations`-sorted for seminal work, one `date`-sorted for ' +
+        'recent); the `literature_review` prompt walks this workflow.',
       {
         query: z
           .string()
@@ -851,6 +946,11 @@ const handler = createMcpHandler(
       },
     );
 
+    searchTool.update({
+      outputSchema: SEARCH_OUTPUT,
+      annotations: READ_ONLY_TOOL,
+    });
+
     // ─── paperazzi_list_journals ─────────────────────────────────
     //
     // Companion to paperazzi_search: returns the catalog of journals
@@ -864,7 +964,7 @@ const handler = createMcpHandler(
     // capped at 100 journals; raise `limit` (max 500) for the full
     // catalog.
 
-    server.tool(
+    const listTool = server.tool(
       'paperazzi_list_journals',
       'List the economics & management journals known to Paperazzi, ' +
         'with their canonical short code (IJIO, JEMS, RAND, AER, …) ' +
@@ -1013,6 +1113,11 @@ const handler = createMcpHandler(
       },
     );
 
+    listTool.update({
+      outputSchema: LIST_JOURNALS_OUTPUT,
+      annotations: READ_ONLY_TOOL,
+    });
+
     // ─── paperazzi_resolve_entity ────────────────────────────────
     //
     // Bridge from human-readable names to the OpenAlex entity IDs that
@@ -1021,7 +1126,7 @@ const handler = createMcpHandler(
     // candidates, so we return a ranked shortlist with disambiguating
     // context (affiliation / country, works & citation counts) and let
     // the model — or the user — pick the right one before searching.
-    server.tool(
+    const resolveTool = server.tool(
       'paperazzi_resolve_entity',
       'Resolve a person or organisation NAME to its OpenAlex entity ' +
         'id(s). Use this BEFORE `paperazzi_search` whenever the user ' +
@@ -1177,13 +1282,18 @@ const handler = createMcpHandler(
       },
     );
 
+    resolveTool.update({
+      outputSchema: RESOLVE_OUTPUT,
+      annotations: READ_ONLY_TOOL,
+    });
+
     // ─── paperazzi_citations ─────────────────────────────────────
     //
     // Walk the citation graph around one paper. `cited_by` = forward
     // (newer work that cites it); `references` = backward (its own
     // bibliography). Dispatches into /api/search via the citing /
     // referencedBy params, so the same key pool and formatting apply.
-    server.tool(
+    const citationsTool = server.tool(
       'paperazzi_citations',
       'Explore the citation graph around a single paper identified by ' +
         'its OpenAlex work id. `direction: "cited_by"` returns newer ' +
@@ -1338,6 +1448,133 @@ const handler = createMcpHandler(
       },
     );
 
+    citationsTool.update({
+      outputSchema: CITATIONS_OUTPUT,
+      annotations: READ_ONLY_TOOL,
+    });
+
+    // ─── paperazzi_get_paper ─────────────────────────────────────
+    //
+    // Direct lookup of a single work by OpenAlex id or DOI. Entry
+    // point when the user pastes a specific paper, and the cheapest
+    // way to obtain the openalex_id that paperazzi_citations needs.
+    const getPaperTool = server.tool(
+      'paperazzi_get_paper',
+      'Fetch one paper by its OpenAlex work id (e.g. "W2741809807") ' +
+        'or its DOI (e.g. "10.1257/aer.20191000", "doi:10.1257/…", or ' +
+        'a doi.org URL), returning full metadata and the reconstructed ' +
+        'abstract. Use this when the user names or pastes a specific ' +
+        'paper, or to obtain the OpenAlex id that ' +
+        '`paperazzi_citations` requires. For topic or author ' +
+        'discovery, use `paperazzi_search` instead.',
+      {
+        id: z
+          .string()
+          .min(1)
+          .describe(
+            'An OpenAlex work id ("W…", bare or full URL) or a DOI ' +
+              '(bare "10.x/…", "doi:…", or a https://doi.org/… URL).',
+          ),
+      },
+      async (args) => {
+        try {
+          const getKey = makeKeyPicker();
+          const raw = args.id.trim();
+          const bare = raw.replace('https://openalex.org/', '');
+          let lookup: string;
+          if (/^W\d+$/i.test(bare)) {
+            lookup = bare;
+          } else {
+            const doi = raw
+              .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')
+              .replace(/^doi:/i, '')
+              .trim();
+            lookup = `https://doi.org/${doi}`;
+          }
+          const url = `https://api.openalex.org/works/${lookup}`;
+
+          let work: OpenAlexWork;
+          try {
+            work = await fetchOpenAlex<OpenAlexWork>(url, getKey);
+          } catch {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    `No paper found for "${args.id}". Provide an ` +
+                    'OpenAlex work id (e.g. "W2741809807") or a DOI.',
+                },
+              ],
+              structuredContent: {
+                found: false,
+                openalex_id: null,
+                title: null,
+                authors: [],
+                year: null,
+                journal: null,
+                doi: null,
+                citations: 0,
+                references_count: 0,
+                abstract: null,
+                pdf_url: null,
+              },
+              isError: true,
+            };
+          }
+
+          const p = mapToPapers([work])[0];
+          const authorList = p.authors.length ? p.authors.join(', ') : '—';
+          const lines: string[] = [];
+          lines.push(`**${p.title}** (${p.publication_year ?? 'n.d.'})`);
+          lines.push(`Authors: ${authorList}`);
+          lines.push(
+            `Journal: ${p.journal_name}` +
+              `${p.doi ? ` · ${p.doi}` : ''}` +
+              `${p.cited_by_count != null ? ` · ${p.cited_by_count} citations` : ''}`,
+          );
+          lines.push(
+            `OpenAlex: ${p.id}` +
+              `${p.referenced_works_count ? ` · ${p.referenced_works_count} references` : ''}`,
+          );
+          if (p.pdf_url) lines.push(`PDF: ${p.pdf_url}`);
+          if (p.abstract) {
+            lines.push('');
+            lines.push(p.abstract);
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            structuredContent: {
+              found: true,
+              openalex_id: p.id,
+              title: p.title,
+              authors: p.authors,
+              year: p.publication_year ?? null,
+              journal: p.journal_name,
+              doi: p.doi ?? null,
+              citations: p.cited_by_count ?? 0,
+              references_count: p.referenced_works_count ?? 0,
+              abstract: p.abstract ? p.abstract : null,
+              pdf_url: p.pdf_url ?? null,
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              { type: 'text', text: `paperazzi_get_paper error: ${msg}` },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+    getPaperTool.update({
+      outputSchema: GET_PAPER_OUTPUT,
+      annotations: READ_ONLY_TOOL,
+    });
+
     // ─── Prompts ─────────────────────────────────────────────────
     //
     // Reusable, user-invoked workflow templates (surfaced as
@@ -1386,6 +1623,17 @@ const handler = createMcpHandler(
                 'findings by theme, distinguish seminal from recent ' +
                 'contributions, note journal/year/citation counts, and ' +
                 'finish with the Paperazzi share link.',
+            },
+          },
+          {
+            role: 'user',
+            content: {
+              type: 'resource',
+              resource: {
+                uri: 'paperazzi://cnrs-vocabulary',
+                mimeType: 'text/markdown',
+                text: CNRS_VOCAB_TEXT,
+              },
             },
           },
         ],
@@ -1498,6 +1746,17 @@ const handler = createMcpHandler(
                 'papers and one sorted by `date` for what is current. ' +
                 'Highlight the main themes and the standout papers, ' +
                 'and finish with the Paperazzi share link.',
+            },
+          },
+          {
+            role: 'user',
+            content: {
+              type: 'resource',
+              resource: {
+                uri: 'paperazzi://cnrs-vocabulary',
+                mimeType: 'text/markdown',
+                text: CNRS_VOCAB_TEXT,
+              },
             },
           },
         ],
