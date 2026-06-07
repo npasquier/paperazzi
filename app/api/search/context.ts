@@ -13,6 +13,14 @@ export interface FilterParams {
   publicationType: string;
   from: string | null;
   to: string | null;
+  /**
+   * Working-paper source-id whitelist. Restricts results to
+   * `primary_location.source.id IN (…)`. Mutually exclusive with the
+   * journal-ISSN clause at the OpenAlex layer — when non-empty, the
+   * journals list is zeroed upstream so the two clauses don't AND to
+   * the empty intersection.
+   */
+  workingPaperSourceIds: string[];
 }
 
 export interface SearchContext {

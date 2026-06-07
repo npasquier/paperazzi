@@ -576,6 +576,7 @@ function NavBarContent() {
     router.push('/search');
   };
 
+
   // Same deferred-commit behavior for journal chips — local state
   // only, dirty signal derived from URL via `chipsDirty`. See
   // removeAuthorChip for the rationale.

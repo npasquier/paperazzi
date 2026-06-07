@@ -86,6 +86,9 @@ export function loadCnrsScheme(): Promise<RankingScheme> {
             name: 'Top 5',
             issns: [...CNRS_TOP5_ISSNS],
           },
+          // Working-papers filter is now its own top-level FilterPanel
+          // section (parallel to Journals), not a preset pill here. See
+          // `data/econWorkingPapers.ts` + the "Working papers" UI.
         ],
       };
       return scheme;

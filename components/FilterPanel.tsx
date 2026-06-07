@@ -20,6 +20,10 @@ import {
   migrateJournalFilterPreset,
 } from '@/utils/migrateFilters';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
+import {
+  ECON_WORKING_PAPER_SERIES,
+  ECON_WORKING_PAPER_SOURCE_IDS,
+} from '@/data/econWorkingPapers';
 
 export interface FilterPreset {
   id: string;
@@ -37,16 +41,6 @@ interface FilterPanelProps {
   isOpen: boolean;
   onToggle: () => void;
 }
-const PUBLICATION_TYPES = [
-  { value: '', label: 'All Types' },
-  { value: 'article', label: 'Journal Article' },
-  { value: 'review', label: 'Review' },
-  { value: 'preprint', label: 'Preprint' },
-  { value: 'book-chapter', label: 'Book Chapter' },
-  { value: 'book', label: 'Book' },
-  { value: 'dissertation', label: 'Dissertation' },
-  { value: 'dataset', label: 'Dataset' },
-];
 const MAX_PRESETS = 3;
 export default function FilterPanel({
   filters,
@@ -306,19 +300,17 @@ export default function FilterPanel({
     }
     setActivePresetId(null);
   };
-  const handlePublicationTypeChange = (
-    e: React.ChangeEvent<HTMLSelectElement>,
-  ) => {
-    setFilters((prev) => ({ ...prev, publicationType: e.target.value }));
-    setActivePresetId(null);
-  };
   const journalActiveCount = (() => {
     const mode = filters.journalFilterMode || 'wide';
     if (mode === 'wide') return filters.econFilter?.enabled ? 1 : 0;
     return filters.journals.length;
   })();
+  const workingPaperActive =
+    !!filters.workingPaperFilter?.enabled &&
+    (filters.workingPaperFilter.sourceIds?.length || 0) > 0;
   const activeFilterCount =
     journalActiveCount +
+    (workingPaperActive ? 1 : 0) +
     filters.authors.length +
     filters.institutions.length +
     (filters.publicationType ? 1 : 0) +
@@ -565,6 +557,12 @@ export default function FilterPanel({
 
         {/* Collapsible filter sections */}
         <div className='px-4'>
+          {/* RePEc-mode banner. The journals/WP-catalogue sections
+              below assume OpenAlex IDs and don't translate; we hide
+              them entirely and tell the user what's available
+              instead. Series and author lookup will live here in a
+              follow-up — for now the navbar search box is the only
+              input the RePEc backend honours. */}
           {/* (Saved searches moved to a footer-style block at the
               bottom of the panel — see the section below Type & Year.
               Kept out of the primary scan path because it's a power-
@@ -624,6 +622,18 @@ export default function FilterPanel({
                     setFilters((prev) => ({
                       ...prev,
                       journalFilterMode: next,
+                      // Activating Journals (Wide or Specific) parks
+                      // the working-paper filter — the two clauses
+                      // can't usefully AND. Switching to Off leaves
+                      // WP untouched (user might be swapping venues).
+                      workingPaperFilter:
+                        next !== 'off' && prev.workingPaperFilter?.enabled
+                          ? {
+                              enabled: false,
+                              sourceIds:
+                                prev.workingPaperFilter.sourceIds || [],
+                            }
+                          : prev.workingPaperFilter,
                     }));
                     setActivePresetId(null);
                   };
@@ -1020,33 +1030,165 @@ export default function FilterPanel({
               `openInstitutionModal` bindings are kept (currently
               unused) so this is reversible — re-add the
               `renderSection` calls and the panel works again. */}
-        </div>
-        {/* Type & Year */}
-        <div className='px-4 py-4 border-t border-app-muted space-y-4'>
-          <div>
-            <label className='text-xs text-app-soft block mb-1.5'>Type</label>
-            {/* Type — same sobered pattern as Sort By: borderless
-                inline select with a lucide chevron overlay. See the
-                Sort By comment above for rationale. */}
-            <div className='relative group'>
-              <select
-                value={filters.publicationType}
-                onChange={handlePublicationTypeChange}
-                className='w-full appearance-none bg-transparent border-0 pl-1 pr-6 py-1 text-sm text-stone-700 group-hover:text-stone-900 group-hover:bg-[var(--surface-muted)] cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition'
-              >
-                {PUBLICATION_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={12}
-                aria-hidden='true'
-                className='absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 group-hover:text-stone-600 pointer-events-none transition'
-              />
-            </div>
+
+          {/* Working papers — restrict results to a whitelist of
+              OpenAlex source ids (RePEc, HAL, NBER, IMF, …). Mutually
+              exclusive with the journal-ISSN clause at the OpenAlex
+              layer: ISSN and source.id are separate filter fields and
+              get AND-ed upstream, so combining them returns the empty
+              intersection. The UI parks Journals (sets mode='off') the
+              moment any WP source is selected; switching Journals back
+              to Wide or Specific parks WP in turn. */}
+          <div className='border-b border-app-muted'>
+            {(() => {
+              const wp = filters.workingPaperFilter || {
+                enabled: false,
+                sourceIds: [],
+              };
+              const allIds = ECON_WORKING_PAPER_SOURCE_IDS;
+              const isAllOn =
+                wp.enabled &&
+                wp.sourceIds.length === allIds.length &&
+                allIds.every((id) => wp.sourceIds.includes(id));
+              const setWp = (
+                next: NonNullable<Filters['workingPaperFilter']>,
+                parkJournals: boolean,
+              ) => {
+                setFilters((prev) => ({
+                  ...prev,
+                  workingPaperFilter: next,
+                  journalFilterMode: parkJournals
+                    ? 'off'
+                    : prev.journalFilterMode,
+                }));
+                setActivePresetId(null);
+              };
+              return (
+                <>
+                  <div className='w-full flex items-center justify-between py-4'>
+                    <span className='text-xs text-app-soft'>
+                      Working papers
+                    </span>
+                    {wp.enabled && wp.sourceIds.length > 0 && (
+                      <span className='text-xs badge-neutral px-1.5 py-0.5 rounded'>
+                        {wp.sourceIds.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className='pb-3 pl-0'>
+                    {/* All / Off toggle. Mirrors the Journals
+                        Wide/Specific/Off pattern with two states
+                        because everything else here is per-source
+                        checkboxes below. */}
+                    <div className='flex items-center gap-1 p-0.5 mb-3 surface-subtle rounded text-[11px]'>
+                      <button
+                        onClick={() =>
+                          setWp(
+                            { enabled: true, sourceIds: [...allIds] },
+                            true,
+                          )
+                        }
+                        className={`flex-1 px-2 py-1 rounded transition ${
+                          isAllOn
+                            ? 'surface-card text-stone-800 shadow-sm'
+                            : 'text-stone-500 hover:text-stone-700'
+                        }`}
+                        title='Filter to all curated WP sources'
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() =>
+                          setWp(
+                            { enabled: false, sourceIds: wp.sourceIds },
+                            false,
+                          )
+                        }
+                        className={`flex-1 px-2 py-1 rounded transition ${
+                          !wp.enabled
+                            ? 'surface-card text-stone-800 shadow-sm'
+                            : 'text-stone-500 hover:text-stone-700'
+                        }`}
+                        title='Pause the filter — selections are kept but inactive'
+                      >
+                        Off
+                      </button>
+                    </div>
+                    {wp.enabled && (
+                      <>
+                        <p className='text-[10px] uppercase tracking-wider text-app-soft mb-1.5'>
+                          Sources
+                        </p>
+                        {/* Pill buttons — mirror the Domain row above so the
+                            WP selector reads consistently with the rest of
+                            the panel. Short label is derived from the
+                            display name (strip " Working Papers", "Policy
+                            Research", "Economics Department", " (all)") so
+                            pills stay compact; full name + note are
+                            preserved as the hover tooltip. */}
+                        <div className='flex flex-wrap gap-1 mb-2'>
+                          {ECON_WORKING_PAPER_SERIES.map((series) => {
+                            const checked = wp.sourceIds.includes(
+                              series.sourceId,
+                            );
+                            const shortLabel = series.name
+                              .replace(/Policy Research /, '')
+                              .replace(/Economics Department /, '')
+                              .replace(/ Working Papers$/, '')
+                              .replace(/ \(all\)$/, '')
+                              .trim();
+                            return (
+                              <button
+                                key={series.sourceId}
+                                title={series.note || series.name}
+                                onClick={() => {
+                                  const nextIds = checked
+                                    ? wp.sourceIds.filter(
+                                        (id) => id !== series.sourceId,
+                                      )
+                                    : [...wp.sourceIds, series.sourceId];
+                                  const nextEnabled = nextIds.length > 0;
+                                  setWp(
+                                    {
+                                      enabled: nextEnabled,
+                                      sourceIds: nextIds,
+                                    },
+                                    nextEnabled,
+                                  );
+                                }}
+                                className={`px-1.5 py-0.5 text-[10px] rounded transition ${
+                                  checked
+                                    ? 'button-primary'
+                                    : 'surface-muted text-stone-400 hover:bg-[var(--surface-subtle)]'
+                                }`}
+                              >
+                                {shortLabel}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {wp.sourceIds.length > 0 && (
+                          <p className='text-[10px] text-app-soft'>
+                            {wp.sourceIds.length} of {allIds.length} sources
+                            selected
+                          </p>
+                        )}
+                        {wp.sourceIds.length > 0 &&
+                          (filters.journalFilterMode || 'wide') !== 'off' && (
+                            <p className='text-[10px] text-warning mt-1'>
+                              Journals filter paused while WP is active.
+                            </p>
+                          )}
+                      </>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
+        </div>
+        {/* Year */}
+        <div className='px-4 py-4 border-t border-app-muted space-y-4'>
           <div>
             <label className='text-xs text-app-soft block mb-1.5'>Year</label>
             <div className='flex items-center gap-2'>

@@ -88,6 +88,21 @@ export function migrateFilters(input: unknown): Filters {
       o.journalFilterMode === 'off'
         ? o.journalFilterMode
         : undefined,
+    workingPaperFilter: migrateWorkingPaperFilter(o.workingPaperFilter),
+  };
+}
+
+/** Coerce stored workingPaperFilter. */
+export function migrateWorkingPaperFilter(
+  input: unknown,
+): Filters['workingPaperFilter'] {
+  if (!input || typeof input !== 'object') return undefined;
+  const o = input as Record<string, unknown>;
+  return {
+    enabled: !!o.enabled,
+    sourceIds: Array.isArray(o.sourceIds)
+      ? (o.sourceIds as unknown[]).map((x) => String(x))
+      : [],
   };
 }
 

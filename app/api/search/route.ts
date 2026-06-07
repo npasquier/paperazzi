@@ -88,29 +88,41 @@ export async function GET(req: NextRequest) {
     .split(',')
     .filter(Boolean);
 
+  // Working-paper filter — whitelist of OpenAlex source ids (RePEc,
+  // HAL, NBER, IMF, …). Mapped to a primary_location.source.id:
+  // clause. Mutually exclusive with the journal ISSN filter
+  // (different clauses, ANDed upstream, empty intersection) — when
+  // wpEnabled is true we zero out manual journals so a stale
+  // ?journals= URL param doesn't degenerate into empty results.
+  const wpEnabled = searchParams.get('wpEnabled') === 'true';
+  const wpSources = (searchParams.get('wpSources') || '')
+    .split(',')
+    .filter(Boolean);
+
   const filterParams = {
-    journals,
+    journals: wpEnabled && wpSources.length > 0 ? [] : journals,
     authors,
     topics,
     institutions,
     publicationType,
     from,
     to,
+    workingPaperSourceIds: wpEnabled ? wpSources : [],
   };
 
   // Decide whether the wide econ filter applies for this request.
   // Manual journals (filterParams.journals) override the wide filter when
   // non-empty, so we only build issnBatches when there are no manual
-  // journals AND the client sent an ISSN whitelist.
+  // journals AND the client sent an ISSN whitelist. The working-paper
+  // filter also wins — its source-id whitelist is a different filter
+  // clause and the two can't usefully co-fire.
   let issnBatches: string[][] | null = null;
   if (
     econEnabled &&
     filterParams.journals.length === 0 &&
+    !filterParams.workingPaperSourceIds.length &&
     econIssns.length > 0
   ) {
-    // Small ISSN sets fit in a single OpenAlex filter — skip the
-    // batched count/walk machinery and let the caller use the regular
-    // filter path.
     issnBatches =
       econIssns.length <= ISSN_BATCH_SIZE ? [econIssns] : batchISSNs(econIssns);
   }

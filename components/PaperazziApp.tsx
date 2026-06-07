@@ -84,6 +84,7 @@ function PaperazziAppContent() {
       presetId: null,
     },
     journalFilterMode: 'off',
+    workingPaperFilter: { enabled: false, sourceIds: [] },
   });
 
   // --- Search state ---
@@ -107,6 +108,7 @@ function PaperazziAppContent() {
       presetId: null,
     },
     journalFilterMode: 'off',
+    workingPaperFilter: { enabled: false, sourceIds: [] },
   });
   const [page, setPage] = useState(1);
   // Focal-paper id for the network view; null when not in network mode.
@@ -137,6 +139,11 @@ function PaperazziAppContent() {
           issns: undefined,
         },
         journalFilterMode: 'off',
+        // Citation drill-down / network view / reset should also clear
+        // the working-paper filter — like econFilter, it's part of the
+        // transient venue selection users expect to wipe when
+        // navigating into a citation context.
+        workingPaperFilter: { enabled: false, sourceIds: [] },
       }));
     };
     // Navbar's "clear search" button hits the same reset as a citation
@@ -339,6 +346,10 @@ function PaperazziAppContent() {
       const committedNonUrl = {
         econFilter: liveFilters.econFilter,
         journalFilterMode: reconcileMode(liveFilters.journalFilterMode),
+        // workingPaperFilter is non-URL-synced (same pattern as
+        // econFilter / journalFilterMode) — carry the live snapshot
+        // through so toggling it in the panel survives an Enter commit.
+        workingPaperFilter: liveFilters.workingPaperFilter,
       };
       setFilters({ ...newFilters, ...committedNonUrl });
       setSearchFilters({ ...newFilters, ...committedNonUrl });
@@ -817,6 +828,7 @@ function PaperazziAppContent() {
             onExitNetwork={handleResetAll}
             econFilter={searchFilters.econFilter}
             journalFilterMode={searchFilters.journalFilterMode}
+            workingPaperFilter={searchFilters.workingPaperFilter}
             networkId={networkId}
             onPresetTile={handlePresetTile}
             sidebarsCollapsed={sidebarsCollapsed}

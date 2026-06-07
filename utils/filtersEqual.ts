@@ -43,6 +43,17 @@ function strEq(a: string | undefined | null, b: string | undefined | null): bool
   return (a || '') === (b || '');
 }
 
+/** Deep-ish equality for the `workingPaperFilter` shape. */
+function wpEq(
+  a: Filters['workingPaperFilter'],
+  b: Filters['workingPaperFilter'],
+): boolean {
+  const aEnabled = !!a?.enabled;
+  const bEnabled = !!b?.enabled;
+  if (aEnabled !== bEnabled) return false;
+  return arrEq(a?.sourceIds ?? [], b?.sourceIds ?? []);
+}
+
 /** Deep-ish equality for the `econFilter` shape. */
 function econEq(
   a: Filters['econFilter'],
@@ -86,5 +97,6 @@ export function filtersEqual(live: Filters, applied: Filters): boolean {
   if ((live.journalFilterMode || 'wide') !== (applied.journalFilterMode || 'wide'))
     return false;
   if (!econEq(live.econFilter, applied.econFilter)) return false;
+  if (!wpEq(live.workingPaperFilter, applied.workingPaperFilter)) return false;
   return true;
 }

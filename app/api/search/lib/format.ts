@@ -32,6 +32,8 @@ export function buildFilters(params: {
   to: string | null;
   citing?: string | null;
   workIds?: string[];
+  /** Working-paper source-id whitelist (see context.FilterParams). */
+  workingPaperSourceIds?: string[];
 }): string[] {
   const filters: string[] = [];
 
@@ -41,7 +43,15 @@ export function buildFilters(params: {
   if (params.citing) {
     filters.push(`cites:${toFullId(params.citing)}`);
   }
-  if (params.journals.length) {
+  // Working-paper source-id wins over the journal-ISSN clause when
+  // both are present (different clauses, OpenAlex ANDs them, empty
+  // intersection). The route zeroes `journals` upstream when WP is
+  // active; this branch defends the boundary anyway.
+  if (params.workingPaperSourceIds?.length) {
+    filters.push(
+      `primary_location.source.id:${params.workingPaperSourceIds.join('|')}`,
+    );
+  } else if (params.journals.length) {
     filters.push(`primary_location.source.issn:${params.journals.join('|')}`);
   }
   if (params.authors.length) {

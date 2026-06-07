@@ -76,6 +76,10 @@ interface Props {
   // Which journal-filter source feeds the API: 'wide' uses econFilter and
   // ignores `journals`; 'specific' does the inverse; 'off' sends neither.
   journalFilterMode?: 'wide' | 'specific' | 'off';
+  workingPaperFilter?: {
+    enabled: boolean;
+    sourceIds: string[];
+  };
   // When set, the main area renders the citation network for this OpenAlex
   // work id instead of the regular results list.
   networkId?: string | null;
@@ -117,6 +121,7 @@ export default function SearchResults({
   referencesAll,
   econFilter,
   journalFilterMode = 'wide',
+  workingPaperFilter,
   networkId,
   onPresetTile,
   loadMore,
@@ -417,6 +422,14 @@ export default function SearchResults({
             params.set('econIssns', econResolvedIssns.join(','));
         }
 
+        // Working-paper filter — restricts to a whitelist of OpenAlex
+        // source ids (RePEc, HAL, NBER, IMF, …). Server prefers this
+        // over the journal-ISSN clause when both are present.
+        if (workingPaperFilter?.enabled && workingPaperFilter.sourceIds.length) {
+          params.set('wpEnabled', 'true');
+          params.set('wpSources', workingPaperFilter.sourceIds.join(','));
+        }
+
         // cachedFetch: in-session memo of identical URLs (page-flip,
         // chip-toggle round-trips, browser back/forward) come back without
         // a network round-trip. Error envelopes (5xx) are returned but
@@ -464,6 +477,7 @@ export default function SearchResults({
     econFilter,
     econResolvedIssns,
     journalFilterMode,
+    workingPaperFilter,
     networkId,
   ]);
 
@@ -504,6 +518,10 @@ export default function SearchResults({
         p.set('econEnabled', 'true');
         if (econResolvedIssns.length > 0)
           p.set('econIssns', econResolvedIssns.join(','));
+      }
+      if (workingPaperFilter?.enabled && workingPaperFilter.sourceIds.length) {
+        p.set('wpEnabled', 'true');
+        p.set('wpSources', workingPaperFilter.sourceIds.join(','));
       }
       return p;
     };
@@ -587,7 +605,14 @@ export default function SearchResults({
     return () => {
       aborted = true;
     };
-  }, [networkId, journalFilterMode, econFilter, econResolvedIssns, journals]);
+  }, [
+    networkId,
+    journalFilterMode,
+    econFilter,
+    econResolvedIssns,
+    journals,
+    workingPaperFilter,
+  ]);
 
   // Author helpers
   const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
@@ -801,6 +826,18 @@ export default function SearchResults({
                     return (
                       <p className='text-[11px] text-warning mt-1.5'>
                         Filtered by {label}
+                      </p>
+                    );
+                  }
+                  if (
+                    workingPaperFilter?.enabled &&
+                    workingPaperFilter.sourceIds.length
+                  ) {
+                    return (
+                      <p className='text-[11px] text-warning mt-1.5'>
+                        Filtered by {workingPaperFilter.sourceIds.length}{' '}
+                        working-paper source
+                        {workingPaperFilter.sourceIds.length === 1 ? '' : 's'}
                       </p>
                     );
                   }

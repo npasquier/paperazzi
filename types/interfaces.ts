@@ -150,6 +150,33 @@ export interface Filters {
   // Which journal-filter source feeds the API. Both subsections retain their
   // state when inactive; only the active one is sent to /api/search.
   journalFilterMode?: 'wide' | 'specific' | 'off';
+  /**
+   * Working-paper filter — restricts results to a whitelist of econ
+   * working-paper OpenAlex source ids (NBER, IMF, RePEc, SSRN, …). Sits
+   * as its own top-level FilterPanel section, parallel to Journals.
+   *
+   * Mutually exclusive with the journal filter at the OpenAlex layer:
+   * the journal filter narrows by `primary_location.source.issn` and the
+   * WP filter narrows by `primary_location.source.id`, and OpenAlex ANDs
+   * the two clauses — so combining them returns the empty intersection.
+   * The UI enforces this by flipping `journalFilterMode` to 'off' when
+   * the user enables WP (and vice versa). State is preserved, only the
+   * active one fires.
+   */
+  /**
+   * Working-paper filter — restricts results to a curated whitelist of
+   * OpenAlex source ids that index working papers (RePEc, HAL, NBER,
+   * IMF, …). See `data/econWorkingPapers.ts` for the catalogue. The
+   * filter narrows by `primary_location.source.id` server-side and is
+   * mutually exclusive with the journal-ISSN filter at the OpenAlex
+   * layer — the FilterPanel enforces a soft mutex by parking Journals
+   * when WP is active and vice versa.
+   */
+  workingPaperFilter?: {
+    enabled: boolean;
+    /** Selected OpenAlex source ids (e.g. ['S4306401271','S…HAL…']). */
+    sourceIds: string[];
+  };
 }
 
 // Snapshot of the Journals subsection state — saved by the user under

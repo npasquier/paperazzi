@@ -1,10 +1,26 @@
 // Model Context Protocol (MCP) endpoint.
 //
-// Exposes Paperazzi's economics-aware search as a single tool,
-// `paperazzi_search`, so any MCP-capable LLM client (Claude Desktop,
-// Mistral Le Chat with custom connectors, ChatGPT with connectors,
-// Cursor, etc.) can invoke Paperazzi when the user asks about research
-// papers, scholarly citations, or specific journals/tiers.
+// Exposes Paperazzi's economics-aware engine to any MCP-capable LLM
+// client (Claude Desktop, Mistral Le Chat, ChatGPT connectors, Cursor,
+// etc.) when the user asks about research papers, scholarly citations,
+// or specific journals/tiers.
+//
+// Tools:
+//   • paperazzi_search          — ranked paper search with CNRS journal /
+//                                 domain / tier filters, plus author_ids /
+//                                 institution_ids (OpenAlex entity IDs).
+//   • paperazzi_list_journals   — catalogue of known journals (code,
+//                                 domain, tier, ISSN) for disambiguation.
+//   • paperazzi_resolve_entity  — author / institution NAME → OpenAlex
+//                                 id(s), the prerequisite for filtering a
+//                                 search by author_ids / institution_ids.
+//   • paperazzi_citations       — citation-graph walk around one paper
+//                                 (cited_by = forward, references = back).
+//
+// Prompts (user-invoked workflow templates): literature_review,
+// author_recent_work, explore_citations, journal_panorama. These keep
+// multi-step "how to drive Paperazzi" guidance out of the always-loaded
+// tool descriptions — a prompt is only pulled into context on demand.
 //
 // Architecture
 // ────────────
@@ -40,6 +56,10 @@ import {
   JOURNAL_SHORTCUTS,
   JOURNAL_SHORTCUTS_LIST,
 } from '@/data/journalAbbreviations';
+// OpenAlex key-rotation + fetch helpers, reused so the resolve tool
+// inherits the same OPENALEX_KEYS pool as /api/search.
+import { makeKeyPicker } from '../search/lib/keys';
+import { fetchOpenAlex } from '../search/lib/fetch';
 
 // ─── Vocabulary the LLM sees in the parameter schema ─────────────────
 //
@@ -381,6 +401,10 @@ async function resolveIssns(args: {
 function buildSearchUrl(args: {
   query: string;
   issns: string[];
+  author_ids?: string[];
+  institution_ids?: string[];
+  citing?: string;
+  referenced_by?: string;
   year_from?: number;
   year_to?: number;
   limit: number;
@@ -388,6 +412,17 @@ function buildSearchUrl(args: {
 }): URL {
   const params = new URLSearchParams();
   if (args.query) params.set('query', args.query);
+  if (args.author_ids?.length) {
+    params.set('authors', args.author_ids.join(','));
+  }
+  if (args.institution_ids?.length) {
+    params.set('institutions', args.institution_ids.join(','));
+  }
+  // Citation-graph walks. `citing` → forward (papers that cite the id);
+  // `referencedBy` → backward (the id's own reference list). The search
+  // route dispatches to the right handler based on which is present.
+  if (args.citing) params.set('citing', args.citing);
+  if (args.referenced_by) params.set('referencedBy', args.referenced_by);
   if (args.year_from) params.set('from', String(args.year_from));
   if (args.year_to) params.set('to', String(args.year_to));
   params.set('perPage', String(args.limit));
@@ -479,11 +514,38 @@ const handler = createMcpHandler(
       {
         query: z
           .string()
-          .min(1)
+          .optional()
           .describe(
             "Free-text search query. Examples: 'digital agriculture " +
               "adoption', 'minimum wage employment effects', 'monetary " +
-              "policy transmission'.",
+              "policy transmission'. Optional: you may omit it when " +
+              'filtering purely by `author_ids` and/or ' +
+              "`institution_ids` (e.g. \"latest papers by this " +
+              'author"), in which case sort by `date`. At least one of ' +
+              'query, author_ids, institution_ids, or a journal/domain/' +
+              'tier filter must be present.',
+          ),
+        author_ids: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Restrict to papers (co-)authored by these OpenAlex author ' +
+              'IDs (e.g. "A5008020290"). These are OpenAlex entity IDs, ' +
+              'NOT names — resolve a name like "Pasquier" to an ID first ' +
+              'with the `paperazzi_resolve_entity` tool (type: ' +
+              '"author"), then pass the chosen id here. Multiple IDs are ' +
+              'AND-combined (papers co-authored by ALL of them).',
+          ),
+        institution_ids: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Restrict to papers with an author affiliated to these ' +
+              'OpenAlex institution IDs (e.g. "I4210166294" for a lab ' +
+              'or university). These are OpenAlex entity IDs, NOT names ' +
+              '— resolve a name like "GAEL" or "Toulouse School of ' +
+              'Economics" with `paperazzi_resolve_entity` (type: ' +
+              '"institution") first. Multiple IDs are OR-combined.',
           ),
         domains: z
           .array(z.enum(DOMAIN_CODES))
@@ -545,6 +607,42 @@ const handler = createMcpHandler(
       },
       async (args) => {
         try {
+          const query = (args.query ?? '').trim();
+          const authorIds = args.author_ids ?? [];
+          const institutionIds = args.institution_ids ?? [];
+
+          // Require something to search on. An empty query with no
+          // filter at all would list the entire OpenAlex corpus by
+          // date — almost never the intent, and a sign the model
+          // dropped the topic.
+          const hasFilter =
+            authorIds.length > 0 ||
+            institutionIds.length > 0 ||
+            (args.domains?.length ?? 0) > 0 ||
+            (args.tiers?.length ?? 0) > 0 ||
+            (args.journal_codes?.length ?? 0) > 0 ||
+            (args.journal_names?.length ?? 0) > 0 ||
+            args.top5_only === true;
+          if (!query && !hasFilter) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    'Paperazzi search did not run: provide a `query`, ' +
+                    'or at least one filter (`author_ids`, ' +
+                    '`institution_ids`, `domains`, `tiers`, ' +
+                    '`journal_codes`, `journal_names`, or ' +
+                    '`top5_only`). To list an author’s latest ' +
+                    'work, resolve the author with ' +
+                    '`paperazzi_resolve_entity`, then call this tool ' +
+                    'with `author_ids` and `sort: "date"`.',
+                },
+              ],
+              isError: true,
+            };
+          }
+
           const resolved = await resolveIssns(args);
           const { issns, unmatched_journal_names, recognized_aliases } =
             resolved;
@@ -581,7 +679,7 @@ const handler = createMcpHandler(
             return {
               content: [{ type: 'text', text: warnLines.join('\n') }],
               structuredContent: {
-                query: args.query,
+                query,
                 filter_issns: [],
                 count: 0,
                 unmatched_journal_names,
@@ -593,8 +691,10 @@ const handler = createMcpHandler(
           }
 
           const url = buildSearchUrl({
-            query: args.query,
+            query,
             issns,
+            author_ids: authorIds,
+            institution_ids: institutionIds,
             year_from: args.year_from,
             year_to: args.year_to,
             limit,
@@ -634,7 +734,7 @@ const handler = createMcpHandler(
           }
 
           const shareUrl = buildShareUrl({
-            query: args.query,
+            query,
             issns,
             year_from: args.year_from,
             year_to: args.year_to,
@@ -647,8 +747,27 @@ const handler = createMcpHandler(
           const filterNote = issns.length
             ? ` (filtered to ${issns.length} journal${issns.length === 1 ? '' : 's'})`
             : '';
+          // Describe what was searched. With no free-text query the
+          // search is a pure author/institution/journal listing, so
+          // name that instead of printing an empty `for ""`.
+          const entityBits: string[] = [];
+          if (authorIds.length) {
+            entityBits.push(
+              `${authorIds.length} author${authorIds.length === 1 ? '' : 's'}`,
+            );
+          }
+          if (institutionIds.length) {
+            entityBits.push(
+              `${institutionIds.length} institution${institutionIds.length === 1 ? '' : 's'}`,
+            );
+          }
+          const searchLabel = query
+            ? `for "${query}"`
+            : entityBits.length
+              ? `by ${entityBits.join(' + ')}`
+              : 'matching your filters';
           lines.push(
-            `Found ${data.results.length} paper${data.results.length === 1 ? '' : 's'} for "${args.query}"${filterNote}.`,
+            `Found ${data.results.length} paper${data.results.length === 1 ? '' : 's'} ${searchLabel}${filterNote}.`,
           );
           if (recognized_aliases.length) {
             lines.push('');
@@ -702,7 +821,7 @@ const handler = createMcpHandler(
             // for chained tool use and clients that want JSON they
             // can parse directly.
             structuredContent: {
-              query: args.query,
+              query,
               filter_issns: issns,
               count: data.results.length,
               share_url: shareUrl,
@@ -893,13 +1012,506 @@ const handler = createMcpHandler(
         }
       },
     );
+
+    // ─── paperazzi_resolve_entity ────────────────────────────────
+    //
+    // Bridge from human-readable names to the OpenAlex entity IDs that
+    // paperazzi_search's `author_ids` / `institution_ids` require. A
+    // surname like "Pasquier" or a lab acronym like "GAEL" maps to many
+    // candidates, so we return a ranked shortlist with disambiguating
+    // context (affiliation / country, works & citation counts) and let
+    // the model — or the user — pick the right one before searching.
+    server.tool(
+      'paperazzi_resolve_entity',
+      'Resolve a person or organisation NAME to its OpenAlex entity ' +
+        'id(s). Use this BEFORE `paperazzi_search` whenever the user ' +
+        'names an author or institution to filter by — the search ' +
+        "tool's `author_ids` / `institution_ids` need OpenAlex IDs, " +
+        'not names. Returns ranked candidates with disambiguating ' +
+        'context: for authors, their last-known affiliation plus works ' +
+        'and citation counts; for institutions, the type and country. ' +
+        'If exactly one candidate is an obvious match, proceed with ' +
+        'its id; if several are plausible (common surnames), ask the ' +
+        'user to choose. Typical flow: resolve "Pasquier" → pick the ' +
+        'GAEL-affiliated A-id → `paperazzi_search({ author_ids: [id], ' +
+        'sort: "date" })`.',
+      {
+        name: z
+          .string()
+          .min(1)
+          .describe(
+            'The author or institution name to look up, e.g. ' +
+              '"Nicolas Pasquier", "GAEL", "Toulouse School of ' +
+              'Economics".',
+          ),
+        type: z
+          .enum(['author', 'institution'])
+          .describe(
+            'Whether `name` denotes a person (author) or an ' +
+              'organisation such as a lab, university, or research ' +
+              'centre (institution).',
+          ),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(10)
+          .optional()
+          .describe('Max candidates to return (1–10, default 5).'),
+      },
+      async (args) => {
+        try {
+          const getKey = makeKeyPicker();
+          const limit = args.limit ?? 5;
+          const endpoint =
+            args.type === 'author' ? 'authors' : 'institutions';
+          const url =
+            `https://api.openalex.org/${endpoint}` +
+            `?search=${encodeURIComponent(args.name)}&per-page=${limit}`;
+          const data = await fetchOpenAlex<{
+            results?: Array<{
+              id: string;
+              display_name?: string;
+              works_count?: number;
+              cited_by_count?: number;
+              last_known_institutions?: Array<{
+                display_name?: string;
+                country_code?: string;
+              }>;
+              last_known_institution?: {
+                display_name?: string;
+                country_code?: string;
+              } | null;
+              country_code?: string;
+              type?: string;
+            }>;
+          }>(url, getKey);
+
+          const candidates = (data.results ?? []).map((r) => {
+            const bareId = (r.id || '').replace(
+              'https://openalex.org/',
+              '',
+            );
+            const affiliation =
+              r.last_known_institutions?.[0]?.display_name ??
+              r.last_known_institution?.display_name ??
+              null;
+            const country =
+              r.last_known_institutions?.[0]?.country_code ??
+              r.last_known_institution?.country_code ??
+              r.country_code ??
+              null;
+            return {
+              openalex_id: bareId,
+              name: r.display_name ?? '(unknown)',
+              context:
+                args.type === 'author'
+                  ? (affiliation ?? '—')
+                  : [r.type, country].filter(Boolean).join(', ') || '—',
+              works_count: r.works_count ?? 0,
+              cited_by_count: r.cited_by_count ?? 0,
+            };
+          });
+
+          if (candidates.length === 0) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    `No OpenAlex ${args.type} matched "${args.name}". ` +
+                    'Try a fuller name or an alternative spelling.',
+                },
+              ],
+              structuredContent: {
+                query: args.name,
+                type: args.type,
+                candidates: [],
+              },
+            };
+          }
+
+          const ctxHeader =
+            args.type === 'author' ? 'Affiliation' : 'Type / Country';
+          const lines: string[] = [];
+          lines.push(
+            `Found ${candidates.length} ${args.type} candidate` +
+              `${candidates.length === 1 ? '' : 's'} for ` +
+              `"${args.name}". Pass the chosen \`openalex_id\` to ` +
+              '`paperazzi_search` as ' +
+              (args.type === 'author'
+                ? '`author_ids`'
+                : '`institution_ids`') +
+              '.',
+          );
+          lines.push('');
+          lines.push(`| OpenAlex ID | Name | ${ctxHeader} | Works | Citations |`);
+          lines.push('|---|---|---|---|---|');
+          for (const c of candidates) {
+            lines.push(
+              `| ${c.openalex_id} | ${c.name} | ${c.context} | ` +
+                `${c.works_count} | ${c.cited_by_count} |`,
+            );
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            structuredContent: {
+              query: args.name,
+              type: args.type,
+              candidates,
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `paperazzi_resolve_entity error: ${msg}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // ─── paperazzi_citations ─────────────────────────────────────
+    //
+    // Walk the citation graph around one paper. `cited_by` = forward
+    // (newer work that cites it); `references` = backward (its own
+    // bibliography). Dispatches into /api/search via the citing /
+    // referencedBy params, so the same key pool and formatting apply.
+    server.tool(
+      'paperazzi_citations',
+      'Explore the citation graph around a single paper identified by ' +
+        'its OpenAlex work id. `direction: "cited_by"` returns newer ' +
+        'papers that CITE it (forward — who builds on this work). ' +
+        '`direction: "references"` returns the papers in its OWN ' +
+        'bibliography (backward — its intellectual foundations). Get ' +
+        'the work id from a `paperazzi_search` result ' +
+        '(`structuredContent.results[].openalex_id`, e.g. ' +
+        '"W2741809807"); if you only have a title, find it with ' +
+        '`paperazzi_search` first. Defaults to sorting by citations so ' +
+        'the most influential works surface first; optionally narrow ' +
+        'the set with a free-text `query`.',
+      {
+        openalex_id: z
+          .string()
+          .min(1)
+          .describe(
+            'OpenAlex work id of the focal paper, e.g. "W2741809807" ' +
+              '(bare id or full URL both work). Take it from a ' +
+              "paperazzi_search result's `openalex_id` field.",
+          ),
+        direction: z
+          .enum(['cited_by', 'references'])
+          .describe(
+            '"cited_by" = newer papers that cite this work (forward / ' +
+              'impact). "references" = the works this paper cites ' +
+              '(backward / foundations).',
+          ),
+        query: z
+          .string()
+          .optional()
+          .describe(
+            'Optional free-text filter applied within the citation ' +
+              'set (e.g. narrow a paper\'s citers to those about ' +
+              '"welfare").',
+          ),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe('Maximum papers to return (1–50, default 20).'),
+        sort: z
+          .enum(['relevance', 'citations', 'date'])
+          .optional()
+          .describe(
+            'Defaults to `citations` (most influential first). Use ' +
+              '`date` for the newest citers/references, `relevance` ' +
+              'when a `query` is set.',
+          ),
+      },
+      async (args) => {
+        try {
+          const cleanId = args.openalex_id.trim();
+          const limit = args.limit ?? 20;
+          const sortStr = mapSort(args.sort ?? 'citations');
+          const query = (args.query ?? '').trim();
+          const url = buildSearchUrl({
+            query,
+            issns: [],
+            citing: args.direction === 'cited_by' ? cleanId : undefined,
+            referenced_by:
+              args.direction === 'references' ? cleanId : undefined,
+            limit,
+            sort: sortStr,
+          });
+          const req = new NextRequest(url);
+          const res = await searchGET(req);
+          const data = (await res.json()) as {
+            results: Array<{
+              id: string;
+              title: string;
+              authors: string[];
+              publication_year: number;
+              journal_name: string;
+              doi?: string | null;
+              cited_by_count?: number;
+              abstract?: string;
+            }>;
+            meta: { count: number; page: number; per_page: number };
+            error?: string;
+            referencedByTitle?: string;
+          };
+          if (data.error) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Paperazzi citations failed: ${data.error}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const dirLabel =
+            args.direction === 'cited_by'
+              ? 'papers citing'
+              : 'references of';
+          const focal = data.referencedByTitle
+            ? `"${data.referencedByTitle}"`
+            : cleanId;
+          const lines: string[] = [];
+          lines.push(
+            `Found ${data.results.length} ${dirLabel} ${focal}` +
+              `${query ? ` matching "${query}"` : ''}.`,
+          );
+          lines.push('');
+          data.results.forEach((p, i) => {
+            const authors =
+              p.authors.length > 4
+                ? `${p.authors.slice(0, 3).join(', ')}, et al.`
+                : p.authors.join(', ') || '—';
+            const cite =
+              p.cited_by_count != null
+                ? ` · ${p.cited_by_count} citations`
+                : '';
+            const doi = p.doi ? ` · ${p.doi}` : '';
+            lines.push(
+              `${i + 1}. **${p.title}** (${p.publication_year}) — ` +
+                `*${p.journal_name}*${cite}${doi}`,
+            );
+            lines.push(`   Authors: ${authors}`);
+          });
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            structuredContent: {
+              focal_id: cleanId,
+              direction: args.direction,
+              focal_title: data.referencedByTitle ?? null,
+              count: data.results.length,
+              results: data.results.map((p) => ({
+                openalex_id: p.id,
+                title: p.title,
+                authors: p.authors,
+                year: p.publication_year,
+                journal: p.journal_name,
+                doi: p.doi ?? null,
+                citations: p.cited_by_count ?? 0,
+              })),
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              { type: 'text', text: `paperazzi_citations error: ${msg}` },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // ─── Prompts ─────────────────────────────────────────────────
+    //
+    // Reusable, user-invoked workflow templates (surfaced as
+    // slash-commands in clients that implement the MCP prompts
+    // capability). They keep the heavier "how to drive Paperazzi well"
+    // guidance OUT of the always-loaded tool descriptions: a prompt is
+    // only pulled into context when the user explicitly picks it.
+
+    server.prompt(
+      'literature_review',
+      'Survey the economics/management literature on a topic using ' +
+        'Paperazzi, balancing seminal and recent work.',
+      {
+        topic: z
+          .string()
+          .describe(
+            'The subject to review, e.g. "minimum wage employment ' +
+              'effects".',
+          ),
+        scope: z
+          .string()
+          .optional()
+          .describe(
+            'Optional narrowing: journals, CNRS tiers/domains, or a ' +
+              'year range.',
+          ),
+      },
+      ({ topic, scope }) => ({
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text:
+                `Conduct a literature review on: ${topic}.` +
+                (scope ? ` Scope: ${scope}.` : '') +
+                '\n\nUse the `paperazzi_search` tool, not web search. ' +
+                'Run at most 1–3 well-scoped calls — typically one ' +
+                'sorted by `citations` (seminal work) and one by ' +
+                '`date` (recent work). Batch every journal/domain/tier ' +
+                'filter into single array arguments (they are ' +
+                'OR-combined); never loop one value per call. If the ' +
+                'scope (journals, tiers, year range, breadth) is ' +
+                'genuinely ambiguous, ask ONE concise clarifying ' +
+                'question before searching. Then synthesise: group ' +
+                'findings by theme, distinguish seminal from recent ' +
+                'contributions, note journal/year/citation counts, and ' +
+                'finish with the Paperazzi share link.',
+            },
+          },
+        ],
+      }),
+    );
+
+    server.prompt(
+      'author_recent_work',
+      "List an author's most recent papers, optionally scoped to an " +
+        'institution, resolving names to OpenAlex IDs first.',
+      {
+        author_name: z
+          .string()
+          .describe('The author to look up, e.g. "Nicolas Pasquier".'),
+        institution_name: z
+          .string()
+          .optional()
+          .describe(
+            'Optional affiliation to disambiguate / scope by, e.g. ' +
+              '"GAEL".',
+          ),
+      },
+      ({ author_name, institution_name }) => ({
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text:
+                `Find the most recent papers by ${author_name}` +
+                (institution_name ? ` at ${institution_name}` : '') +
+                '.\n\nSteps: (1) Call `paperazzi_resolve_entity` with ' +
+                `type:"author" for "${author_name}"` +
+                (institution_name
+                  ? ` and again with type:"institution" for ` +
+                    `"${institution_name}"`
+                  : '') +
+                '. (2) If several candidates are plausible, show their ' +
+                'affiliation and works count and ask the user to pick; ' +
+                'if one is an obvious match, proceed. (3) Call ' +
+                '`paperazzi_search` with the chosen `author_ids`' +
+                (institution_name ? ' and `institution_ids`' : '') +
+                ' and `sort: "date"`. (4) Present the latest papers ' +
+                'with year, journal, and a one-line takeaway each.',
+            },
+          },
+        ],
+      }),
+    );
+
+    server.prompt(
+      'explore_citations',
+      'Trace the citation graph around a paper — who cites it and what ' +
+        'it builds on.',
+      {
+        paper: z
+          .string()
+          .describe(
+            'The focal paper: an OpenAlex work id, a DOI, or a title ' +
+              '+ author.',
+          ),
+      },
+      ({ paper }) => ({
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text:
+                `Explore the citation graph around this paper: ${paper}.` +
+                '\n\nIf you do not already have its OpenAlex work id, ' +
+                'first locate it with `paperazzi_search` (match the ' +
+                'title and author). Then use `paperazzi_citations`: ' +
+                'call it with direction:"cited_by" (sorted by ' +
+                'citations) to find the most influential work building ' +
+                'on it, and direction:"references" to surface its key ' +
+                'intellectual foundations. Summarise the standout ' +
+                'works in each direction, grouped by theme.',
+            },
+          },
+        ],
+      }),
+    );
+
+    server.prompt(
+      'journal_panorama',
+      'Survey recent notable work in a specific journal, CNRS domain, ' +
+        'or tier.',
+      {
+        target: z
+          .string()
+          .describe(
+            'A journal (name or short code like "IJIO"), a CNRS ' +
+              'domain, or a tier.',
+          ),
+      },
+      ({ target }) => ({
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text:
+                `Give a panorama of recent notable work in: ${target}.` +
+                '\n\nIf you are unsure of the exact journal code or ' +
+                'name, first call `paperazzi_list_journals` to resolve ' +
+                'it (and its CNRS domain/tier). Then run ' +
+                '`paperazzi_search` filtered to that journal/domain/' +
+                'tier: one call sorted by `citations` for landmark ' +
+                'papers and one sorted by `date` for what is current. ' +
+                'Highlight the main themes and the standout papers, ' +
+                'and finish with the Paperazzi share link.',
+            },
+          },
+        ],
+      }),
+    );
   },
-  // Server capabilities — empty is fine. Tool definitions registered
-  // via `server.tool(...)` are discovered at runtime via tools/list,
-  // which is how every current MCP client picks them up.
+  // Server capabilities. `tools` and `prompts` are advertised so
+  // clients call tools/list and prompts/list on connect. Resources
+  // aren't used. Definitions are still discovered at runtime — these
+  // empty objects just flip the capability flags on.
   {
     capabilities: {
       tools: {},
+      prompts: {},
     },
   },
   // Adapter options — Streamable HTTP, hosted at /api/mcp. `basePath`
