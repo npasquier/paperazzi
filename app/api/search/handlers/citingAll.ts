@@ -58,9 +58,13 @@ export async function handleCitingAll(
     citingAll.map((id) => fetchAllCitingIds(id, ctx.getKey)),
   );
 
-  const commonIds = citingSets.reduce((a, b) =>
-    a.filter((id: string) => b.includes(id)),
-  );
+  // Set-based intersection: each citing set can hold up to 4000 ids, so
+  // a plain `a.filter(id => b.includes(id))` would be O(|a|·|b|) per
+  // pair — ~16M comparisons for two well-cited papers.
+  const commonIds = citingSets.reduce((a, b) => {
+    const bSet = new Set(b);
+    return a.filter((id: string) => bSet.has(id));
+  });
 
   if (commonIds.length === 0) {
     return NextResponse.json({

@@ -210,7 +210,7 @@ export default function AboutPage() {
                           Alerting
                         </td>
                         <td className='py-2 px-3'>
-                          Use 'saved searches', No email alert
+                          Use &lsquo;saved searches&rsquo;, No email alert
                         </td>
                         <td className='py-2 px-3 text-stone-400'>API access</td>
                         <td className='py-2 px-3 text-stone-400'>

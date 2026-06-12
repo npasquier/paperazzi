@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Info } from 'lucide-react';
 import { JOURNAL_SHORTCUTS_LIST } from '@/data/journalAbbreviations';
+import { useDismissablePopover } from '@/hooks/useDismissablePopover';
 
 interface SearchSyntaxHelpProps {
   /**
@@ -26,8 +27,12 @@ export default function SearchSyntaxHelp({
   const [coords, setCoords] = useState<{ top: number; right: number } | null>(
     null,
   );
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  // Outside-click + Escape dismissal via the shared hook; the hook's
+  // anchor ref doubles as the coords anchor below.
+  const { popoverRef, anchorRef: buttonRef } = useDismissablePopover(
+    open,
+    () => setOpen(false),
+  );
 
   const recomputeCoords = () => {
     if (!buttonRef.current) return;
@@ -43,31 +48,21 @@ export default function SearchSyntaxHelp({
     setOpen((o) => !o);
   };
 
+  // Keep the fixed-position popover glued to the button across window
+  // resizes while open.
   useEffect(() => {
     if (!open) return;
-    const onMouseDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        buttonRef.current?.contains(target) ||
-        popoverRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setOpen(false);
+    const onResize = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    const onResize = () => recomputeCoords();
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
     window.addEventListener('resize', onResize);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [open]);
+    return () => window.removeEventListener('resize', onResize);
+  }, [open, buttonRef]);
 
   return (
     <>

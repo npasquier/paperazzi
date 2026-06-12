@@ -1,3 +1,10 @@
+// Upper bound on accepted word positions. Real abstracts are a few
+// hundred words, so the bound is generous. It matters because
+// `words[pos] = word` with an unvalidated pos builds a sparse array — a
+// corrupt or hostile index containing `pos = 1e9` would make
+// `join(' ')` attempt a ~GB string server-side.
+const MAX_ABSTRACT_POSITION = 10_000;
+
 // Accepts `unknown` because the inverted index comes straight from
 // untyped OpenAlex JSON (the OpenAlexWork type stores it as `unknown`).
 // We narrow defensively rather than trust the shape.
@@ -10,7 +17,14 @@ export default function buildAbstract(abstractIndex: unknown): string {
   )) {
     if (!Array.isArray(positions)) continue;
     for (const pos of positions) {
-      if (typeof pos === 'number') words[pos] = word;
+      if (
+        typeof pos === 'number' &&
+        Number.isInteger(pos) &&
+        pos >= 0 &&
+        pos < MAX_ABSTRACT_POSITION
+      ) {
+        words[pos] = word;
+      }
     }
   }
 

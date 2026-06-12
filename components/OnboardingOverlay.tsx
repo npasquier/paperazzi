@@ -1,27 +1,55 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import { Filter, Pin, Search, Flag } from 'lucide-react';
 import { STORAGE_KEYS } from '@/utils/storageKeys';
 
-export default function OnboardingOverlay() {
-  const [show, setShow] = useState(false);
+// "Has the user seen onboarding?" as a tiny external store over
+// localStorage, read via useSyncExternalStore. This replaces the old
+// read-in-effect + setState pattern (flagged by the React 19 compiler
+// lint and double-rendering on mount). The server/hydration snapshot
+// is `true` ("assume seen") so returning users never get an overlay
+// flash; for new users the overlay appears right after hydration.
+const seenListeners = new Set<() => void>();
+// In-memory fallback so dismissal still works when localStorage is
+// unavailable (private mode etc.) — degrades to once-per-session.
+let seenInMemory = false;
 
-  useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem(
-      STORAGE_KEYS.hasSeenOnboarding,
-    );
-    if (!hasSeenOnboarding) {
-      setShow(true);
-    }
-  }, []);
+function subscribeSeen(fn: () => void): () => void {
+  seenListeners.add(fn);
+  return () => {
+    seenListeners.delete(fn);
+  };
+}
+
+function readSeen(): boolean {
+  if (seenInMemory) return true;
+  try {
+    return localStorage.getItem(STORAGE_KEYS.hasSeenOnboarding) !== null;
+  } catch {
+    // Can't read storage — err on the side of not nagging.
+    return true;
+  }
+}
+
+function markSeen() {
+  seenInMemory = true;
+  try {
+    localStorage.setItem(STORAGE_KEYS.hasSeenOnboarding, 'true');
+  } catch {
+    /* degrade to the in-memory flag. */
+  }
+  for (const fn of [...seenListeners]) fn();
+}
+
+export default function OnboardingOverlay() {
+  const hasSeen = useSyncExternalStore(subscribeSeen, readSeen, () => true);
 
   const dismiss = () => {
-    localStorage.setItem(STORAGE_KEYS.hasSeenOnboarding, 'true');
-    setShow(false);
+    markSeen();
   };
 
-  if (!show) return null;
+  if (hasSeen) return null;
 
   return (
     <div className='fixed inset-0 z-50 pointer-events-none'>

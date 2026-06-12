@@ -26,9 +26,11 @@ export async function handleReferencesAll(
   );
 
   // Intersection: a reference must appear in every set to survive.
-  const commonIds = referenceSets.reduce((a, b) =>
-    a.filter((id: string) => b.includes(id)),
-  );
+  // Set-based so the pairwise step is O(|a|+|b|) instead of O(|a|·|b|).
+  const commonIds = referenceSets.reduce((a, b) => {
+    const bSet = new Set(b);
+    return a.filter((id: string) => bSet.has(id));
+  });
 
   if (commonIds.length === 0) {
     return NextResponse.json({

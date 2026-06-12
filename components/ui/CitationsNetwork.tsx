@@ -78,6 +78,9 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
   const [transform, setTransform] = useState<Transform>(IDENTITY);
+  // True while a pan gesture is active — see startPan for why this
+  // mirrors dragRef into state.
+  const [isPanning, setIsPanning] = useState(false);
 
   // Dynamic chart width — kept in sync with the container's aspect ratio via
   // ResizeObserver. Without this, the SVG's fixed viewBox (DEFAULT_W × H)
@@ -368,6 +371,12 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
       startTy: transform.ty,
       moved: false,
     };
+    // State mirror of dragRef for things the RENDER needs (the grab /
+    // grabbing cursor). Reading dragRef.current during render is
+    // unreliable (ref writes don't re-render) and flagged by the React
+    // compiler lint; the ref stays the per-move source of truth because
+    // movePan mutates it without needing a render per mousemove.
+    setIsPanning(true);
     (e.target as Element).setPointerCapture(e.pointerId);
   };
 
@@ -401,6 +410,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
     // only the legend's "Clear" chip does that. Empty-area clicks are a
     // no-op so users can pan without losing their path.
     dragRef.current = null;
+    setIsPanning(false);
     try {
       (e.target as Element).releasePointerCapture(e.pointerId);
     } catch {
@@ -519,7 +529,7 @@ export default function CitationsNetwork({ focal, refs, cites }: Props) {
           viewBox={`0 0 ${chartW} ${H}`}
           className='w-full h-full select-none'
           style={{
-            cursor: dragRef.current ? 'grabbing' : 'grab',
+            cursor: isPanning ? 'grabbing' : 'grab',
             touchAction: 'none',
           }}
           // Defer the clear so the tooltip card (a sibling of this SVG) has

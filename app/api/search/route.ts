@@ -31,21 +31,50 @@ export async function GET(req: NextRequest) {
   const getKey = makeKeyPicker();
 
   // ── URL → typed inputs ────────────────────────────────────────────
+  //
+  // Every list/scalar param below (except `query`, which is always
+  // encodeURIComponent'd downstream) is interpolated RAW into the
+  // upstream OpenAlex `&filter=` / `&sort=` strings. OpenAlex's filter
+  // grammar uses `,` (AND), `|` (OR) and `:` (key/value), so a value
+  // containing grammar characters or URL metacharacters (`&`, spaces…)
+  // could inject extra clauses or extra query params. None of that is
+  // exploitable against a trusted system — OpenAlex is public and
+  // read-only — but it produces confusing upstream 400s and reshaped
+  // responses. Safelist each value: legit inputs are ISSNs, OpenAlex
+  // ids (bare or full-URL), type slugs and years, all of which match.
+  const SAFE_VALUE = /^[\w:./()-]+$/;
+  const safeList = (raw: string | null): string[] =>
+    (raw || '')
+      .split(',')
+      .filter(Boolean)
+      .filter((v) => SAFE_VALUE.test(v));
+  const safeScalar = (raw: string | null): string => {
+    const v = raw || '';
+    return SAFE_VALUE.test(v) ? v : '';
+  };
+
   const query = searchParams.get('query') || '';
-  const journals = (searchParams.get('journals') || '')
-    .split(',')
-    .filter(Boolean);
-  const authors = (searchParams.get('authors') || '')
-    .split(',')
-    .filter(Boolean);
-  const topics = (searchParams.get('topics') || '').split(',').filter(Boolean);
-  const institutions = (searchParams.get('institutions') || '')
-    .split(',')
-    .filter(Boolean);
-  const publicationType = searchParams.get('type') || '';
-  const from = searchParams.get('from');
-  const to = searchParams.get('to');
-  const sort = searchParams.get('sort') || 'relevance_score';
+  const journals = safeList(searchParams.get('journals'));
+  const authors = safeList(searchParams.get('authors'));
+  const topics = safeList(searchParams.get('topics'));
+  const institutions = safeList(searchParams.get('institutions'));
+  const publicationType = safeScalar(searchParams.get('type'));
+  const from = safeScalar(searchParams.get('from')) || null;
+  const to = safeScalar(searchParams.get('to')) || null;
+  // `sort` is appended to the upstream URL verbatim (`&sort=…`), so it
+  // gets a strict whitelist rather than just a character check —
+  // otherwise `sort=x&select=id` would inject params and reshape the
+  // response. Unknown values fall back to the default.
+  const ALLOWED_SORTS = new Set([
+    'relevance_score',
+    'relevance_score:desc',
+    'publication_date',
+    'publication_date:desc',
+    'cited_by_count',
+    'cited_by_count:desc',
+  ]);
+  const rawSort = searchParams.get('sort') || 'relevance_score';
+  const sort = ALLOWED_SORTS.has(rawSort) ? rawSort : 'relevance_score';
   // Parse a positive-integer query param, clamping to [min, max] and
   // falling back to `fallback` for anything non-finite (e.g. ?page=abc,
   // which Number() turns into NaN — that used to flow straight into the
@@ -71,22 +100,65 @@ export async function GET(req: NextRequest) {
   const perPage = clampInt(searchParams.get('perPage'), 20, 1, 100);
 
   const citing = searchParams.get('citing');
-  const citingAll = (searchParams.get('citingAll') || '')
-    .split(',')
-    .filter(Boolean);
+  const citingAll = safeList(searchParams.get('citingAll'));
   const referencedBy = searchParams.get('referencedBy');
-  const referencesAll = (searchParams.get('referencesAll') || '')
-    .split(',')
-    .filter(Boolean);
+  const referencesAll = safeList(searchParams.get('referencesAll'));
+
+  // Work-id params must be OpenAlex work ids (bare "W123…" or the full
+  // https://openalex.org/W123… URL). `referencedBy` in particular is
+  // interpolated into the upstream PATH (/works/<id>), so failing fast
+  // with a clear 400 beats forwarding garbage and surfacing an opaque
+  // upstream 404 — and it closes the door on path-shaped values
+  // ("W1/../authors/A2") reaching the upstream URL at all.
+  const WORK_ID_RE = /^(https:\/\/openalex\.org\/)?W\d+$/i;
+  const invalidWorkId = [citing, referencedBy, ...citingAll, ...referencesAll]
+    .filter((id): id is string => Boolean(id))
+    .find((id) => !WORK_ID_RE.test(id));
+  if (invalidWorkId) {
+    return NextResponse.json(
+      {
+        results: [],
+        meta: { count: 0, page: 1, per_page: 0 },
+        error: `Invalid OpenAlex work id: "${invalidWorkId}". Expected "W…" or "https://openalex.org/W…".`,
+      },
+      {
+        status: 400,
+        headers: { 'Cache-Control': 'no-store, must-revalidate' },
+      },
+    );
+  }
+
+  // Fan-out cap. Each citingAll id triggers up to ~20 cursor-paginated
+  // upstream calls (4000 ids @ 200/page in handlers/citingAll.ts), so an
+  // unbounded list is a cost-amplification vector on an open endpoint —
+  // 100 ids ≈ 2000 OpenAlex calls billed to our keys. 50 is far beyond
+  // any legitimate UI flow (the intersection of >50 citation sets is
+  // almost always empty anyway). referencesAll is 1 call per id but gets
+  // the same cap for symmetry.
+  const MAX_INTERSECTION_IDS = 50;
+  if (
+    citingAll.length > MAX_INTERSECTION_IDS ||
+    referencesAll.length > MAX_INTERSECTION_IDS
+  ) {
+    return NextResponse.json(
+      {
+        results: [],
+        meta: { count: 0, page: 1, per_page: 0 },
+        error: `Too many ids: citingAll/referencesAll accept at most ${MAX_INTERSECTION_IDS} ids per request.`,
+      },
+      {
+        status: 400,
+        headers: { 'Cache-Control': 'no-store, must-revalidate' },
+      },
+    );
+  }
 
   // Econ filter — the wide-mode whitelist of allowed ISSNs. The client is
   // responsible for resolving whatever it has (tiers + domains, an
   // ISSN-based preset like Top 5, etc.) into this final ISSN list using
   // the user's active RankingScheme. The server stays scheme-agnostic.
   const econEnabled = searchParams.get('econEnabled') === 'true';
-  const econIssns = (searchParams.get('econIssns') || '')
-    .split(',')
-    .filter(Boolean);
+  const econIssns = safeList(searchParams.get('econIssns'));
 
   // Working-paper filter — whitelist of OpenAlex source ids (RePEc,
   // HAL, NBER, IMF, …). Mapped to a primary_location.source.id:
@@ -95,9 +167,7 @@ export async function GET(req: NextRequest) {
   // wpEnabled is true we zero out manual journals so a stale
   // ?journals= URL param doesn't degenerate into empty results.
   const wpEnabled = searchParams.get('wpEnabled') === 'true';
-  const wpSources = (searchParams.get('wpSources') || '')
-    .split(',')
-    .filter(Boolean);
+  const wpSources = safeList(searchParams.get('wpSources'));
 
   const filterParams = {
     journals: wpEnabled && wpSources.length > 0 ? [] : journals,

@@ -122,24 +122,64 @@ function formatTimeAgo(iso: string): string {
   return `${Math.floor(elapsed / 3600)}h ago`;
 }
 
+// sessionStorage key for the operator's usage token. Session-scoped on
+// purpose: the token is a server secret (USAGE_API_TOKEN), so we keep it
+// out of long-lived localStorage and re-prompt per browser session.
+const USAGE_TOKEN_STORAGE_KEY = 'paperazzi:usage-token';
+
+function readStoredToken(): string {
+  try {
+    return sessionStorage.getItem(USAGE_TOKEN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 export default function OpenAlexUsageModal({ isOpen, onClose }: Props) {
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 401 from the route → the deployment requires USAGE_API_TOKEN. Show
+  // a token prompt instead of the generic error banner.
+  const [needsToken, setNeedsToken] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
 
-  const load = async () => {
+  const load = async (tokenOverride?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/openalex/usage', { cache: 'no-store' });
+      const token = tokenOverride ?? readStoredToken();
+      const res = await fetch('/api/openalex/usage', {
+        cache: 'no-store',
+        headers: token ? { 'x-usage-token': token } : undefined,
+      });
+      if (res.status === 401) {
+        setNeedsToken(true);
+        setData(null);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       const json = (await res.json()) as UsageData;
+      setNeedsToken(false);
       setData(json);
+      // The token worked (or wasn't needed) — persist it for this session.
+      if (tokenOverride !== undefined) {
+        try {
+          sessionStorage.setItem(USAGE_TOKEN_STORAGE_KEY, tokenOverride);
+        } catch {
+          /* private mode etc. — degrade to per-open prompting. */
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown fetch error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const submitToken = () => {
+    const trimmed = tokenInput.trim();
+    if (trimmed) load(trimmed);
   };
 
   // Poll while open. Cleared on close so the request stops when the
@@ -194,7 +234,7 @@ export default function OpenAlexUsageModal({ isOpen, onClose }: Props) {
           </div>
           <div className='flex items-center gap-1'>
             <button
-              onClick={load}
+              onClick={() => load()}
               disabled={loading}
               className='p-1.5 text-stone-400 hover:text-stone-600 rounded transition disabled:cursor-not-allowed'
               title='Refresh now'
@@ -255,6 +295,37 @@ export default function OpenAlexUsageModal({ isOpen, onClose }: Props) {
         {!data && loading && (
           <div className='py-8 text-center text-xs text-stone-400'>
             Loading usage…
+          </div>
+        )}
+
+        {/* Token prompt — the deployment has USAGE_API_TOKEN set (or is
+            production without one) and the route answered 401. */}
+        {needsToken && (
+          <div className='surface-subtle border border-app rounded p-3 mb-3'>
+            <p className='text-xs text-stone-600 leading-snug mb-2'>
+              This endpoint requires the usage token (the deployment&apos;s{' '}
+              <code className='font-mono text-[11px]'>USAGE_API_TOKEN</code>).
+            </p>
+            <div className='flex items-center gap-2'>
+              <input
+                type='password'
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitToken();
+                }}
+                placeholder='Usage token'
+                autoFocus
+                className='flex-1 text-xs rounded border border-app px-2 py-1.5 bg-[var(--background-card)] text-stone-700 focus:outline-none'
+              />
+              <button
+                onClick={submitToken}
+                disabled={loading || !tokenInput.trim()}
+                className='text-xs px-2.5 py-1.5 rounded border border-app text-stone-600 hover:text-stone-900 transition disabled:cursor-not-allowed disabled:opacity-50'
+              >
+                Unlock
+              </button>
+            </div>
           </div>
         )}
 

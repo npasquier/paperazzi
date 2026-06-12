@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   HAS_OPENALEX_KEYS,
   OPENALEX_KEYS,
@@ -8,6 +9,60 @@ import {
 import type { OpenAlexRateLimitResponse } from '@/types/openalex';
 
 export const dynamic = 'force-dynamic';
+
+// ── Access control ───────────────────────────────────────────────────
+//
+// This route is operator-facing: it reveals redacted key previews,
+// per-key call/failure counters and daily spend in USD, and every hit
+// fans out one upstream `rate-limit` request per configured key. Left
+// open, it both discloses operational data and hands an abuser a free
+// upstream-call amplifier. So:
+//
+//   • USAGE_API_TOKEN set     → require it in the `x-usage-token`
+//                               header (timing-safe comparison). The
+//                               usage modal prompts for the token once
+//                               and keeps it in sessionStorage.
+//   • USAGE_API_TOKEN unset   → open in development (local DX), 401 in
+//                               production with a message telling the
+//                               operator which env var to set.
+const USAGE_API_TOKEN = process.env.USAGE_API_TOKEN || '';
+
+/** Constant-time string comparison via SHA-256 digests (equal-length
+ *  buffers are a precondition of timingSafeEqual, hashing guarantees
+ *  it regardless of input lengths). */
+function tokensMatch(provided: string, expected: string): boolean {
+  const a = createHash('sha256').update(provided).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
+/** Returns null when the request is authorized, or a 401 response. */
+function checkAccess(req: NextRequest): NextResponse | null {
+  if (USAGE_API_TOKEN) {
+    const provided = req.headers.get('x-usage-token') || '';
+    if (provided && tokensMatch(provided, USAGE_API_TOKEN)) return null;
+    return NextResponse.json(
+      { error: 'Invalid or missing usage token.' },
+      {
+        status: 401,
+        headers: { 'Cache-Control': 'no-store, must-revalidate' },
+      },
+    );
+  }
+  // No token configured: open in dev, closed in production.
+  if (process.env.NODE_ENV !== 'production') return null;
+  return NextResponse.json(
+    {
+      error:
+        'Usage endpoint is disabled: set the USAGE_API_TOKEN env var and ' +
+        'provide it via the x-usage-token header to enable it in production.',
+    },
+    {
+      status: 401,
+      headers: { 'Cache-Control': 'no-store, must-revalidate' },
+    },
+  );
+}
 
 interface UsageKeySnapshot {
   id: string;
@@ -157,7 +212,10 @@ async function fetchKeyUsage(
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = checkAccess(req);
+  if (denied) return denied;
+
   const fetchedAt = new Date().toISOString();
 
   if (!HAS_OPENALEX_KEYS) {

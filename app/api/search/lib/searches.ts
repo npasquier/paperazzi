@@ -91,27 +91,42 @@ export async function econBatchedSearch(
       continue;
     }
 
-    const needed = perPage - resultsToReturn.length;
-    const batchPage = Math.floor(skipRemaining / perPage) + 1;
-    const offsetInPage = skipRemaining % perPage;
-
     const batchFilters = [
       ...baseFilters,
       `primary_location.source.issn:${issnBatches[i].join('|')}`,
     ];
 
-    let url = `https://api.openalex.org/works?per-page=${perPage}&page=${batchPage}`;
-    url += `&filter=${batchFilters.join(',')}`;
-    if (query) url += `&search=${encodeURIComponent(query)}`;
-    url += buildSort(sort, !!query);
+    // Walk pages WITHIN this batch until the requested page is filled or
+    // the batch is exhausted. A single-fetch-per-batch shortcut here used
+    // to drop items: when `localOffset` wasn't page-aligned (i.e. earlier
+    // batch counts weren't multiples of perPage), the slice of one
+    // upstream page could only yield `perPage - offsetInPage` items, and
+    // the rest of the batch's items for this page were silently skipped —
+    // they then never appeared on ANY page (and later pages could show
+    // duplicates pulled early from the next batch).
+    let localOffset = skipRemaining; // index of next unconsumed item in batch
+    while (resultsToReturn.length < perPage && localOffset < batchCount) {
+      const needed = perPage - resultsToReturn.length;
+      const batchPage = Math.floor(localOffset / perPage) + 1;
+      const offsetInPage = localOffset % perPage;
 
-    const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
-      url,
-      getKey,
-    );
-    const batchResults = data.results || [];
-    const sliced = batchResults.slice(offsetInPage, offsetInPage + needed);
-    resultsToReturn.push(...sliced);
+      let url = `https://api.openalex.org/works?per-page=${perPage}&page=${batchPage}`;
+      url += `&filter=${batchFilters.join(',')}`;
+      if (query) url += `&search=${encodeURIComponent(query)}`;
+      url += buildSort(sort, !!query);
+
+      const data = await fetchOpenAlex<OpenAlexResultsPage<OpenAlexWork>>(
+        url,
+        getKey,
+      );
+      const batchResults = data.results || [];
+      const sliced = batchResults.slice(offsetInPage, offsetInPage + needed);
+      resultsToReturn.push(...sliced);
+      localOffset += sliced.length;
+      // Upstream returned fewer items than its own count promised (eventual
+      // consistency) — bail on this batch rather than loop forever.
+      if (sliced.length === 0) break;
+    }
 
     skipRemaining = 0;
     if (resultsToReturn.length >= perPage) break;
@@ -248,12 +263,15 @@ export async function searchWithinIds(
     const allResults: OpenAlexWork[] = batchResults.flat();
 
     // STEP 2 — ECON ISSN whitelist still has to be applied locally because
-    // it can exceed the upstream filter's 100-value cap.
+    // it can exceed the upstream filter's 100-value cap. Build the
+    // allowed-ISSN Set ONCE outside the filter callback — the old version
+    // re-flattened the batches and did a linear `includes` per work,
+    // O(works × whitelist), which adds up at 4000-work scale.
+    const allowedIssns = issnBatches ? new Set(issnBatches.flat()) : null;
     const filtered = allResults.filter((w) => {
-      if (!issnBatches) return true;
+      if (!allowedIssns) return true;
       const issns = w.primary_location?.source?.issn || [];
-      const allowedIssns = issnBatches.flat();
-      return issns.some((i: string) => allowedIssns.includes(i));
+      return issns.some((i: string) => allowedIssns.has(i));
     });
 
     const totalCount = filtered.length;

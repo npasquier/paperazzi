@@ -1,51 +1,98 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface CelebrationOverlayProps {
   show: boolean;
   onComplete?: () => void;
 }
 
-export default function CelebrationOverlay({ show, onComplete }: CelebrationOverlayProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+interface ConfettiPiece {
+  id: number;
+  left: string;
+  delay: string;
+  duration: string;
+  color: string;
+  size: number;
+  rotation: number;
+}
 
-  useEffect(() => {
-    if (show) {
-      setIsVisible(true);
-      setIsAnimating(true);
-      
-      // Start fade out after 2.5s
-      const fadeTimer = setTimeout(() => {
-        setIsAnimating(false);
-      }, 2500);
+const CONFETTI_COLORS = [
+  '#10b981',
+  '#3b82f6',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#ec4899',
+];
 
-      // Remove from DOM after fade completes
-      const removeTimer = setTimeout(() => {
-        setIsVisible(false);
-        onComplete?.();
-      }, 3000);
-
-      return () => {
-        clearTimeout(fadeTimer);
-        clearTimeout(removeTimer);
-      };
-    }
-  }, [show, onComplete]);
-
-  if (!isVisible) return null;
-
-  // Generate confetti pieces with varied properties
-  const confettiPieces = Array.from({ length: 50 }, (_, i) => ({
+function makeConfettiPieces(): ConfettiPiece[] {
+  return Array.from({ length: 50 }, (_, i) => ({
     id: i,
     left: `${Math.random() * 100}%`,
     delay: `${Math.random() * 0.5}s`,
     duration: `${2 + Math.random() * 2}s`,
-    color: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'][Math.floor(Math.random() * 6)],
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
     size: 4 + Math.random() * 8,
     rotation: Math.random() * 360,
   }));
+}
+
+export default function CelebrationOverlay({ show, onComplete }: CelebrationOverlayProps) {
+  // Seeded from `show` so a mount with show=true is visible on the very
+  // first render; later show-transitions are reconciled in the
+  // adjust-state-during-render block below.
+  const [isVisible, setIsVisible] = useState(show);
+  const [isAnimating, setIsAnimating] = useState(show);
+
+  // React to `show` flipping true during render rather than in an
+  // effect — the React-sanctioned pattern for deriving state from a
+  // prop change (the old synchronous setState-in-effect version is
+  // flagged by the React 19 compiler lint and cost an extra
+  // render-commit-render cycle).
+  const [prevShow, setPrevShow] = useState(show);
+  if (prevShow !== show) {
+    setPrevShow(show);
+    if (show) {
+      setIsVisible(true);
+      setIsAnimating(true);
+    }
+  }
+
+  // Timers only — the async callbacks are allowed to set state.
+  useEffect(() => {
+    if (!show) return;
+
+    // Start fade out after 2.5s
+    const fadeTimer = setTimeout(() => {
+      setIsAnimating(false);
+    }, 2500);
+
+    // Remove from DOM after fade completes
+    const removeTimer = setTimeout(() => {
+      setIsVisible(false);
+      onComplete?.();
+    }, 3000);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, [show, onComplete]);
+
+  // Generate one set of confetti per show-cycle. Calling Math.random()
+  // directly in render regenerated every piece's position/timing on each
+  // re-render (and this component re-renders mid-animation when
+  // isAnimating flips), making the confetti visibly jump — it also
+  // violates render purity. useMemo keyed on `show` keeps the pieces
+  // stable for the whole animation. Hooks must run unconditionally, so
+  // this sits above the early return.
+  const confettiPieces = useMemo<ConfettiPiece[]>(
+    () => (show ? makeConfettiPieces() : []),
+    [show],
+  );
+
+  if (!isVisible) return null;
 
   return (
     <div 
