@@ -448,6 +448,8 @@ function buildShareUrl(args: {
   issns: string[];
   year_from?: number;
   year_to?: number;
+  author_ids?: string[];
+  institution_ids?: string[];
 }): string {
   const base =
     process.env.NEXT_PUBLIC_BASE_URL ||
@@ -458,6 +460,9 @@ function buildShareUrl(args: {
   if (args.year_from) p.set('from', String(args.year_from));
   if (args.year_to) p.set('to', String(args.year_to));
   if (args.issns.length) p.set('journals', args.issns.join(','));
+  if (args.author_ids?.length) p.set('authors', args.author_ids.join(','));
+  if (args.institution_ids?.length)
+    p.set('institutions', args.institution_ids.join(','));
   return `${base}/search?${p.toString()}`;
 }
 
@@ -494,7 +499,12 @@ const PAPER_RESULT_SHAPE = {
 const SEARCH_OUTPUT = {
   query: z.string(),
   filter_issns: z.array(z.string()),
+  /** Number of results returned in this response (≤ limit). */
   count: z.number(),
+  /** Total results available for this query/filter combination. When
+   *  count < total_count the result was truncated by `limit`; raise
+   *  `limit` (max 50) or narrow the filters to surface different papers. */
+  total_count: z.number(),
   share_url: z.string(),
   unmatched_journal_names: z.array(z.string()),
   recognized_aliases: z.array(
@@ -536,7 +546,11 @@ const CITATIONS_OUTPUT = {
   focal_id: z.string(),
   direction: z.enum(['cited_by', 'references']),
   focal_title: z.string().nullable(),
+  /** Number of results returned in this response (≤ limit). */
   count: z.number(),
+  /** Total papers in this citation set. When count < total_count the
+   *  result was truncated; raise `limit` (max 50) to see more. */
+  total_count: z.number(),
   results: z.array(
     z.object({
       openalex_id: z.string(),
@@ -833,7 +847,10 @@ const handler = createMcpHandler(
             issns,
             year_from: args.year_from,
             year_to: args.year_to,
+            author_ids: authorIds,
+            institution_ids: institutionIds,
           });
+          const totalCount = data.meta?.count ?? data.results.length;
 
           // Markdown summary the model will paraphrase. Kept compact
           // so we stay well under typical tool-response size limits
@@ -861,8 +878,12 @@ const handler = createMcpHandler(
             : entityBits.length
               ? `by ${entityBits.join(' + ')}`
               : 'matching your filters';
+          const truncatedNote =
+            data.results.length < totalCount
+              ? ` (showing ${data.results.length} of ${totalCount}; raise \`limit\` or narrow filters for more)`
+              : '';
           lines.push(
-            `Found ${data.results.length} paper${data.results.length === 1 ? '' : 's'} ${searchLabel}${filterNote}.`,
+            `Found ${totalCount} paper${totalCount === 1 ? '' : 's'} ${searchLabel}${filterNote}${truncatedNote}.`,
           );
           if (recognized_aliases.length) {
             lines.push('');
@@ -919,6 +940,7 @@ const handler = createMcpHandler(
               query,
               filter_issns: issns,
               count: data.results.length,
+              total_count: totalCount,
               share_url: shareUrl,
               unmatched_journal_names,
               recognized_aliases,
@@ -1396,10 +1418,15 @@ const handler = createMcpHandler(
           const focal = data.referencedByTitle
             ? `"${data.referencedByTitle}"`
             : cleanId;
+          const citationsTotalCount = data.meta?.count ?? data.results.length;
+          const citationsTruncatedNote =
+            data.results.length < citationsTotalCount
+              ? ` (showing ${data.results.length} of ${citationsTotalCount}; raise \`limit\` to see more)`
+              : '';
           const lines: string[] = [];
           lines.push(
-            `Found ${data.results.length} ${dirLabel} ${focal}` +
-              `${query ? ` matching "${query}"` : ''}.`,
+            `Found ${citationsTotalCount} ${dirLabel} ${focal}` +
+              `${query ? ` matching "${query}"` : ''}${citationsTruncatedNote}.`,
           );
           lines.push('');
           data.results.forEach((p, i) => {
@@ -1425,6 +1452,7 @@ const handler = createMcpHandler(
               direction: args.direction,
               focal_title: data.referencedByTitle ?? null,
               count: data.results.length,
+              total_count: citationsTotalCount,
               results: data.results.map((p) => ({
                 openalex_id: p.id,
                 title: p.title,

@@ -3,49 +3,152 @@
 Paperazzi exposes an [MCP](https://modelcontextprotocol.io/) endpoint at
 `/api/mcp` so any MCP-capable LLM client can search peer-reviewed
 economics papers through the same engine that powers the web app —
-ranking-aware journal filtering, CNRS tier/domain whitelists, the lot.
+ranking-aware journal filtering, CNRS tier/domain whitelists, citation
+graph walks, and more.
 
 The endpoint is **open**: no token, no account. The deployed URL is:
 
     https://paperazzi.vercel.app/api/mcp
 
-> ⚠️ Currently only one tool is exposed: `paperazzi_search`. Citation
-> traversal and pin/collection management are not in MCP scope yet —
-> the link returned with each result opens the same query in Paperazzi
-> where those features live.
-
 ---
 
-## The tool
+## Tools
+
+### `paperazzi_search`
+
+Ranked paper search with CNRS journal-quality filtering.
 
 ```text
 paperazzi_search({
-  query:         string,                         // required, e.g. "digital agriculture adoption"
-  domains?:      ("OrgInd" | "Macro" | "Fin" | ...)[],   // CNRS domain codes
-  tiers?:        ("1" | "2" | "3" | "4")[],      // CNRS tiers, 1 = top
-  journal_names?: string[],                      // substring match, e.g. ["Econometrica"]
-  top5_only?:    boolean,                        // AER, ECMA, JPE, QJE, ReStud
-  year_from?:    number,
-  year_to?:      number,
-  limit?:        number,                         // 1..50, default 20
-  sort?:         "relevance" | "citations" | "date",
+  query?:           string,                          // free-text, e.g. "digital agriculture adoption"
+  author_ids?:      string[],                        // OpenAlex author IDs (AND-combined)
+  institution_ids?: string[],                        // OpenAlex institution IDs (OR-combined)
+  domains?:         ("OrgInd" | "Macro" | "Fin" | ...)[],  // CNRS domain codes
+  tiers?:           ("1" | "2" | "3" | "4")[],       // CNRS tiers, 1 = most selective
+  journal_codes?:   ("AER" | "QJE" | "IJIO" | ...)[],     // typed short codes → exact ISSN
+  journal_names?:   string[],                        // substring match on full display names
+  top5_only?:       boolean,                         // AER, ECMA, JPE, QJE, ReStud
+  year_from?:       number,
+  year_to?:         number,
+  limit?:           number,                          // 1–50, default 20
+  sort?:            "relevance" | "citations" | "date",
 })
 ```
 
-Returns up to `limit` papers with title, authors, journal, year,
-citation count, DOI, abstract, and a `share_url` that opens the same
-search in the Paperazzi UI.
+Returns `count`, `total_count`, title/authors/journal/year/citations/DOI/abstract,
+and a `share_url` that opens the same search in the Paperazzi UI.
+`total_count` tells you how many results exist in total — when it exceeds
+`count`, raise `limit` or narrow your filters.
+
+**Typical flow for author/institution searches:** resolve the name to an
+OpenAlex ID with `paperazzi_resolve_entity` first, then pass `author_ids`
+or `institution_ids` here with `sort: "date"`.
+
+---
+
+### `paperazzi_list_journals`
+
+Catalogue of journals known to Paperazzi (CNRS domain, tier, ISSN, short
+code). Use this to discover exact journal names or short codes before
+filtering a search, especially after a previous search returns
+`unmatched_journal_names`.
+
+```text
+paperazzi_list_journals({
+  domains?:    string[],    // CNRS domain codes
+  tiers?:      string[],    // "1"–"4"
+  query?:      string,      // case-insensitive substring on display name
+  codes_only?: boolean,     // only journals with a registered short code
+  limit?:      number,      // 1–500, default 100
+})
+```
+
+Returns `count`, `total_matched`, `truncated`, and a list with `code`,
+`name`, `domain`, `tier`, `issn`.
+
+---
+
+### `paperazzi_resolve_entity`
+
+Resolve a human-readable author or institution name to its OpenAlex
+entity ID. Always call this before filtering `paperazzi_search` by
+`author_ids` or `institution_ids`.
+
+```text
+paperazzi_resolve_entity({
+  name:   string,                       // e.g. "Nicolas Pasquier" or "GAEL"
+  type:   "author" | "institution",
+  limit?: number,                       // 1–10, default 5
+})
+```
+
+Returns ranked candidates with `openalex_id`, `name`, disambiguating
+context (affiliation for authors; type/country for institutions), `works_count`,
+and `cited_by_count`. If one match is obvious, proceed; otherwise ask the
+user to pick.
+
+---
+
+### `paperazzi_citations`
+
+Walk the citation graph around a single paper.
+
+```text
+paperazzi_citations({
+  openalex_id: string,                       // e.g. "W2741809807" (from a search result)
+  direction:   "cited_by" | "references",    // forward (who cites it) or backward (its refs)
+  query?:      string,                       // optional free-text filter within the set
+  limit?:      number,                       // 1–50, default 20
+  sort?:       "relevance" | "citations" | "date",
+})
+```
+
+Returns `count`, `total_count`, `focal_title`, and the paper list. Get
+the `openalex_id` from a `paperazzi_search` result; if you only have a
+title, search for it first.
+
+---
+
+### `paperazzi_get_paper`
+
+Fetch one paper by its OpenAlex work ID or DOI. Useful when the user
+pastes a specific paper, or to obtain the `openalex_id` that
+`paperazzi_citations` requires.
+
+```text
+paperazzi_get_paper({
+  id: string,  // "W2741809807", "10.1257/aer.20191000", "doi:…", or a doi.org URL
+})
+```
+
+Returns `found`, `openalex_id`, title, authors, year, journal, DOI,
+citations, references count, abstract, and PDF URL.
+
+---
+
+## Prompts
+
+Prompts are user-invoked workflow templates surfaced as slash-commands in
+clients that implement the MCP prompts capability (e.g. Claude Desktop).
+They pull step-by-step guidance into context only when needed — keeping
+tool descriptions lean.
+
+| Prompt | What it does |
+|---|---|
+| `literature_review` | Survey a topic: seminal papers by citations + recent work by date |
+| `author_recent_work` | Resolve an author name → latest papers, with affiliation disambiguation |
+| `explore_citations` | Trace forward (cited_by) and backward (references) around one paper |
+| `journal_panorama` | Landmark + recent work in a specific journal, domain, or tier |
 
 ---
 
 ## Adding it to a client
 
-### Claude Desktop / Cowork (free)
+### Claude Desktop / Cowork
 
 Edit your `claude_desktop_config.json` (on macOS:
 `~/Library/Application Support/Claude/claude_desktop_config.json`). Add
-an `mcpServers` block as a sibling of whatever's already in the file —
-don't replace anything:
+an `mcpServers` block:
 
 ```json
 {
@@ -59,32 +162,15 @@ don't replace anything:
 ```
 
 This uses [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) — a
-tiny bridge that turns the remote HTTP server into a local stdio process
-the app can talk to. It's the most compatible config across app
-versions; the native HTTP-transport JSON shape varies and isn't worth
-chasing. Requires [Node.js](https://nodejs.org) on your machine
-(`node --version` to check).
+tiny bridge that turns the remote HTTP endpoint into a local stdio process.
+Requires [Node.js](https://nodejs.org). Fully quit and reopen the app,
+then try: *"Find me recent IO papers on platform competition."*
 
-Fully quit and reopen the app. Ask: *"Find me recent papers on digital
-agriculture in Industrial Organization journals."*
+### Mistral Le Chat / ChatGPT / Cursor / Cline / Zed
 
-### Mistral Le Chat
-
-Le Chat's connector/MCP UI is moving fast; check the current "Tools" or
-"Connectors" panel in settings and add a custom MCP server pointing at
-`https://paperazzi.vercel.app/api/mcp`. May require a paid plan
-depending on the rollout state.
-
-### ChatGPT (Plus / Team / Enterprise)
-
-In a custom GPT or via the connectors panel, add a remote MCP server
-with URL `https://paperazzi.vercel.app/api/mcp`. Requires a paid plan
-at the time of writing.
-
-### Cursor, Cline, Continue, Zed, etc.
-
-All speak MCP. Point them at `https://paperazzi.vercel.app/api/mcp`
-with the HTTP transport.
+Point your client's MCP settings at `https://paperazzi.vercel.app/api/mcp`
+using the HTTP (Streamable HTTP) transport. ChatGPT and Le Chat may
+require a paid plan.
 
 ---
 
@@ -93,36 +179,28 @@ with the HTTP transport.
 ```bash
 npm install        # picks up mcp-handler, @modelcontextprotocol/sdk, zod
 npm run dev
+# endpoint: http://localhost:3000/api/mcp
 ```
 
-The endpoint is then live at `http://localhost:3000/api/mcp`. Point a
-local Claude Desktop config at that URL to develop against your dev
-server.
+Point a local Claude Desktop config at `http://localhost:3000/api/mcp`
+to develop against your dev server.
 
 ---
 
-## How it's wired
+## Architecture
 
 - **Transport.** Streamable HTTP via [`mcp-handler`](https://github.com/vercel/mcp-handler),
   Vercel's official adapter around `@modelcontextprotocol/sdk`. Stateless
-  (no Redis required) — fine for request/response tools like ours.
-- **Backend.** The MCP handler dispatches in-process into the existing
-  `app/api/search` GET handler. No second network hop, no logic
-  duplication. The CNRS scheme and ISSN resolution are imported from
-  `data/cnrsScheme.ts` and `data/domains.ts`.
-- **OpenAlex keys.** Reuses the same `OPENALEX_KEYS` rotation pool the
-  website uses — nothing extra to configure.
-- **Optional auth.** None. If you ever need to gate the endpoint, the
-  cleanest place is a header check at the top of the `POST` export in
-  `app/api/mcp/route.ts` before delegating to `handler`.
-
-## Adding more tools
-
-Open `app/api/mcp/route.ts` and add another `server.tool(...)` block
-inside the `createMcpHandler` init function. Candidates worth
-considering when you're ready:
-
-- `paperazzi_cited_by(openalex_id)` — forward citation walk.
-- `paperazzi_references(openalex_id)` — backward citation walk.
-- `paperazzi_lookup_journal(name)` — return tier/domain/ISSN for a
-  journal name, useful as a one-shot lookup before a filtered search.
+  — no Redis required.
+- **Backend.** Tools dispatch in-process into the existing `/api/search`
+  GET handler. No extra network hop, no logic duplication.
+- **OpenAlex keys.** Reuses the same `OPENALEX_KEYS` rotation pool as the
+  website — nothing extra to configure.
+- **Auth.** None. To gate the endpoint, add a header check at the top of
+  the `POST` export in `app/api/mcp/route.ts` before delegating to `handler`.
+- **Annotations.** Every tool carries `readOnlyHint: true`, `destructiveHint: false`,
+  `idempotentHint: true`, `openWorldHint: true` — clients can skip
+  confirmation prompts for all Paperazzi calls.
+- **Output schemas.** Every tool declares a typed `outputSchema` (Zod),
+  enabling structured `structuredContent` responses alongside the Markdown
+  text — useful for tool chaining.
