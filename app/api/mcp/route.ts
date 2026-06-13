@@ -63,6 +63,21 @@ import { fetchOpenAlex } from '../search/lib/fetch';
 import { mapToPapers } from '../search/lib/format';
 import type { OpenAlexWork } from '@/types/openalex';
 
+// ─── Next.js route-segment config ────────────────────────────────────
+//
+// These MUST live at the module level — they configure the Vercel
+// function itself, which is separate from the `maxDuration` option
+// passed to createMcpHandler (that only governs mcp-handler's own
+// SSE keep-alive). Without `export const maxDuration`, Vercel applies
+// its default function timeout (10s on Hobby), which cuts the streaming
+// channel that `mcp-remote` opens before the MCP handshake completes —
+// the client then reports the connection as unavailable. `nodejs` is
+// required because mcp-handler / the MCP SDK don't run on the edge
+// runtime.
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 // ─── Vocabulary the LLM sees in the parameter schema ─────────────────
 //
 // The literal tuple below is what z.enum constrains against at compile
