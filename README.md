@@ -47,6 +47,7 @@ Paperazzi is a web app that searches academic papers via the [OpenAlex](https://
 | Data source      | [OpenAlex](https://openalex.org/) REST API     |
 | LLM integration  | MCP server (`@modelcontextprotocol/sdk` + `mcp-handler`) |
 | Persistence      | Browser localStorage                           |
+| Testing          | [Vitest](https://vitest.dev/)                  |
 | Hosting          | Vercel                                         |
 
 No database, no auth provider, no analytics other than [Vercel Analytics](https://vercel.com/docs/analytics).
@@ -65,6 +66,11 @@ git clone https://github.com/npasquier/paperazzi.git
 cd paperazzi
 npm install
 ```
+
+> **Tip — native binding error:** if `npm test` fails with `Cannot find native binding` for `@rolldown/binding-darwin-arm64`, this is a [known npm bug](https://github.com/npm/cli/issues/4828) with optional dependencies. Fix it with:
+> ```bash
+> rm -rf node_modules package-lock.json && npm install
+> ```
 
 ### Configure environment
 
@@ -100,6 +106,7 @@ npm run start
 | `OPEN_ALEX_API_KEY`   | No       | server    | Legacy single OpenAlex API key; Paperazzi will use it as a fallback or merge it into the rotation pool. |
 | `OPENALEX_KEYS`       | No       | server    | Comma-separated list of keys; the API route rotates through them (random start offset, round-robin) and the usage dashboard inspects them individually. |
 | `NEXT_PUBLIC_BASE_URL`| No       | server    | Base URL used by the MCP server to build "open this search in Paperazzi" links. Falls back to `VERCEL_URL`, then the public deployment. |
+| `USAGE_API_TOKEN`     | **Yes in prod** | server | Bearer token for the `/api/openalex/usage` endpoint. Without it the route returns 401 in production. Set to any long random string. |
 
 A starter file lives at `.env.example` (do not commit `.env.local`).
 
@@ -116,7 +123,7 @@ paperazzi/
 │   ├── search/                # Main search experience (uses PaperazziApp)
 │   └── api/
 │       ├── search/            # /api/search route — proxies & shapes OpenAlex
-│       │   ├── route.ts       #   entry; parses params, dispatches to handlers
+│       │   ├── route.ts       #   entry; parses + validates params, dispatches to handlers
 │       │   ├── context.ts     #   request context / shared params
 │       │   ├── handlers/      #   one file per search mode
 │       │   │   ├── regular.ts
@@ -126,11 +133,11 @@ paperazzi/
 │       │   └── lib/           #   fetch, format, searches, key-rotation helpers
 │       ├── mcp/               # /api/mcp — MCP server (paperazzi_search, paperazzi_list_journals)
 │       └── openalex/
-│           └── usage/         # /api/openalex/usage — API-key budget/usage data
+│           └── usage/         # /api/openalex/usage — API-key budget/usage (token-gated)
 │
 ├── components/                # All UI components
 │   ├── PaperazziApp.tsx       # Top-level client component for /search
-│   ├── NavBar.tsx
+│   ├── NavBar.tsx             # Search bar, @/#/~ chips, dirty-state button
 │   ├── FilterPanel.tsx        # Left pane: query + filters + presets
 │   ├── SearchResults.tsx      # Centre pane: result list + pagination
 │   ├── PinSidebar.tsx         # Right pane: pinned papers, groups, collections
@@ -147,7 +154,7 @@ paperazzi/
 │   ├── EmptyState.tsx
 │   ├── SearchSyntaxHelp.tsx   # Keyword syntax + shortcut help
 │   ├── rankings/
-│   │   └── RankingsEditor.tsx
+│   │   └── RankingsEditor.tsx # Split into ~11 focused modules under rankings/
 │   └── ui/                    # Reusable building blocks
 │       ├── PaperCard.tsx      #   default / compact / pinned variants
 │       ├── PinButton.tsx
@@ -155,7 +162,30 @@ paperazzi/
 │       └── CelebrationOverlay.tsx
 │
 ├── contexts/
-│   └── PinContext.tsx         # Pins, groups, collections, import/export
+│   └── PinContext.tsx         # Pins, groups, collections context + usePins hook
+│                              # (delegates storage/CRUD to hooks/usePinStorage
+│                              #  and hooks/useCollectionManager)
+│
+├── hooks/                     # Standalone React hooks (no component coupling)
+│   ├── useNavBarAutocomplete.ts  # @/#/~ autocomplete state, paging, selectMention
+│   ├── useNavBarChips.ts         # Chip state, event-bus sync, dirty signals
+│   ├── usePinStorage.ts          # Debounced localStorage write + flush/cancel
+│   ├── useCollectionManager.ts   # Collection CRUD + export/import callbacks
+│   ├── usePinSelection.ts        # Multi-select state for PinSidebar
+│   ├── usePinDragDrop.ts         # Drag-and-drop state machine for PinSidebar
+│   ├── useSidebarResize.ts       # Resizable sidebar width (module-level store)
+│   ├── useDismissablePopover.ts  # Generic outside-click dismissal
+│   ├── useFilterPresets.ts       # Saved-search + journal-preset persistence
+│   ├── usePaperSearch.ts         # List fetch + loading UX for SearchResults
+│   ├── useCitationBanners.ts     # Citation count banners
+│   ├── useNetworkView.ts         # Citation network view state
+│   └── useAuthorPanel.ts         # Author panel state + reported-flag store
+│
+├── tests/                     # Vitest test suite (run with `npm test`)
+│   ├── econBatchedSearch.test.ts  # H1 pagination regression (8 batch × page combos)
+│   ├── format.test.ts             # buildFilters / buildSort / mapToPapers
+│   ├── abstract.test.ts           # Abstract reconstruction + M6 position-clamp
+│   └── searchRoute.test.ts        # /api/search validation (400 paths, sanitisation)
 │
 ├── data/                      # Static datasets (CNRS scheme, journals, abbreviations)
 │   ├── cnrsScheme.ts
@@ -166,19 +196,22 @@ paperazzi/
 ├── utils/
 │   ├── activeRanking.ts          # Active ranking loader / resolver
 │   ├── pinCollectionTransfer.ts  # Export/import format + parser
+│   ├── pinStorage.ts             # Pure localStorage helpers for PinContext
+│   │                             # (readJSON/writeJSON, ensureBootstrapped, …)
 │   ├── storageKeys.ts            # Single source of truth for localStorage keys
 │   ├── eventBus.ts               # Tiny pub/sub (paper-citing-click, etc.)
 │   ├── normalizeId.ts            # OpenAlex ID canonicalisation
-│   ├── openAlexClient.ts         # Client OpenAlex fetch (polite-pool mailto) + work→Paper mapper
+│   ├── openAlexClient.ts         # Client OpenAlex fetch (polite-pool mailto)
 │   ├── abstract.ts               # Inverted-index → text
 │   ├── cleanHtml.ts              # Sanitize OpenAlex titles/abstracts
 │   ├── correctionForms.ts        # OpenAlex correction-form links
 │   ├── migrateFilters.ts         # Filter-shape migrations
-│   ├── filtersEqual.ts           # Structural Filters comparator (deferred-commit dirty check)
-│   ├── searchCache.ts            # In-memory result cache
+│   ├── filtersEqual.ts           # Structural Filters comparator
+│   ├── searchCache.ts            # In-memory result cache (LRU, inflight dedup)
 │   ├── queryMentions.ts          # @author / #journal shortcut parsing
 │   ├── loadJournals.ts           # Journal loading / ISSN resolution
-│   └── usePersistedBoolean.ts    # localStorage-backed boolean hook
+│   ├── download.ts               # triggerDownload helper
+│   └── usePersistedBoolean.ts    # localStorage-backed boolean (useSyncExternalStore)
 │
 ├── types/
 │   ├── interfaces.ts          # App-level types (Paper, PinGroup, Filters, …)
@@ -186,12 +219,21 @@ paperazzi/
 │
 ├── public/                    # Static assets
 ├── MCP.md                     # MCP server setup + client wiring guide
+├── CODE_AUDIT.md              # Security + architecture audit log with fix history
+├── vitest.config.ts           # Vitest config
 ├── next.config.ts
 ├── tsconfig.json
 ├── eslint.config.mjs
 ├── postcss.config.mjs
 └── package.json
 ```
+
+### Key architectural boundaries
+
+- **`app/api/`** is the only server-side code. Everything else runs in the browser.
+- **`hooks/`** contains pure logic hooks with no JSX. Components import from here; hooks never import from components.
+- **`utils/`** contains framework-agnostic helpers. Pure functions in `utils/pinStorage.ts` are safe to import in Vitest tests without React setup.
+- **`contexts/PinContext.tsx`** owns the React tree for pinning but delegates its two hardest sub-problems — debounced writes (`usePinStorage`) and collection CRUD (`useCollectionManager`) — to dedicated hooks so each concern is independently testable and readable.
 
 ## Data flow
 
@@ -217,7 +259,7 @@ User →  │ NavBar + FilterPanel      │ ────────────
         └────────────────┘
 ```
 
-`NavBar` resolves `@author` and `#journal` shortcuts client-side before pushing the search URL. Ranking-aware journal filters are resolved locally to ISSNs, then sent as normal search params to `/api/search`. The server stays scheme-agnostic — it only ever receives the final ISSN whitelist. Browser-side calls straight to OpenAlex (autocomplete, citation-banner metadata, pin refresh) go through `utils/openAlexClient.ts` so they consistently carry the polite-pool `mailto`; the `/api/search` proxy authenticates with the rotated `OPENALEX_KEYS` pool instead.
+`NavBar` resolves `@author` and `#journal` shortcuts client-side (via `useNavBarAutocomplete`) before pushing the search URL. Ranking-aware journal filters are resolved locally to ISSNs, then sent as normal search params to `/api/search`. The server stays scheme-agnostic — it only ever receives the final ISSN whitelist. Browser-side calls straight to OpenAlex (autocomplete, citation-banner metadata, pin refresh) go through `utils/openAlexClient.ts` so they consistently carry the polite-pool `mailto`; the `/api/search` proxy authenticates with the rotated `OPENALEX_KEYS` pool instead.
 
 The MCP server (`/api/mcp`) dispatches into the same `/api/search` handler in-process, so LLM clients get identical results without a second network hop.
 
@@ -234,12 +276,26 @@ The endpoint is open (no token) and reuses the `OPENALEX_KEYS` rotation pool. Fu
 
 ## Scripts
 
-| Command          | What it does                                         |
-| ---------------- | ---------------------------------------------------- |
-| `npm run dev`    | Start the dev server with hot reload on `:3000`.     |
-| `npm run build`  | Production build (`.next/`).                         |
-| `npm run start`  | Serve the production build.                          |
-| `npm run lint`   | Run ESLint over the project.                         |
+| Command              | What it does                                                            |
+| -------------------- | ----------------------------------------------------------------------- |
+| `npm run dev`        | Start the dev server with hot reload on `:3000`.                        |
+| `npm run build`      | Production build (`.next/`).                                            |
+| `npm run start`      | Serve the production build.                                             |
+| `npm run lint`       | Run ESLint over the project.                                            |
+| `npm test`           | Run the full Vitest test suite once (43 tests across 4 files).          |
+| `npm run test:watch` | Run Vitest in watch mode (re-runs on file save — useful during development). |
+| `npm run check`      | Typecheck + lint + tests in one shot — the recommended pre-push gate.   |
+
+### What the tests cover
+
+The test suite lives in `tests/` and is focused on the server-side logic where bugs have real cost:
+
+- **`econBatchedSearch.test.ts`** — pagination correctness across 8 batch-layout × page-size combinations, including the H1 regression (mid-batch offset was silently dropping results).
+- **`format.test.ts`** — `buildFilters`, `buildSort`, `mapToPapers`, and query-param sanitisation.
+- **`abstract.test.ts`** — inverted-index reconstruction, including the M6 position-clamp regression.
+- **`searchRoute.test.ts`** — `/api/search` 400 paths (all fire before any upstream call) and the upstream URL sanitisation.
+
+To add a test, create a `*.test.ts` file anywhere under `tests/`. Vitest picks it up automatically. The pure helpers in `utils/` (e.g. `pinStorage.ts`, `abstract.ts`, `normalizeId.ts`) have no React or Next.js dependencies and can be imported directly in tests without any special setup.
 
 ## Contributing
 
@@ -251,9 +307,7 @@ Contributions and bug reports are welcome.
 4. **Match the surrounding style.** TypeScript strict, no `any` unless documented, comments explain *why* (the *what* is in the code).
 5. **Run before pushing:**
    ```bash
-   npm run lint
-   npx tsc --noEmit
-   npm run build
+   npm run check   # typecheck + lint + tests in one shot
    ```
 6. **Open a pull request** against `main` with a clear description of what changed and why. Screenshots help for UI changes.
 
@@ -268,4 +322,4 @@ If you spot incorrect paper metadata, that's an OpenAlex data issue — see <htt
 - **[OpenAlex](https://openalex.org/)** — the open scholarly metadata graph that powers every search.
 - **[CNRS Section 37](https://www.gate.cnrs.fr/wp-content/uploads/2021/12/categorisation37_liste_juin_2020-2.pdf)** — the (2020) economics-journal categorisation used for filter tiers.
 
-Built by [Nicolas Pasquier](https://npasquier.github.io/), economics researcher at GAEL.
+Built by [Nicolas Pasquier](https://npasquier.github.io/), economics researcher at GAEL, with [Claude Opus and Claude Fable](https://www.anthropic.com/claude) (Anthropic) as AI pair-programming assistants throughout development.

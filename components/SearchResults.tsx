@@ -1,26 +1,31 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+// Search-page results pane. The data layer was extracted into hooks in
+// the 2026-06 L2 decomposition — this component keeps the URL-driven
+// props, the econ-filter resolution, and the (large) render branches:
+//   • usePaperSearch      — the /api/search list fetch + loading UX
+//   • useCitationBanners  — citing / refs / citingAll / referencesAll
+//                           focal-paper metadata for the banners
+//   • useNetworkView      — the citation-network data (focal + edges)
+//   • useAuthorPanel      — the single-author summary card + report flow
+
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Paper, RESULTS_PER_PAGE } from '../types/interfaces';
+import { RESULTS_PER_PAGE } from '../types/interfaces';
 import PaperCard from './ui/PaperCard';
 import CitationsNetwork from './ui/CitationsNetwork';
 import EmptyState, { PresetTileId } from './EmptyState';
-import { reportedAuthorKey } from '@/utils/storageKeys';
-import { cachedFetch } from '@/utils/searchCache';
-import { emit, on } from '@/utils/eventBus';
+import { emit } from '@/utils/eventBus';
+import { on } from '@/utils/eventBus';
 import { normalizeId } from '@/utils/normalizeId';
-import cleanHtml from '@/utils/cleanHtml';
-import {
-  openAlexFetch,
-  withMailto,
-  fetchWorkAsPaper,
-} from '@/utils/openAlexClient';
-import { AUTHOR_CORRECTION_FORM_URL } from '@/utils/correctionForms';
 import {
   resolveIssns,
   useActiveRanking,
 } from '@/utils/activeRanking';
+import { usePaperSearch } from '@/hooks/usePaperSearch';
+import { useCitationBanners } from '@/hooks/useCitationBanners';
+import { useNetworkView } from '@/hooks/useNetworkView';
+import { useAuthorPanel } from '@/hooks/useAuthorPanel';
 import {
   X,
   Quote,
@@ -35,22 +40,6 @@ import {
   Minimize2,
   Flag,
 } from 'lucide-react';
-
-// Shape of the author summary card built from OpenAlex /authors/{id}.
-// Only the fields the panel actually reads — everything optional because
-// OpenAlex omits stats for thinly-indexed authors.
-interface AuthorInfo {
-  id: string;
-  display_name: string;
-  orcid?: string;
-  works_count?: number;
-  cited_by_count?: number;
-  h_index?: number;
-  i10_index?: number;
-  last_known_institution?: string;
-  last_known_institution_country?: string;
-  affiliations: Array<{ institution?: { display_name?: string } }>;
-}
 
 interface Props {
   query: string;
@@ -136,45 +125,6 @@ export default function SearchResults({
   onToggleSidebars,
 }: Props) {
   const router = useRouter();
-  const [results, setResults] = useState<Paper[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [isPending, startTransition] = useTransition();
-  const [citingPaper, setCitingPaper] = useState<Paper | null>(null);
-  const [citingAllPapers, setCitingAllPapers] = useState<Paper[]>([]);
-  const [loadingCitingPaper, setLoadingCitingPaper] = useState(false);
-  const [loadingCitingAllPapers, setLoadingCitingAllPapers] = useState(false);
-  const [referencedByPaper, setReferencedByPaper] = useState<Paper | null>(
-    null,
-  );
-  const [loadingReferencedByPaper, setLoadingReferencedByPaper] =
-    useState(false);
-  const [referencesAllPapers, setReferencesAllPapers] = useState<Paper[]>([]);
-  const [loadingReferencesAllPapers, setLoadingReferencesAllPapers] =
-    useState(false);
-  const [authorInfo, setAuthorInfo] = useState<AuthorInfo | null>(null);
-  // Only the setter is used (the loading value isn't surfaced in the UI).
-  const [, setLoadingAuthorInfo] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingMessage, setLoadingMessage] = useState<string>(
-    'Searching OpenAlex...',
-  );
-  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
-  const [showSlowLoadingHelp, setShowSlowLoadingHelp] = useState(false);
-
-  const [isAuthorInfoExpanded, setIsAuthorInfoExpanded] = useState(false);
-  const [isAuthorIdCopied, setIsAuthorIdCopied] = useState(false);
-
-  // ── Network view state ─────────────────────────────────────────────
-  const [networkFocal, setNetworkFocal] = useState<Paper | null>(null);
-  const [networkRefs, setNetworkRefs] = useState<Paper[]>([]);
-  const [networkCites, setNetworkCites] = useState<Paper[]>([]);
-  const [networkRefsTotal, setNetworkRefsTotal] = useState<number | null>(null);
-  const [networkCitesTotal, setNetworkCitesTotal] = useState<number | null>(
-    null,
-  );
-  const [networkLoading, setNetworkLoading] = useState(false);
-  const [networkError, setNetworkError] = useState<string | null>(null);
-  const [hasAuthorReported, setHasAuthorReported] = useState(false);
 
   const isEconActive = econFilter?.enabled ?? false;
 
@@ -185,7 +135,7 @@ export default function SearchResults({
   // we expand (tiers, domains) → ISSNs against the active scheme.
   //
   // Returns `null` while the scheme is still loading on first paint, OR
-  // when the wide filter isn't engaged. The fetch effect treats `null`
+  // when the wide filter isn't engaged. usePaperSearch treats `null`
   // as "don't push wide-mode params" (vs. an empty array, which means
   // "scheme matches no journals — short-circuit").
   const activeRanking = useActiveRanking();
@@ -202,29 +152,73 @@ export default function SearchResults({
     );
   }, [activeRanking, econFilter]);
 
-  // Progressive loading messages
-  useEffect(() => {
-    if (!isPending || !loadingStartTime) return;
-    const updateLoadingMessage = () => {
-      const elapsed = Date.now() - loadingStartTime;
-      if (elapsed < 3000) {
-        setLoadingMessage('Searching OpenAlex...');
-        setShowSlowLoadingHelp(false);
-      } else if (elapsed < 6000) {
-        setLoadingMessage('Processing results...');
-        setShowSlowLoadingHelp(false);
-      } else if (elapsed < 10000) {
-        setLoadingMessage('Still loading... OpenAlex is busy');
-        setShowSlowLoadingHelp(false);
-      } else {
-        setLoadingMessage('Taking longer than usual...');
-        setShowSlowLoadingHelp(true);
-      }
-    };
-    updateLoadingMessage();
-    const interval = setInterval(updateLoadingMessage, 1000);
-    return () => clearInterval(interval);
-  }, [isPending, loadingStartTime]);
+  // ── Data hooks (see module docstring) ────────────────────────────────
+  const {
+    results,
+    totalCount,
+    isPending,
+    error,
+    loadingMessage,
+    showSlowLoadingHelp,
+  } = usePaperSearch({
+    query,
+    journals,
+    authors,
+    institutions,
+    publicationType,
+    from,
+    to,
+    sortBy,
+    page,
+    citing,
+    citingAll,
+    referencedBy,
+    referencesAll,
+    econFilter,
+    econResolvedIssns,
+    journalFilterMode,
+    workingPaperFilter,
+    networkId,
+  });
+
+  const {
+    citingPaper,
+    loadingCitingPaper,
+    citingAllPapers,
+    loadingCitingAllPapers,
+    referencedByPaper,
+    loadingReferencedByPaper,
+    referencesAllPapers,
+    loadingReferencesAllPapers,
+  } = useCitationBanners({ citing, citingAll, referencedBy, referencesAll });
+
+  const {
+    focal: networkFocal,
+    refs: networkRefs,
+    cites: networkCites,
+    refsTotal: networkRefsTotal,
+    citesTotal: networkCitesTotal,
+    loading: networkLoading,
+    error: networkError,
+  } = useNetworkView({
+    networkId,
+    journals,
+    econFilter,
+    econResolvedIssns,
+    journalFilterMode,
+    workingPaperFilter,
+  });
+
+  const {
+    authorInfo,
+    isExpanded: isAuthorInfoExpanded,
+    toggleExpanded: toggleAuthorInfo,
+    isIdCopied: isAuthorIdCopied,
+    copyId: copyAuthorId,
+    openCorrectionForm: openAuthorCorrectionForm,
+    isReported: isAuthorReported,
+    handleReportedToggle: handleAuthorReportedToggle,
+  } = useAuthorPanel(authors);
 
   // Citation click events
   useEffect(() => {
@@ -256,408 +250,6 @@ export default function SearchResults({
       for (const off of offs) off();
     };
   }, [router]);
-
-  // Fetch author info
-  useEffect(() => {
-    if (authors.length !== 1) {
-      setAuthorInfo(null);
-      setIsAuthorInfoExpanded(false);
-      return;
-    }
-    const authorId = authors[0].id;
-    setLoadingAuthorInfo(true);
-    openAlexFetch(`https://api.openalex.org/authors/${authorId}`)
-      .then((res) => {
-        // Guard res.ok: a 429/5xx returns an error body without these
-        // fields, which would otherwise paint the author panel with
-        // undefined name / stats. Throw so the .catch clears it instead.
-        if (!res.ok) throw new Error(`OpenAlex ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        setAuthorInfo({
-          id: data.id,
-          display_name: data.display_name,
-          orcid: data.orcid,
-          works_count: data.works_count,
-          cited_by_count: data.cited_by_count,
-          h_index: data.summary_stats?.h_index,
-          i10_index: data.summary_stats?.i10_index,
-          last_known_institution: data.last_known_institution?.display_name,
-          last_known_institution_country:
-            data.last_known_institution?.country_code,
-          affiliations: data.affiliations?.slice(0, 3) || [],
-        });
-      })
-      .catch(() => setAuthorInfo(null))
-      .finally(() => setLoadingAuthorInfo(false));
-  }, [authors]);
-
-  // Fetch citing paper. fetchWorkAsPaper folds in the OpenAlex→Paper
-  // mapping and per-call error handling that all four of these citation
-  // banner effects used to repeat inline.
-  useEffect(() => {
-    if (!citing) {
-      setCitingPaper(null);
-      return;
-    }
-    setLoadingCitingPaper(true);
-    fetchWorkAsPaper(citing)
-      .then(setCitingPaper)
-      .finally(() => setLoadingCitingPaper(false));
-  }, [citing]);
-
-  // Fetch referencedBy paper
-  useEffect(() => {
-    if (!referencedBy) {
-      setReferencedByPaper(null);
-      return;
-    }
-    setLoadingReferencedByPaper(true);
-    fetchWorkAsPaper(referencedBy)
-      .then(setReferencedByPaper)
-      .finally(() => setLoadingReferencedByPaper(false));
-  }, [referencedBy]);
-
-  // Fetch citingAll papers
-  useEffect(() => {
-    if (!citingAll || citingAll.length === 0) {
-      setCitingAllPapers([]);
-      return;
-    }
-    setLoadingCitingAllPapers(true);
-    Promise.all(citingAll.map((id) => fetchWorkAsPaper(id)))
-      .then((papers) =>
-        setCitingAllPapers(papers.filter((p): p is Paper => p !== null)),
-      )
-      .finally(() => setLoadingCitingAllPapers(false));
-  }, [citingAll]);
-
-  // Fetch referencesAll papers
-  useEffect(() => {
-    if (!referencesAll || referencesAll.length === 0) {
-      setReferencesAllPapers([]);
-      return;
-    }
-    setLoadingReferencesAllPapers(true);
-    Promise.all(referencesAll.map((id) => fetchWorkAsPaper(id)))
-      .then((papers) =>
-        setReferencesAllPapers(papers.filter((p): p is Paper => p !== null)),
-      )
-      .finally(() => setLoadingReferencesAllPapers(false));
-  }, [referencesAll]);
-
-  // ─── Main search effect ───
-  useEffect(() => {
-    // Skip the regular search entirely while we're rendering a network — the
-    // network fetch (below) drives that view.
-    if (networkId) return;
-    // Wide econ filter is a meaningful constraint on its own — the API can
-    // browse all econ journals without a query. Only short-circuit when no
-    // filter at all is active (otherwise wide-mode-without-query returned
-    // empty because `journals` is empty in wide mode).
-    const isWideEconActive =
-      journalFilterMode === 'wide' && (econFilter?.enabled ?? false);
-    if (
-      !citing &&
-      !citingAll?.length &&
-      !referencedBy &&
-      !referencesAll?.length &&
-      !query &&
-      journals.length === 0 &&
-      authors.length === 0 &&
-      institutions.length === 0 &&
-      !isWideEconActive
-    ) {
-      setResults([]);
-      setTotalCount(0);
-      setError(null);
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        setError(null);
-        setLoadingStartTime(Date.now());
-        setShowSlowLoadingHelp(false);
-
-        const params = new URLSearchParams();
-        if (query) params.set('query', query);
-        // Journal filter source is gated by mode — only the active subsection
-        // sends params, so the two never compete on the API side.
-        if (journalFilterMode === 'specific' && journals.length) {
-          params.set('journals', journals.map((j) => j.issn).join(','));
-        }
-        if (authors.length)
-          params.set('authors', authors.map((a) => a.id).join(','));
-        if (institutions.length)
-          params.set(
-            'institutions',
-            institutions
-              .map((i) => normalizeId(i.id))
-              .join(','),
-          );
-        if (publicationType) params.set('type', publicationType);
-        if (from) params.set('from', from);
-        if (to) params.set('to', to);
-        if (sortBy) params.set('sort', sortBy);
-        params.set('page', page.toString());
-        if (citing) params.set('citing', citing);
-        if (citingAll?.length) params.set('citingAll', citingAll.join(','));
-        if (referencedBy) params.set('referencedBy', referencedBy);
-        if (referencesAll?.length)
-          params.set('referencesAll', referencesAll.join(','));
-
-        // Econ filter params (only when wide mode is active). The server
-        // is scheme-agnostic — we resolve tiers/domains to ISSNs locally
-        // using the active RankingScheme and send only `econIssns`. The
-        // resolution is memoised in `econResolvedIssns` above.
-        if (
-          journalFilterMode === 'wide' &&
-          econFilter?.enabled &&
-          econResolvedIssns !== null
-        ) {
-          params.set('econEnabled', 'true');
-          if (econResolvedIssns.length > 0)
-            params.set('econIssns', econResolvedIssns.join(','));
-        }
-
-        // Working-paper filter — restricts to a whitelist of OpenAlex
-        // source ids (RePEc, HAL, NBER, IMF, …). Server prefers this
-        // over the journal-ISSN clause when both are present.
-        if (workingPaperFilter?.enabled && workingPaperFilter.sourceIds.length) {
-          params.set('wpEnabled', 'true');
-          params.set('wpSources', workingPaperFilter.sourceIds.join(','));
-        }
-
-        // cachedFetch: in-session memo of identical URLs (page-flip,
-        // chip-toggle round-trips, browser back/forward) come back without
-        // a network round-trip. Error envelopes (5xx) are returned but
-        // not cached, so transient failures don't stick.
-        const data = (await cachedFetch(
-          `/api/search?${params.toString()}`,
-        )) as {
-          results?: Paper[];
-          meta?: { count?: number };
-          error?: string;
-        };
-
-        if (data.error) {
-          setError(data.error);
-          setResults([]);
-          setTotalCount(0);
-        } else {
-          setResults(data.results || []);
-          setTotalCount(data.meta?.count || 0);
-        }
-      } catch (err) {
-        console.error('Search error:', err);
-        setError('An error occurred while searching. Please try again.');
-        setResults([]);
-        setTotalCount(0);
-      } finally {
-        setLoadingStartTime(null);
-        setShowSlowLoadingHelp(false);
-      }
-    });
-  }, [
-    query,
-    journals,
-    authors,
-    institutions,
-    publicationType,
-    from,
-    to,
-    sortBy,
-    page,
-    citing,
-    citingAll,
-    referencedBy,
-    referencesAll,
-    econFilter,
-    econResolvedIssns,
-    journalFilterMode,
-    workingPaperFilter,
-    networkId,
-  ]);
-
-  // ── Network view fetch ───────────────────────────────────────────
-  // When a `networkId` is set, fire three calls in parallel:
-  //   1) the focal paper itself (OpenAlex direct, so we have referenced_works)
-  //   2) refs       — papers the focal cites
-  //   3) cites      — papers that cite the focal
-  // Both /api/search calls return papers with `referenced_works`, which is
-  // what CitationsNetwork needs to compute non-trivial edges.
-  useEffect(() => {
-    if (!networkId) {
-      setNetworkFocal(null);
-      setNetworkRefs([]);
-      setNetworkCites([]);
-      setNetworkRefsTotal(null);
-      setNetworkCitesTotal(null);
-      setNetworkError(null);
-      return;
-    }
-    let aborted = false;
-    setNetworkLoading(true);
-    setNetworkError(null);
-
-    // Mirror the regular-search journal-filter logic: only the active mode's
-    // params get sent, so toggling Wide/Specific/Off in the side panel
-    // narrows (or opens up) the network just like it narrows the list.
-    const buildFilterParams = (): URLSearchParams => {
-      const p = new URLSearchParams();
-      if (journalFilterMode === 'specific' && journals.length) {
-        p.set('journals', journals.map((j) => j.issn).join(','));
-      }
-      if (
-        journalFilterMode === 'wide' &&
-        econFilter?.enabled &&
-        econResolvedIssns !== null
-      ) {
-        p.set('econEnabled', 'true');
-        if (econResolvedIssns.length > 0)
-          p.set('econIssns', econResolvedIssns.join(','));
-      }
-      if (workingPaperFilter?.enabled && workingPaperFilter.sourceIds.length) {
-        p.set('wpEnabled', 'true');
-        p.set('wpSources', workingPaperFilter.sourceIds.join(','));
-      }
-      return p;
-    };
-
-    const refsParams = buildFilterParams();
-    refsParams.set('referencedBy', networkId);
-    refsParams.set('perPage', '200');
-    refsParams.set('sort', 'cited_by_count:desc');
-
-    const citesParams = buildFilterParams();
-    citesParams.set('citing', networkId);
-    citesParams.set('perPage', '200');
-    citesParams.set('sort', 'cited_by_count:desc');
-
-    // All three calls go through cachedFetch so toggling between two
-    // networks the user has already opened (e.g. clicking back into a
-    // graph node they explored earlier) is instant. The OpenAlex
-    // /works/<id> call is the slowest and most cache-friendly — its
-    // payload is invariant across page reloads within a session.
-    type FocalRaw = {
-      id: string;
-      title?: string | null;
-      authorships?: { author: { display_name: string } }[];
-      publication_year?: number;
-      primary_location?: { source?: { display_name?: string } };
-      doi?: string | null;
-      cited_by_count?: number;
-      referenced_works_count?: number;
-      referenced_works?: string[];
-    };
-    type SearchResp = {
-      results?: Paper[];
-      meta?: { count?: number };
-      error?: string;
-    };
-    Promise.all([
-      cachedFetch<FocalRaw>(
-        withMailto(`https://api.openalex.org/works/${networkId}`),
-      ),
-      cachedFetch<SearchResp>(`/api/search?${refsParams.toString()}`),
-      cachedFetch<SearchResp>(`/api/search?${citesParams.toString()}`),
-    ])
-      .then(([focalRaw, refsResp, citesResp]) => {
-        if (aborted) return;
-        if (refsResp.error || citesResp.error) {
-          setNetworkError(refsResp.error || citesResp.error || null);
-          return;
-        }
-        const focal: Paper = {
-          id: focalRaw.id,
-          title: cleanHtml(focalRaw.title),
-          authors: (focalRaw.authorships || []).map(
-            (a) => a.author.display_name,
-          ),
-          publication_year: focalRaw.publication_year ?? 0,
-          journal_name:
-            focalRaw.primary_location?.source?.display_name || 'Unknown',
-          doi: focalRaw.doi ?? undefined,
-          cited_by_count: focalRaw.cited_by_count || 0,
-          referenced_works_count: focalRaw.referenced_works_count || 0,
-          abstract: '',
-          referenced_works: (focalRaw.referenced_works || []).map((id) =>
-            normalizeId(id),
-          ),
-        };
-        setNetworkFocal(focal);
-        setNetworkRefs(refsResp.results || []);
-        setNetworkCites(citesResp.results || []);
-        setNetworkRefsTotal(refsResp.meta?.count ?? null);
-        setNetworkCitesTotal(citesResp.meta?.count ?? null);
-      })
-      .catch((err: unknown) => {
-        if (aborted) return;
-        const msg = err instanceof Error ? err.message : 'Network error';
-        setNetworkError(msg);
-      })
-      .finally(() => {
-        if (!aborted) setNetworkLoading(false);
-      });
-
-    return () => {
-      aborted = true;
-    };
-  }, [
-    networkId,
-    journalFilterMode,
-    econFilter,
-    econResolvedIssns,
-    journals,
-    workingPaperFilter,
-  ]);
-
-  // Author helpers
-  const toggleAuthorInfo = () => setIsAuthorInfoExpanded(!isAuthorInfoExpanded);
-  const copyAuthorId = async () => {
-    if (!authorInfo) return;
-    const id = normalizeId(authorInfo.id);
-    try {
-      await navigator.clipboard.writeText(id);
-      setIsAuthorIdCopied(true);
-      setTimeout(() => setIsAuthorIdCopied(false), 2000);
-    } catch {}
-  };
-  const openAuthorCorrectionForm = () => {
-    window.open(AUTHOR_CORRECTION_FORM_URL, '_blank');
-  };
-  const authorReportedKey = authorInfo
-    ? reportedAuthorKey(normalizeId(authorInfo.id))
-    : '';
-  // Seed the "already reported" flag from localStorage in an effect rather
-  // than reading storage during render — a render-phase read risks an
-  // SSR/client hydration mismatch and re-runs on every render. Reseeding
-  // when the focused author changes also clears the in-session toggle so a
-  // report on one author doesn't visually bleed onto the next.
-  const [isAuthorReportedStored, setIsAuthorReportedStored] = useState(false);
-  useEffect(() => {
-    setHasAuthorReported(false);
-    if (typeof window === 'undefined' || !authorReportedKey) {
-      setIsAuthorReportedStored(false);
-      return;
-    }
-    setIsAuthorReportedStored(
-      localStorage.getItem(authorReportedKey) === 'true',
-    );
-  }, [authorReportedKey]);
-  const handleAuthorReportedToggle = () => {
-    if (!hasAuthorReported && !isAuthorReportedStored) {
-      setHasAuthorReported(true);
-      localStorage.setItem(authorReportedKey, 'true');
-      emit('paper-reported', { authorId: authorReportedKey });
-    } else {
-      setHasAuthorReported(false);
-      localStorage.removeItem(authorReportedKey);
-    }
-  };
-  const isAuthorReported = hasAuthorReported || isAuthorReportedStored;
 
   // Empty state — but only when we're not in network mode AND no journal
   // filter is active (a wide filter alone is a meaningful constraint and
