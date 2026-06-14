@@ -101,7 +101,7 @@ describe('mapToPapers', () => {
   it('trims works to the client Paper shape and normalizes ids', () => {
     const work = {
       id: 'https://openalex.org/W1',
-      title: '<i>Fancy</i> title',
+      title: '<i>Fancy</i> R&amp;D title',
       authorships: [{ author: { display_name: 'Ada' } }],
       publication_year: 2020,
       primary_location: {
@@ -116,7 +116,7 @@ describe('mapToPapers', () => {
     } as unknown as OpenAlexWork;
 
     const [p] = mapToPapers([work]);
-    expect(p.title).toBe('Fancy title'); // HTML stripped
+    expect(p.title).toBe('Fancy R&D title'); // tags stripped, entities decoded
     expect(p.authors).toEqual(['Ada']);
     expect(p.journal_name).toBe('AER');
     expect(p.abstract).toBe('Hello world');
