@@ -1,6 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { X, Database, AlertTriangle, Flag, Download } from 'lucide-react';
+import Link from 'next/link';
+import {
+  X,
+  Database,
+  AlertTriangle,
+  Flag,
+  Download,
+  ArrowRight,
+} from 'lucide-react';
 import {
   ALL_FIXED_KEYS,
   STORAGE_KEYS,
@@ -347,6 +355,18 @@ export default function StorageModal({ isOpen, onClose }: Props) {
               for the next researcher who finds that paper.
             </p>
           )}
+          <Link
+            href='/curate'
+            onClick={onClose}
+            className='mt-1 inline-flex items-center gap-1.5 rounded-md border border-app bg-white/60 px-2.5 py-1.5 font-medium text-stone-800 transition hover:bg-white hover:text-stone-900'
+          >
+            Open curation tool
+            <ArrowRight size={13} className='text-accent-strong' />
+          </Link>
+          <p className='text-[11px] leading-snug text-stone-500'>
+            A focus-tool for corrections — scan a journal for works missing
+            abstracts, recover them, and submit fixes to OpenAlex in one place.
+          </p>
         </section>
 
         {/* 2) Stored on this device — the four local-storage buckets,

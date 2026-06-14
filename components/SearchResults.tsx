@@ -23,6 +23,8 @@ import {
   useActiveRanking,
 } from '@/utils/activeRanking';
 import { usePaperSearch } from '@/hooks/usePaperSearch';
+import { useSearchNoiseFilter } from '@/hooks/useSearchNoiseFilter';
+import { isHiddenNoise } from '@/utils/noiseFilters';
 import { useCitationBanners } from '@/hooks/useCitationBanners';
 import { useNetworkView } from '@/hooks/useNetworkView';
 import { useAuthorPanel } from '@/hooks/useAuthorPanel';
@@ -191,6 +193,21 @@ export default function SearchResults({
     referencesAllPapers,
     loadingReferencesAllPapers,
   } = useCitationBanners({ citing, citingAll, referencedBy, referencesAll });
+
+  // Global "hide non-articles" filter — quietly drops likely paratext
+  // (front matter, referee acknowledgments, no-author items, …) that OpenAlex
+  // mis-types as articles. On by default; edited from the FilterPanel.
+  const searchNoise = useSearchNoiseFilter();
+  const visibleResults = useMemo(() => {
+    if (!searchNoise.enabled) return results;
+    return results.filter(
+      (p) =>
+        !isHiddenNoise(
+          { title: p.title, authorCount: p.authors?.length ?? null },
+          searchNoise.hidden,
+        ),
+    );
+  }, [results, searchNoise.enabled, searchNoise.hidden]);
 
   const {
     focal: networkFocal,
@@ -893,7 +910,7 @@ export default function SearchResults({
 
       {results.length > 0 && (
         <div className='app-scrollbar flex-1 min-h-0 overflow-y-auto space-y-3 mb-4 pr-1'>
-          {results.map((paper) => (
+          {visibleResults.map((paper) => (
             <PaperCard
               key={paper.id}
               paper={paper}
@@ -903,6 +920,17 @@ export default function SearchResults({
               onAuthorClick={onAuthorSearch}
             />
           ))}
+          {visibleResults.length === 0 && (
+            <div className='text-center py-12 text-stone-500'>
+              <p className='text-sm'>
+                All {results.length} results on this page were hidden as
+                non-articles.
+              </p>
+              <p className='text-xs mt-1 text-stone-400'>
+                Adjust “Hide non-articles” in the filters to show them.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

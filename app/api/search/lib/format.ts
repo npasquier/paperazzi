@@ -74,6 +74,14 @@ export function buildFilters(params: {
     filters.push(`publication_year:${params.from || ''}-${params.to || ''}`);
   }
 
+  // Globally exclude OpenAlex "paratext" (front matter, editorial boards,
+  // tables of contents, indexes, …) from every normal search — these aren't
+  // real articles and only add noise. Skipped for explicit ID lookups so a
+  // directly requested work is never silently dropped.
+  if (!params.workIds?.length) {
+    filters.push('is_paratext:false');
+  }
+
   return filters;
 }
 

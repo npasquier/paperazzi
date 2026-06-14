@@ -93,6 +93,12 @@ export type AppEvents = {
    * the event is just the trigger.
    */
   'paperazzi-filters-discard': undefined;
+  /**
+   * The global "hide non-articles" search filter changed (toggle or a
+   * per-category edit in the FilterPanel). SearchResults listens so the
+   * rendered list re-filters live. Payload is the full new state.
+   */
+  'search-noise-changed': { enabled: boolean; hidden: Record<string, boolean> };
 };
 
 type EventName = keyof AppEvents;

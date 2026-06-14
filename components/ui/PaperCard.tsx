@@ -8,6 +8,8 @@ import {
   Flag,
   CheckCircle,
   Network as NetworkIcon,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Paper } from '@/types/interfaces';
 import PinButton from './PinButton';
@@ -46,8 +48,22 @@ export default function PaperCard({
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isPaperInfoOpen, setIsPaperInfoOpen] = useState(false);
   const [hasReported, setHasReported] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
 
   const workId = normalizeId(paper.id);
+
+  const handleCopyId = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!navigator.clipboard?.writeText) return;
+    navigator.clipboard
+      .writeText(workId)
+      .then(() => {
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 1500);
+      })
+      .catch(() => {});
+  };
 
   // Check if abstract exists
   const hasAbstract = paper.abstract && paper.abstract.trim().length > 0;
@@ -574,6 +590,18 @@ export default function PaperCard({
               <code className='surface-muted rounded px-1 py-0.5 font-mono text-[10px] text-stone-500'>
                 {workId}
               </code>
+              <button
+                onClick={handleCopyId}
+                title={copiedId ? 'Copied!' : 'Copy Paper ID'}
+                aria-label='Copy Paper ID'
+                className='ml-1 inline-flex items-center align-middle rounded p-0.5 text-stone-400 transition hover:bg-[var(--surface-muted)] hover:text-stone-600'
+              >
+                {copiedId ? (
+                  <Check size={12} className='text-success' />
+                ) : (
+                  <Copy size={12} />
+                )}
+              </button>
             </p>
             <CorrectionPills workId={workId} abstract={paper.abstract} />
             {/* Compact action row - with proper spacing from toggle buttons */}

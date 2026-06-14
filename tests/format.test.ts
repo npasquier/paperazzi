@@ -34,14 +34,19 @@ describe('toFullId', () => {
 });
 
 describe('buildFilters', () => {
-  it('returns no filters for empty params', () => {
-    expect(buildFilters(emptyFilters)).toEqual([]);
+  // Every normal search appends `is_paratext:false` to drop OpenAlex paratext
+  // (front matter, editorial boards, …) — so it shows up in each result below.
+  it('excludes paratext even for empty params', () => {
+    expect(buildFilters(emptyFilters)).toEqual(['is_paratext:false']);
   });
 
   it('ORs journals into one ISSN clause', () => {
     expect(
       buildFilters({ ...emptyFilters, journals: ['1234-5678', '9999-0000'] }),
-    ).toEqual(['primary_location.source.issn:1234-5678|9999-0000']);
+    ).toEqual([
+      'primary_location.source.issn:1234-5678|9999-0000',
+      'is_paratext:false',
+    ]);
   });
 
   it('ANDs authors as separate clauses (intersection semantics)', () => {
@@ -50,6 +55,7 @@ describe('buildFilters', () => {
     ).toEqual([
       'authorships.author.id:https://openalex.org/A1',
       'authorships.author.id:https://openalex.org/A2',
+      'is_paratext:false',
     ]);
   });
 
@@ -59,18 +65,29 @@ describe('buildFilters', () => {
       journals: ['1234-5678'],
       workingPaperSourceIds: ['S1', 'S2'],
     });
-    expect(filters).toEqual(['primary_location.source.id:S1|S2']);
+    expect(filters).toEqual([
+      'primary_location.source.id:S1|S2',
+      'is_paratext:false',
+    ]);
+  });
+
+  it('skips the paratext clause for explicit ID lookups', () => {
+    expect(
+      buildFilters({ ...emptyFilters, workIds: ['W1', 'W2'] }),
+    ).toEqual(['openalex_id:W1|W2']);
   });
 
   it('builds the year-range clause from from/to', () => {
     expect(buildFilters({ ...emptyFilters, from: '2019', to: '2021' })).toEqual(
-      ['publication_year:2019-2021'],
+      ['publication_year:2019-2021', 'is_paratext:false'],
     );
     expect(buildFilters({ ...emptyFilters, from: '2019' })).toEqual([
       'publication_year:2019-',
+      'is_paratext:false',
     ]);
     expect(buildFilters({ ...emptyFilters, to: '2021' })).toEqual([
       'publication_year:-2021',
+      'is_paratext:false',
     ]);
   });
 

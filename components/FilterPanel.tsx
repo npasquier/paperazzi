@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 
 import { countIssns, useActiveRanking } from '@/utils/activeRanking';
+import { NOISE_RULES } from '@/utils/noiseFilters';
+import { useSearchNoiseFilter } from '@/hooks/useSearchNoiseFilter';
 import {
   useFilterPresets,
   MAX_PRESETS,
@@ -81,6 +83,12 @@ export default function FilterPanel({
   // then re-renders once it resolves. Tiers/domains/presets are read
   // straight from the scheme so an imported scheme (medicine, JCR, etc.)
   // automatically replaces the CNRS pills.
+  // Global "hide non-articles" search filter (quiet by default — this small
+  // collapsible is its only control). Reused by SearchResults via the same
+  // hook + event sync.
+  const noise = useSearchNoiseFilter();
+  const noiseHiddenCount = NOISE_RULES.filter((r) => noise.hidden[r.id]).length;
+
   const activeRanking = useActiveRanking();
   const schemeTiers = activeRanking?.tiers ?? [];
   const schemeDomains = activeRanking?.domains ?? [];
@@ -1127,6 +1135,63 @@ export default function FilterPanel({
               {presets.length === 0 && (
                 <div className='text-[11px] text-app-soft'>
                   No saved searches yet
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Hide non-articles — a quiet, optional cleanup of the results.
+            On by default and intentionally tucked at the very bottom: most
+            users never need to touch it, but it's here if they want to let a
+            category (e.g. editorials) back in. Mirrors the curation tool's
+            noise rules. */}
+        <div className='px-4 py-2.5 border-t border-app-muted'>
+          <button
+            onClick={() => toggleSection('noise')}
+            className='w-full flex items-center justify-between gap-2 group'
+            aria-expanded={expandedSections.has('noise')}
+            title='Hide non-articles from results'
+          >
+            <span className='text-[11px] uppercase tracking-wider text-app-soft group-hover:text-app-muted transition'>
+              Hide non-articles
+              <span className='ml-1.5 normal-case tracking-normal text-app-soft'>
+                ({noise.enabled ? `${noiseHiddenCount} on` : 'off'})
+              </span>
+            </span>
+            {expandedSections.has('noise') ? (
+              <ChevronDown size={12} className='text-app-soft' />
+            ) : (
+              <ChevronRight size={12} className='text-app-soft' />
+            )}
+          </button>
+          {expandedSections.has('noise') && (
+            <div className='pt-2 space-y-2'>
+              <label className='flex items-center gap-2 text-xs text-app-muted'>
+                <input
+                  type='checkbox'
+                  checked={noise.enabled}
+                  onChange={(e) => noise.setEnabled(e.target.checked)}
+                />
+                Hide likely non-articles (front matter, referee lists, …)
+              </label>
+              {noise.enabled && (
+                <div className='space-y-1 pl-1'>
+                  {NOISE_RULES.map((rule) => (
+                    <label
+                      key={rule.id}
+                      className='flex items-start gap-2 text-[11px] text-app-soft'
+                      title={rule.hint}
+                    >
+                      <input
+                        type='checkbox'
+                        className='mt-0.5'
+                        checked={!!noise.hidden[rule.id]}
+                        onChange={(e) => noise.setRule(rule.id, e.target.checked)}
+                      />
+                      <span>{rule.label}</span>
+                    </label>
+                  ))}
                 </div>
               )}
             </div>
