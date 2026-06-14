@@ -35,9 +35,21 @@ function decodeEntities(text: string): string {
   });
 }
 
+// Encoded markup tags, e.g. `&lt;i&gt;`, `&lt;/sub&gt;`, `&lt;br/&gt;`.
+// OpenAlex/Crossref sometimes double-encode formatting tags, so after the
+// raw-tag pass they survive as entity text and would otherwise decode into
+// literal `<i>` / `</i>` in the UI. The `[a-z]` requirement right after
+// `&lt;` (optionally a slash) means a bare comparison like `a &lt; b &gt; c`
+// is NOT matched — only real tag names are stripped, the math is preserved.
+const ENCODED_TAG = /&lt;\/?[a-z][a-z0-9]*[^&]*?&gt;/gi;
+
 export default function cleanHtml(text: string | null | undefined): string {
   if (!text) return '';
-  return decodeEntities(text.replace(/<[^>]*>/g, '')) // strip tags, then decode entities
+  return decodeEntities(
+    text
+      .replace(/<[^>]*>/g, '') // strip raw HTML tags
+      .replace(ENCODED_TAG, ''), // strip double-encoded markup tags
+  )
     .replace(/\s+/g, ' ') // normalize whitespace (incl. decoded &nbsp;)
     .trim();
 }

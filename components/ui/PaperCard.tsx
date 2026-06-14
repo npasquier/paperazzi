@@ -6,8 +6,6 @@ import {
   Pin,
   BookOpen,
   Flag,
-  Copy,
-  Check,
   CheckCircle,
   Network as NetworkIcon,
 } from 'lucide-react';
@@ -17,7 +15,7 @@ import { reportedPaperKey } from '@/utils/storageKeys';
 import PaperInfoModal from '@/components/PaperInfoModal';
 import { emit } from '@/utils/eventBus';
 import { normalizeId } from '@/utils/normalizeId';
-import { copyWorkIdAndOpenCorrectionForm } from '@/utils/correctionForms';
+import { CorrectionPills } from '@/components/ui/CorrectionPills';
 
 interface PaperCardProps {
   paper: Paper;
@@ -47,7 +45,6 @@ export default function PaperCard({
   const [isAbstractExpanded, setIsAbstractExpanded] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isPaperInfoOpen, setIsPaperInfoOpen] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [hasReported, setHasReported] = useState(false);
 
   const workId = normalizeId(paper.id);
@@ -127,28 +124,6 @@ export default function PaperCard({
     if (onAuthorClick) {
       onAuthorClick(authorName);
     }
-  };
-
-  const copyWorkId = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(workId);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  // Copy the OpenAlex work id to the clipboard before opening the
-  // correction form so the user can paste it straight into the form's
-  // paper-id field — clicking "Submit correction" used to drop the
-  // user on a generic form with no clue which paper they meant.
-  const openOpenAlexForm = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void copyWorkIdAndOpenCorrectionForm(workId);
   };
 
   const handleReportedToggle = (e: React.MouseEvent) => {
@@ -585,46 +560,24 @@ export default function PaperCard({
       <div
         className={`
           overflow-hidden transition-all duration-300 ease-in-out
-          ${isInfoExpanded ? 'max-h-56 opacity-100' : 'max-h-0 opacity-0'}
+          ${isInfoExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
         `}
       >
         <div className='px-3 pb-3 pt-0 border-t border-app'>
           <div className='mt-3 space-y-2'>
             <p className='text-xs text-stone-600 leading-snug'>
               <span className='font-medium text-stone-800'>
-                Spot a problem with this paper?
+                Spot a problem?
               </span>{' '}
-              Wrong author, missing PDF, garbled title, off citation count?
-              OpenAlex is open and improves with corrections from researchers
-              like you.
-            </p>
-            {/* Compact inline Work ID with copy */}
-            <div className='flex items-center gap-2 text-xs'>
-              <span className='text-stone-500'>ID:</span>
-              <code className='px-1.5 py-0.5 surface-muted rounded text-stone-600 font-mono text-[11px]'>
+              Help fix it in OpenAlex.{' '}
+              <span className='text-stone-500'>Paper ID</span>{' '}
+              <code className='surface-muted rounded px-1 py-0.5 font-mono text-[10px] text-stone-500'>
                 {workId}
               </code>
-              <button
-                onClick={copyWorkId}
-                className='p-0.5 text-stone-400 hover:text-stone-600 transition'
-                title='Copy Work ID'
-              >
-                {isCopied ? (
-                  <Check size={12} className='text-success' />
-                ) : (
-                  <Copy size={12} />
-                )}
-              </button>
-            </div>
+            </p>
+            <CorrectionPills workId={workId} abstract={paper.abstract} />
             {/* Compact action row - with proper spacing from toggle buttons */}
             <div className='flex items-center gap-3 pt-1 pr-16'>
-              <button
-                onClick={openOpenAlexForm}
-                className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'
-              >
-                <ExternalLink size={11} />
-                Submit correction
-              </button>
               <button
                 onClick={handleReportedToggle}
                 className={`inline-flex items-center gap-1 text-xs transition ${

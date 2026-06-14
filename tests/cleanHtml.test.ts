@@ -12,6 +12,16 @@ describe('cleanHtml', () => {
     expect(cleanHtml('<i>Fancy</i> title')).toBe('Fancy title');
   });
 
+  it('strips double-encoded markup tags instead of decoding them', () => {
+    expect(cleanHtml('&lt;i&gt;Fancy&lt;/i&gt; title')).toBe('Fancy title');
+    expect(cleanHtml('CO&lt;sub&gt;2&lt;/sub&gt; uptake')).toBe('CO2 uptake');
+    expect(cleanHtml('line&lt;br/&gt;break')).toBe('linebreak');
+  });
+
+  it('preserves encoded comparison operators (not real tags)', () => {
+    expect(cleanHtml('p &lt; 0.05 and n &gt; 100')).toBe('p < 0.05 and n > 100');
+  });
+
   it('decodes &amp; so "R&amp;D" renders as "R&D"', () => {
     expect(cleanHtml('R&amp;D spending')).toBe('R&D spending');
   });

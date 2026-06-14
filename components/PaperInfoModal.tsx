@@ -10,7 +10,6 @@ import {
   Edit2,
   Check,
   CheckCircle,
-  Copy,
   Trash2,
   Plus,
   Tag,
@@ -35,6 +34,7 @@ import {
   copyWorkIdAndOpenCorrectionForm,
   toOpenAlexWorkId,
 } from '@/utils/correctionForms';
+import { CorrectionPills } from '@/components/ui/CorrectionPills';
 
 interface PaperInfoModalProps {
   paper: Paper;
@@ -63,12 +63,10 @@ export default function PaperInfoModal({
   // on the SearchResults paper card so the contribution affordance
   // looks and behaves the same wherever it shows up.
   //   - `isInfoExpanded` toggles the panel open/closed.
-  //   - `isCopied` flashes a check after the inline "Copy ID" press.
   //   - `hasReported` is the optimistic in-session toggle.
   //   - `isReportedStored` snapshots localStorage on mount so the
   //     panel remembers a previous report after a reload.
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [hasReported, setHasReported] = useState(false);
   const reportedKey = reportedPaperKey(workId);
   const [isReportedStored] = useState(() => {
@@ -83,18 +81,6 @@ export default function PaperInfoModal({
     e.preventDefault();
     e.stopPropagation();
     setIsInfoExpanded((open) => !open);
-  };
-
-  const copyWorkId = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(workId);
-      setIsCopied(true);
-      window.setTimeout(() => setIsCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
   };
 
   // Shared click handler for the inline "help add it"/"Help add one"
@@ -161,7 +147,6 @@ export default function PaperInfoModal({
       setIsEditingNote(false);
       setNoteDraft('');
       setIsInfoExpanded(false);
-      setIsCopied(false);
     }
   }, [isOpen]);
 
@@ -624,48 +609,26 @@ export default function PaperInfoModal({
             <div
               className={`overflow-hidden transition-all duration-300 ease-in-out ${
                 isInfoExpanded
-                  ? 'max-h-56 opacity-100 mt-2'
+                  ? 'max-h-96 opacity-100 mt-2'
                   : 'max-h-0 opacity-0'
               }`}
             >
               <div className='space-y-2'>
                 <p className='text-xs text-stone-600 leading-snug'>
                   <span className='font-medium text-stone-800'>
-                    Spot a problem with this paper?
+                    Spot a problem?
                   </span>{' '}
-                  Wrong author, missing PDF, garbled title, off citation
-                  count? OpenAlex is open and improves with corrections from
-                  researchers like you.
-                </p>
-                <div className='flex items-center gap-2 text-xs'>
-                  <span className='text-stone-500'>ID:</span>
-                  <code className='px-1.5 py-0.5 surface-muted rounded text-stone-600 font-mono text-[11px]'>
+                  Help fix it in OpenAlex.{' '}
+                  <span className='text-stone-500'>Paper ID</span>{' '}
+                  <code className='surface-muted rounded px-1 py-0.5 font-mono text-[10px] text-stone-500'>
                     {workId}
                   </code>
-                  <button
-                    type='button'
-                    onClick={copyWorkId}
-                    className='p-0.5 text-stone-400 hover:text-stone-600 transition'
-                    title='Copy Work ID'
-                  >
-                    {isCopied ? (
-                      <Check size={12} className='text-success' />
-                    ) : (
-                      <Copy size={12} />
-                    )}
-                  </button>
-                </div>
+                </p>
+                <CorrectionPills
+                  workId={workId}
+                  abstract={livePaper.abstract}
+                />
                 <div className='flex items-center gap-3 pt-1'>
-                  <a
-                    href={PAPER_CORRECTION_FORM_URL}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    onClick={handleReportClick}
-                    className='inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 hover:underline transition'
-                  >
-                    <ExternalLink size={11} />
-                    Submit correction
-                  </a>
                   <button
                     type='button'
                     onClick={handleReportedToggle}

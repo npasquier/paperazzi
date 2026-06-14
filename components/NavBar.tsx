@@ -44,6 +44,22 @@ function NavBarContent() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Abstract curation dashboard — admin-only affordance, no visible trigger.
+  // Open it with Cmd+Shift+G (Mac) / Ctrl+Shift+G. (G avoids the browser
+  // devtools combos I/J/K/C/M and the reopen-tab combo T.)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'g' || !e.shiftKey) return;
+      if (!e.metaKey && !e.ctrlKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      e.preventDefault();
+      router.push('/curate');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [router]);
+
   // Seed `query` from the URL when on the search page. Owned by useState
   // and just seeded from the URL on entry / back-forward.
   useEffect(() => {
