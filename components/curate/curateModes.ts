@@ -22,6 +22,17 @@ export type CurateMode = 'abstract' | 'duplicate';
 //   error   — request itself failed
 export type RowStatus = 'idle' | 'working' | 'ok' | 'fail' | 'error';
 
+/** A same-title work found elsewhere in OpenAlex (often a working-paper
+ *  version of a published article). */
+export interface DuplicateMatch {
+  workId: string;
+  /** Hosting source's display name, e.g. "NBER Working Papers". */
+  source: string;
+  /** OpenAlex work type, e.g. "preprint", "article". */
+  type: string | null;
+  year: number | null;
+}
+
 export interface ScanRow {
   workId: string;
   doi: string | null;
@@ -34,14 +45,13 @@ export interface ScanRow {
   /** Recovered abstract text. */
   result?: string;
   source?: string;
-  /** Duplicate grouping (set only in 'duplicate' mode). */
-  groupKey?: string;
-  groupSize?: number;
+  /** Same-title works found elsewhere (set only in 'duplicate' mode). */
+  duplicates?: DuplicateMatch[];
 }
 
 export type Candidate = Pick<
   ScanRow,
-  'workId' | 'doi' | 'title' | 'year' | 'authorCount' | 'groupKey' | 'groupSize'
+  'workId' | 'doi' | 'title' | 'year' | 'authorCount' | 'duplicates'
 >;
 
 interface RawListWork {
@@ -188,56 +198,87 @@ async function scanMissingAbstract(opts: ScanOpts): Promise<Candidate[]> {
   return out;
 }
 
-// ── Duplicate: works sharing a normalised title + year ──────────────────────
+interface DupRawWork {
+  id: string;
+  title: string | null;
+  publication_year: number | null;
+  type?: string | null;
+  primary_location?: {
+    source?: { display_name?: string | null } | null;
+  } | null;
+}
+
+/**
+ * Search all of OpenAlex for works with the SAME title as `title` (other than
+ * `selfId`). This is where working-paper versions of a published article live
+ * (NBER, SSRN, RePEc) — a different source, so they never show up in a journal-
+ * scoped scan. Exact normalised-title match keeps precision high.
+ */
+async function findDuplicates(
+  title: string,
+  selfId: string,
+): Promise<DuplicateMatch[]> {
+  const norm = normTitle(title);
+  // Skip very short / generic titles ("Comment", "Introduction") — a title
+  // search on those returns a flood of unrelated works.
+  if (norm.length < 8) return [];
+
+  // The search term must not contain characters OpenAlex uses to delimit
+  // filters — a comma, "|" or ":" inside the title yields an HTTP 400. The
+  // normalised title is already plain lowercase words separated by spaces, so
+  // it's a safe (and equivalent) full-text query term.
+  const url = withMailto(
+    `https://api.openalex.org/works?filter=${encodeURIComponent(
+      `title.search:${norm}`,
+    )}&select=id,title,publication_year,type,primary_location&per-page=50`,
+  );
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`OpenAlex HTTP ${res.status}`);
+  const page = (await res.json()) as { results: DupRawWork[] };
+
+  const matches: DuplicateMatch[] = [];
+  for (const w of page.results) {
+    const id = normalizeId(w.id);
+    if (id === selfId) continue;
+    if (normTitle(cleanHtml(w.title)) !== norm) continue; // exact title only
+    matches.push({
+      workId: id,
+      source: w.primary_location?.source?.display_name ?? '—',
+      type: w.type ?? null,
+      year: w.publication_year ?? null,
+    });
+  }
+  return matches;
+}
+
+// ── Duplicate: walk the journal's articles and, for each, search all of
+//    OpenAlex for same-title records. Returns only the articles that HAVE a
+//    duplicate, with the matches attached — no second step needed. `cap` is the
+//    number of articles examined (one title search each), so it bounds the work.
 async function scanDuplicates(opts: ScanOpts): Promise<Candidate[]> {
   const { issn, fromYear, toYear, cap, shouldStop, onProgress } = opts;
   const filter = baseFilter(issn, fromYear, toYear);
+  const out: Candidate[] = [];
+  let examined = 0;
 
-  const seen: Array<{
-    workId: string;
-    doi: string | null;
-    title: string;
-    year: number | null;
-    key: string;
-  }> = [];
-  for await (const w of pageWorks(filter, LIST_SELECT, shouldStop, onProgress)) {
+  for await (const w of pageWorks(filter, LIST_SELECT, shouldStop)) {
+    if (shouldStop()) break;
     const title = cleanHtml(w.title);
     if (!title) continue;
-    const key = `${normTitle(title)}__${w.publication_year ?? '?'}`;
-    seen.push({
-      workId: normalizeId(w.id),
-      doi: w.doi ? cleanDoi(w.doi) : null,
-      title,
-      year: w.publication_year,
-      key,
-    });
-  }
-
-  // Keep only keys that occur 2+ times, preserving each group together.
-  const counts = new Map<string, number>();
-  for (const r of seen) counts.set(r.key, (counts.get(r.key) ?? 0) + 1);
-
-  const groups = new Map<string, Candidate[]>();
-  for (const r of seen) {
-    const size = counts.get(r.key) ?? 0;
-    if (size < 2) continue;
-    const arr = groups.get(r.key) ?? [];
-    arr.push({
-      workId: r.workId,
-      doi: r.doi,
-      title: r.title,
-      year: r.year,
-      groupKey: r.key,
-      groupSize: size,
-    });
-    groups.set(r.key, arr);
-  }
-
-  // Flatten, capping by number of rows but never splitting a duplicate set.
-  const out: Candidate[] = [];
-  for (const arr of groups.values()) {
-    if (out.length + arr.length > cap && out.length > 0) break;
-    out.push(...arr);
+    examined++;
+    onProgress?.(examined);
+    const selfId = normalizeId(w.id);
+    const matches = await findDuplicates(title, selfId);
+    if (matches.length > 0) {
+      out.push({
+        workId: selfId,
+        doi: w.doi ? cleanDoi(w.doi) : null,
+        title,
+        year: w.publication_year,
+        duplicates: matches,
+      });
+    }
+    if (examined >= cap) break;
   }
   return out;
 }
@@ -279,8 +320,8 @@ export const MODES: ModeConfig[] = [
     tab: 'Duplicates',
     heading: 'Duplicate records',
     blurb:
-      'Find works in the journal that share the same title and year — likely duplicate OpenAlex records. Review each group, then open the merge-correction form for the extra copies.',
-    resultHeader: 'Duplicate group',
+      'Scans the journal’s articles and surfaces only the ones that have a same-title record elsewhere in OpenAlex — most often a published article and its working-paper version(s) (NBER, SSRN, RePEc). Check the matches, then submit a merge correction; the duplicate IDs are copied for the form’s second step. “Max papers” is how many articles to examine.',
+    resultHeader: 'Duplicates found',
     correctionTypeId: 'merge',
     scan: scanDuplicates,
   },

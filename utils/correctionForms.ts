@@ -56,6 +56,8 @@ export const CORRECTION_FORM_ENTRIES: {
   editType: string | null;
   workId: string | null;
   abstract: string | null;
+  mergeMainWorkId: string | null;
+  mergeDuplicateIds: string | null;
 } = {
   // Email is the form's built-in "collect email" field, not a custom
   // question, so it has no `entry.<id>`. It is instead prefilled with the
@@ -65,6 +67,12 @@ export const CORRECTION_FORM_ENTRIES: {
   editType: '324017667',
   workId: '699100053',
   abstract: '1525251538',
+  // Merge page (page 2, shown after picking "Merge the work with a duplicate
+  // record"). Read out of the form's FB_PUBLIC_LOAD_DATA_:
+  //   • mergeMainWorkId  — "the record that appears to be the main record"
+  //   • mergeDuplicateIds — "Which Work ID(s) are duplicates of the main record?"
+  mergeMainWorkId: '1400229365',
+  mergeDuplicateIds: '1977990609',
 };
 
 /**
@@ -131,6 +139,8 @@ export function buildPrefilledCorrectionUrl(opts: {
   abstract?: string;
   email?: string;
   editType?: string;
+  mergeMainWorkId?: string;
+  mergeDuplicateIds?: string;
 }): string {
   const e = CORRECTION_FORM_ENTRIES;
   const pairs: Array<[string | null, string | undefined]> = [
@@ -138,6 +148,8 @@ export function buildPrefilledCorrectionUrl(opts: {
     [e.editType, opts.editType],
     [e.workId, normalizeId(opts.workId)],
     [e.abstract, opts.abstract],
+    [e.mergeMainWorkId, opts.mergeMainWorkId],
+    [e.mergeDuplicateIds, opts.mergeDuplicateIds],
   ];
   const params = pairs
     .filter(([id, val]) => id && val)
@@ -290,6 +302,69 @@ export function openCorrectionForm(
         workId,
         abstract,
         editType: type?.editTypeOption,
+      }),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }
+
+  return copyPromise;
+}
+
+/**
+ * The duplicate Work IDs, normalised and comma-separated with no spaces —
+ * exactly the format the merge form's "duplicate record(s)" field shows as an
+ * example ("W2884670852,W2317271409").
+ */
+export function buildDuplicateIdList(duplicateIds: string[]): string {
+  return duplicateIds.map(normalizeId).join(',');
+}
+
+/**
+ * Merge flow for the curation dashboard's Duplicates mode.
+ *
+ * The merge form is multi-step: page 1 takes the main Work ID + edit type
+ * ("Merge the work with a duplicate record"); page 2 (revealed after that pick)
+ * asks for the MAIN record's Work ID and the DUPLICATE Work IDs.
+ *
+ * We prefill page 1 (which works) and ALSO pass the page-2 entry params. Note:
+ * a plain prefilled link does NOT populate page 2 — Google Forms drops URL
+ * prefill for later sections once you click "Next" (verified against the live
+ * form). Reliably prefilling page 2 needs the `pageHistory` param to land
+ * directly on the merge section; that section index still needs verifying, so
+ * for now the duplicate IDs are COPIED TO THE CLIPBOARD to paste into page 2.
+ *
+ * Clipboard write fires before `window.open` (no `await`) so the popup keeps the
+ * click's user activation. Falls back to a bare merge link when no duplicate IDs
+ * are given.
+ */
+export function openMergeCorrectionForm(
+  workId: string,
+  duplicateIds: string[],
+): Promise<boolean> {
+  if (duplicateIds.length === 0) return openCorrectionForm(workId, 'merge');
+
+  const idList = buildDuplicateIdList(duplicateIds);
+
+  const canUseClipboard =
+    typeof navigator !== 'undefined' && !!navigator.clipboard?.writeText;
+  const copyPromise: Promise<boolean> = canUseClipboard
+    ? navigator.clipboard
+        .writeText(idList)
+        .then(() => true)
+        .catch((err) => {
+          console.error('Failed to copy duplicate IDs:', err);
+          return false;
+        })
+    : Promise.resolve(false);
+
+  if (typeof window !== 'undefined') {
+    window.open(
+      buildPrefilledCorrectionUrl({
+        workId,
+        editType: getCorrectionType('merge')?.editTypeOption,
+        mergeMainWorkId: normalizeId(workId),
+        mergeDuplicateIds: idList,
       }),
       '_blank',
       'noopener,noreferrer',

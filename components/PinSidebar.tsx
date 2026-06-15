@@ -19,6 +19,7 @@ import {
   GripVertical,
   Plus,
   Download,
+  Upload,
   AlertTriangle,
 } from 'lucide-react';
 import { usePins } from '@/contexts/PinContext';
@@ -59,6 +60,14 @@ function getGroupColor(groupId: string): string {
   }
   return GROUP_COLOR_PALETTE[Math.abs(hash) % GROUP_COLOR_PALETTE.length];
 }
+
+// Tooltip shown when the action-row buttons (Clear all / New group / Export)
+// are disabled because the collection has no pinned papers. Native `title`
+// tooltips don't fire on disabled buttons, so we render our own hover bubble.
+const disabledHintText = 'Please pin a paper in order to activate this feature';
+const disabledHintClass =
+  'pointer-events-none absolute top-full left-0 mt-1 hidden group-hover:block ' +
+  'whitespace-nowrap rounded bg-stone-800 px-2 py-1 text-[10px] text-white shadow-lg z-50';
 
 interface PinSidebarProps {
   isOpen: boolean;
@@ -117,6 +126,12 @@ export default function PinSidebar({
   // between exporting just the active collection (for sharing) or the
   // whole library (for personal backup).
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  // Lightweight info modals explaining the drag-and-drop import flow.
+  // `showImportInfo` opens from the Import button; `showExportInfo`
+  // pops up right after a successful export to teach the user how to
+  // get that .json back into Paperazzi later.
+  const [showImportInfo, setShowImportInfo] = useState(false);
+  const [showExportInfo, setShowExportInfo] = useState(false);
   // Confirmation modal for collection deletion. Replaces the native
   // window.confirm() — same semantics (cancel / confirm), but rendered
   // in-app so it matches the rest of the UI and can show richer
@@ -248,6 +263,7 @@ export default function PinSidebar({
 
     setExportMenuOpen(false);
     setMoveFeedback(`Exported "${exported.name}"`);
+    setShowExportInfo(true);
   };
 
   const handleExportAllCollections = () => {
@@ -270,6 +286,7 @@ export default function PinSidebar({
         ? 'Exported your library (1 collection)'
         : `Exported your library (${exported.collectionCount} collections)`,
     );
+    setShowExportInfo(true);
   };
 
   // Resize, selection, and drag-drop behavior live in dedicated hooks
@@ -1023,31 +1040,40 @@ export default function PinSidebar({
               destinations: just this collection (shareable) or the
               whole library (personal backup). */}
           <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
-            {pinnedPapers.length > 0 && (
-              <>
-                <button
-                  onClick={clearPins}
-                  className='text-stone-400 hover:text-stone-600 transition'
-                >
-                  Clear all
-                </button>
-                <button
-                  onClick={() => setShowNewGroupInput(true)}
-                  className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition'
-                  title='New group'
-                >
-                  <FolderPlus size={12} />
-                  New group
-                </button>
-              </>
-            )}
-            <div className='relative'>
+            <span className='relative group inline-flex'>
+              <button
+                onClick={clearPins}
+                disabled={pinnedPapers.length === 0}
+                className='text-stone-400 hover:text-stone-600 transition disabled:text-stone-300 disabled:cursor-not-allowed disabled:pointer-events-none'
+              >
+                Clear all
+              </button>
+              {pinnedPapers.length === 0 && (
+                <span className={disabledHintClass}>{disabledHintText}</span>
+              )}
+            </span>
+            <span className='relative group inline-flex'>
+              <button
+                onClick={() => setShowNewGroupInput(true)}
+                disabled={pinnedPapers.length === 0}
+                className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition disabled:text-stone-300 disabled:cursor-not-allowed disabled:pointer-events-none'
+              >
+                <FolderPlus size={12} />
+                New group
+              </button>
+              {pinnedPapers.length === 0 && (
+                <span className={disabledHintClass}>{disabledHintText}</span>
+              )}
+            </span>
+            <div className='relative group'>
               <button
                 ref={exportMenuButtonRef}
                 onClick={() => setExportMenuOpen((v) => !v)}
-                disabled={collections.length === 0}
-                className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition disabled:text-stone-300 disabled:cursor-not-allowed'
-                title='Export collection or full library'
+                disabled={pinnedPapers.length === 0}
+                className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition disabled:text-stone-300 disabled:cursor-not-allowed disabled:pointer-events-none'
+                title={
+                  pinnedPapers.length === 0 ? undefined : 'Export collection or full library'
+                }
                 aria-haspopup='menu'
                 aria-expanded={exportMenuOpen}
               >
@@ -1096,7 +1122,18 @@ export default function PinSidebar({
                   </button>
                 </div>
               )}
+              {pinnedPapers.length === 0 && (
+                <span className={disabledHintClass}>{disabledHintText}</span>
+              )}
             </div>
+            <button
+              onClick={() => setShowImportInfo(true)}
+              className='inline-flex items-center gap-1 text-stone-500 hover:text-stone-700 transition'
+              title='How to import an exported collection'
+            >
+              <Upload size={12} />
+              Import
+            </button>
           </div>
 
           {selectionMode && pinnedPapers.length >= 2 && (
@@ -1320,6 +1357,103 @@ export default function PinSidebar({
                 className='px-3 py-1.5 text-xs button-danger rounded transition'
               >
                 Delete collection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import explainer. There's no in-app file picker — importing is
+          purely drag-and-drop (handled globally by CollectionImportDropzone),
+          so this modal just teaches the gesture. */}
+      {showImportInfo && (
+        <div
+          className='fixed inset-0 overlay-soft flex items-center justify-center z-[60]'
+          onClick={() => setShowImportInfo(false)}
+          role='dialog'
+          aria-modal='true'
+          aria-labelledby='import-info-title'
+        >
+          <div
+            className='surface-card rounded-lg border border-app p-5 max-w-sm w-full mx-4 shadow-lg'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex items-start gap-3'>
+              <div className='flex-shrink-0 mt-0.5 text-[var(--accent-foreground)]'>
+                <Upload size={18} />
+              </div>
+              <div className='min-w-0 flex-1'>
+                <h3
+                  id='import-info-title'
+                  className='text-sm font-semibold text-stone-900'
+                >
+                  Import a collection
+                </h3>
+                <p className='mt-1.5 text-xs text-stone-600 leading-relaxed'>
+                  Just drag and drop your exported{' '}
+                  <span className='font-medium text-stone-800'>.json</span> file
+                  anywhere onto this page and Paperazzi will load the collection
+                  for you.
+                </p>
+              </div>
+            </div>
+
+            <div className='mt-4 flex justify-end'>
+              <button
+                onClick={() => setShowImportInfo(false)}
+                autoFocus
+                className='px-3 py-1.5 text-xs button-primary rounded transition'
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export confirmation explainer — fires once right after a
+          successful export so the user knows the .json they just
+          downloaded can be brought back via drag-and-drop. */}
+      {showExportInfo && (
+        <div
+          className='fixed inset-0 overlay-soft flex items-center justify-center z-[60]'
+          onClick={() => setShowExportInfo(false)}
+          role='dialog'
+          aria-modal='true'
+          aria-labelledby='export-info-title'
+        >
+          <div
+            className='surface-card rounded-lg border border-app p-5 max-w-sm w-full mx-4 shadow-lg'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex items-start gap-3'>
+              <div className='flex-shrink-0 mt-0.5 text-[var(--accent-foreground)]'>
+                <Download size={18} />
+              </div>
+              <div className='min-w-0 flex-1'>
+                <h3
+                  id='export-info-title'
+                  className='text-sm font-semibold text-stone-900'
+                >
+                  Export saved
+                </h3>
+                <p className='mt-1.5 text-xs text-stone-600 leading-relaxed'>
+                  Your{' '}
+                  <span className='font-medium text-stone-800'>.json</span> file
+                  has been downloaded. To open it again later, just drag and
+                  drop it anywhere onto this page — Paperazzi will restore the
+                  collection automatically.
+                </p>
+              </div>
+            </div>
+
+            <div className='mt-4 flex justify-end'>
+              <button
+                onClick={() => setShowExportInfo(false)}
+                autoFocus
+                className='px-3 py-1.5 text-xs button-primary rounded transition'
+              >
+                Got it
               </button>
             </div>
           </div>

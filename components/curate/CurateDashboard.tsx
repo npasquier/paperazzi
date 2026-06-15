@@ -36,7 +36,10 @@ import { useActiveRanking } from '@/utils/activeRanking';
 import { normalizeId } from '@/utils/normalizeId';
 import { reportedPaperKey } from '@/utils/storageKeys';
 import { emit } from '@/utils/eventBus';
-import { openCorrectionForm } from '@/utils/correctionForms';
+import {
+  openCorrectionForm,
+  openMergeCorrectionForm,
+} from '@/utils/correctionForms';
 import {
   MODES,
   getMode,
@@ -247,7 +250,16 @@ export default function CurateDashboard() {
         onProgress: (n) => setScanned(n),
       });
       setRows(() =>
-        candidates.map((c) => ({ ...c, selected: false, status: 'idle' })),
+        candidates.map((c) => ({
+          ...c,
+          selected: false,
+          // Duplicate candidates already carry their matches from the scan, so
+          // they land as "ok" (found); other modes start idle for phase 2.
+          status:
+            mode === 'duplicate' && (c.duplicates?.length ?? 0) > 0
+              ? 'ok'
+              : 'idle',
+        })),
       );
     } catch (e) {
       setError((e as Error).message || 'Scan failed.');
@@ -309,6 +321,13 @@ export default function CurateDashboard() {
   }
 
   function submitCorrection(r: ScanRow) {
+    if (cfg.id === 'duplicate') {
+      void openMergeCorrectionForm(
+        r.workId,
+        (r.duplicates ?? []).map((d) => d.workId),
+      );
+      return;
+    }
     void openCorrectionForm(r.workId, cfg.correctionTypeId, {
       abstract: cfg.id === 'abstract' ? r.result : undefined,
     });
@@ -415,9 +434,7 @@ export default function CurateDashboard() {
           />
         </label>
         <label className='text-sm'>
-          <span className='mb-1 block font-medium'>
-            {mode === 'duplicate' ? 'Max in groups' : 'Max papers'}
-          </span>
+          <span className='mb-1 block font-medium'>Max papers</span>
           <input
             type='number'
             value={maxCandidates}
@@ -594,7 +611,9 @@ export default function CurateDashboard() {
               ? `${cfg.phase2?.activeLabel ?? 'Working'}… ${progress.done}/${progress.total}`
               : mode === 'abstract'
                 ? `${visibleRows.length} shown · ${okCount} recovered · ${noiseCount} hidden`
-                : `${visibleRows.length} shown`}
+                : mode === 'duplicate'
+                  ? `${visibleRows.length} shown · ${okCount} with duplicates`
+                  : `${visibleRows.length} shown`}
           </span>
         </div>
       )}
@@ -720,10 +739,17 @@ export default function CurateDashboard() {
                         )}
                         <button
                           onClick={() => submitCorrection(r)}
-                          title='Open the correction form prefilled for this fix'
+                          title={
+                            cfg.id === 'duplicate'
+                              ? 'Opens the merge form (page 1 prefilled). The duplicate IDs are copied to your clipboard — paste them into the form’s second step.'
+                              : 'Open the correction form prefilled for this fix'
+                          }
                           className='inline-flex items-center gap-1 rounded border border-[var(--border,#ccc)] px-2 py-1 text-xs hover:bg-[var(--muted,#f3f3f3)]'
                         >
-                          <ExternalLink size={12} /> Submit correction
+                          <ExternalLink size={12} />{' '}
+                          {cfg.id === 'duplicate'
+                            ? 'Merge — copy IDs & open form'
+                            : 'Submit correction'}
                         </button>
                       </div>
                     </td>
@@ -754,15 +780,44 @@ export default function CurateDashboard() {
 // ── Mode-specific result cell ───────────────────────────────────────────────
 function ResultCell({ row, mode }: { row: ScanRow; mode: CurateMode }) {
   if (mode === 'duplicate') {
+    if (row.status === 'idle') {
+      return (
+        <span className='text-[var(--muted-foreground,#999)]'>not checked</span>
+      );
+    }
+    if (row.status === 'working') {
+      return <Loader2 size={14} className='animate-spin' />;
+    }
+    if (row.status === 'fail') {
+      return (
+        <span className='text-[var(--muted-foreground,#999)]'>none found</span>
+      );
+    }
+    if (row.status === 'error') {
+      return <span className='text-[var(--destructive,#b91c1c)]'>error</span>;
+    }
+    const dups = row.duplicates ?? [];
     return (
-      <span className='inline-flex items-center gap-1.5'>
+      <div className='space-y-0.5'>
         <span className='rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800'>
-          {row.groupSize ?? 2} copies
+          {dups.length} duplicate{dups.length === 1 ? '' : 's'} found
         </span>
-        <span className='text-[10px] text-[var(--muted-foreground,#999)]'>
-          same title + year
-        </span>
-      </span>
+        {dups.slice(0, 4).map((d) => (
+          <div
+            key={d.workId}
+            className='text-[11px] text-[var(--muted-foreground,#777)]'
+          >
+            <code className='font-mono'>{d.workId}</code> · {d.source}
+            {d.type ? ` · ${d.type}` : ''}
+            {d.year ? ` · ${d.year}` : ''}
+          </div>
+        ))}
+        {dups.length > 4 && (
+          <div className='text-[10px] text-[var(--muted-foreground,#999)]'>
+            +{dups.length - 4} more
+          </div>
+        )}
+      </div>
     );
   }
 
