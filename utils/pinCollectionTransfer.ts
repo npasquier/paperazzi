@@ -337,6 +337,156 @@ export function buildFullBackupTransferFilename(): string {
   return `paperazzi-backup-${stamp}${PIN_FULL_BACKUP_TRANSFER_SUFFIX}`;
 }
 
+// ---------------------------------------------------------------------------
+// CSV export
+// ---------------------------------------------------------------------------
+// A flat, spreadsheet-friendly export: one row per paper. Unlike the JSON
+// formats above this is a ONE-WAY export — the relational bits (groups,
+// multi-collection libraries) are flattened into columns, so a CSV can't be
+// dropped back into Paperazzi to reconstruct a collection. Its job is
+// interop with Excel / Sheets / reference managers, not round-tripping.
+export const PIN_CSV_MIME = 'text/csv;charset=utf-8';
+
+// UTF-8 byte-order mark. Without it, Excel opens the file in the local
+// ANSI codepage and mangles accented author names (é, ‐, etc.). Prepending
+// the BOM makes Excel detect UTF-8.
+const CSV_BOM = '\uFEFF';
+
+// Excel honours a leading `sep=` directive to set the field separator,
+// overriding the user's locale (French/European Excel otherwise expects
+// `;` and would dump every row into a single column). Google Sheets shows
+// this as a throwaway first row the user can delete.
+const CSV_SEP_HINT = 'sep=,';
+
+// Assemble the final file: BOM, then the sep hint, then the table. Kept in
+// one place so the single-collection and library builders stay identical.
+function withCsvPreamble(table: string): string {
+  return `${CSV_BOM}${CSV_SEP_HINT}\r\n${table}`;
+}
+
+// Columns, in order. `collection` and `group` are denormalised onto every
+// row so a multi-collection library still makes sense as a single flat table.
+const CSV_COLUMNS = [
+  'collection',
+  'group',
+  'id',
+  'title',
+  'authors',
+  'publication_year',
+  'journal_name',
+  'doi',
+  'cited_by_count',
+  'referenced_works_count',
+  'abstract',
+  'issns',
+  'keywords',
+  'comment',
+  'pdf_url',
+] as const;
+
+// RFC-4180 cell escaping: wrap in double quotes when the value contains a
+// comma, quote, or line break, and double any embedded quotes. Plain values
+// (numbers, simple text) are left bare so spreadsheets read them cleanly.
+function csvCell(value: string): string {
+  if (/[",\r\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function joinList(values: string[] | undefined): string {
+  return Array.isArray(values) ? values.join('; ') : '';
+}
+
+function paperRow(
+  collectionName: string,
+  groupName: string,
+  paper: Paper,
+): string {
+  const cells: Record<(typeof CSV_COLUMNS)[number], string> = {
+    collection: collectionName,
+    group: groupName,
+    id: coerceString(paper.id),
+    title: cleanHtml(coerceString(paper.title)),
+    authors: joinList(paper.authors),
+    publication_year: paper.publication_year ? String(paper.publication_year) : '',
+    journal_name: coerceString(paper.journal_name),
+    doi: coerceString(paper.doi),
+    cited_by_count:
+      typeof paper.cited_by_count === 'number' ? String(paper.cited_by_count) : '',
+    referenced_works_count:
+      typeof paper.referenced_works_count === 'number'
+        ? String(paper.referenced_works_count)
+        : '',
+    abstract: cleanHtml(coerceString(paper.abstract)),
+    issns: joinList(paper.issns),
+    keywords: joinList(paper.keywords),
+    comment: coerceString(paper.comment),
+    pdf_url: coerceString(paper.pdf_url),
+  };
+  return CSV_COLUMNS.map((col) => csvCell(cells[col])).join(',');
+}
+
+function collectionRows(
+  collectionName: string,
+  papers: Paper[],
+  groups: PinGroup[],
+): string[] {
+  // Map each paper id to the (first) group that contains it, so the flat
+  // table can show group membership in a single column.
+  const groupByPaperId = new Map<string, string>();
+  for (const group of groups) {
+    for (const id of group.paperIds) {
+      const normalized = normalizeId(id);
+      if (!groupByPaperId.has(normalized)) {
+        groupByPaperId.set(normalized, group.name);
+      }
+    }
+  }
+  return papers.map((paper) =>
+    paperRow(
+      collectionName,
+      groupByPaperId.get(normalizeId(paper.id)) ?? '',
+      paper,
+    ),
+  );
+}
+
+export function buildCollectionCsv(
+  name: string,
+  papers: Paper[],
+  groups: PinGroup[],
+): string {
+  const header = CSV_COLUMNS.join(',');
+  const rows = collectionRows(name.trim() || 'Library', papers, groups);
+  return withCsvPreamble([header, ...rows].join('\r\n'));
+}
+
+export function buildLibraryCsv(
+  collections: Array<{ name: string; papers: Paper[]; groups: PinGroup[] }>,
+): string {
+  const header = CSV_COLUMNS.join(',');
+  const rows = collections.flatMap(({ name, papers, groups }) =>
+    collectionRows(name.trim() || 'Library', papers, groups),
+  );
+  return withCsvPreamble([header, ...rows].join('\r\n'));
+}
+
+export function buildCollectionCsvFilename(name: string): string {
+  const slug =
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'collection';
+  return `${slug}.csv`;
+}
+
+export function buildLibraryCsvFilename(): string {
+  const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return `paperazzi-library-${stamp}.csv`;
+}
+
 /**
  * Validate one raw collection record (the contents of `collection`
  * in a single-collection file, or each entry in a library file's

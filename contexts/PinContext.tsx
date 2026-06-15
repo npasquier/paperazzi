@@ -93,6 +93,8 @@ interface PinContextType {
   collectionsAtCap: boolean;
   exportActiveCollection: () => ExportCollectionResult | null;
   exportAllCollections: () => ExportLibraryResult | null;
+  exportActiveCollectionCsv: () => ExportCollectionResult | null;
+  exportAllCollectionsCsv: () => ExportLibraryResult | null;
   importCollection: (collection: ImportedPinCollection) => ImportCollectionResult;
   importLibrary: (collections: ImportedPinCollection[]) => ImportLibraryResult;
 }
@@ -142,6 +144,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
     collectionsAtCap,
     exportActiveCollection,
     exportAllCollections,
+    exportActiveCollectionCsv,
+    exportAllCollectionsCsv,
     importCollection,
     importLibrary,
   } = useCollectionManager({
@@ -536,6 +540,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
       collectionsAtCap,
       exportActiveCollection,
       exportAllCollections,
+      exportActiveCollectionCsv,
+      exportAllCollectionsCsv,
       importCollection,
       importLibrary,
     }),
@@ -568,6 +574,8 @@ export function PinProvider({ children }: { children: React.ReactNode }) {
       collectionsAtCap,
       exportActiveCollection,
       exportAllCollections,
+      exportActiveCollectionCsv,
+      exportAllCollectionsCsv,
       importCollection,
       importLibrary,
     ],

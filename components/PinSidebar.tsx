@@ -31,6 +31,8 @@ import { on } from '@/utils/eventBus';
 import {
   PIN_COLLECTION_TRANSFER_MIME,
   PIN_LIBRARY_TRANSFER_MIME,
+  PIN_CSV_MIME,
+  readImportFile,
 } from '@/utils/pinCollectionTransfer';
 import { triggerDownload } from '@/utils/download';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
@@ -104,6 +106,9 @@ export default function PinSidebar({
     collectionsAtCap,
     exportActiveCollection,
     exportAllCollections,
+    exportActiveCollectionCsv,
+    importCollection,
+    importLibrary,
   } = usePins();
 
   // Collection switcher (small popover at top of header). Three sub-states:
@@ -122,6 +127,9 @@ export default function PinSidebar({
   const [moveFeedback, setMoveFeedback] = useState<string | null>(null);
   const newCollectionInputRef = useRef<HTMLInputElement>(null);
   const renameCollectionInputRef = useRef<HTMLInputElement>(null);
+  // Hidden file input backing the Import button — clicking Import opens
+  // the OS file picker so users don't have to know about drag-and-drop.
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   // Tiny popover anchored to the export button — lets the user pick
   // between exporting just the active collection (for sharing) or the
   // whole library (for personal backup).
@@ -132,6 +140,10 @@ export default function PinSidebar({
   // get that .json back into Paperazzi later.
   const [showImportInfo, setShowImportInfo] = useState(false);
   const [showExportInfo, setShowExportInfo] = useState(false);
+  // Confirmation modal gating the CSV export. CSV is a one-way,
+  // spreadsheet-only export, so we warn the user it can't be re-imported
+  // before downloading.
+  const [showCsvConfirm, setShowCsvConfirm] = useState(false);
   // Confirmation modal for collection deletion. Replaces the native
   // window.confirm() — same semantics (cancel / confirm), but rendered
   // in-app so it matches the rest of the UI and can show richer
@@ -287,6 +299,90 @@ export default function PinSidebar({
         : `Exported your library (${exported.collectionCount} collections)`,
     );
     setShowExportInfo(true);
+  };
+
+  // File-picker import. Mirrors the global drag-and-drop dropzone, but
+  // for the click-to-choose path. Handles the two shareable formats
+  // (collection + library) directly; full backups stay behind the
+  // drag-and-drop flow because restoring one wipes existing data and
+  // needs the dedicated confirmation dialog.
+  const handleImportFileSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    // Reset so selecting the same file again still fires onChange.
+    e.target.value = '';
+    if (!file) return;
+
+    try {
+      const parsed = await readImportFile(file);
+      if (!parsed.ok) {
+        setMoveFeedback(parsed.error);
+        return;
+      }
+
+      if (parsed.kind === 'full-backup') {
+        setMoveFeedback(
+          "That's a full backup — drag it onto the page to restore it.",
+        );
+        return;
+      }
+
+      if (parsed.kind === 'library') {
+        const result = importLibrary(parsed.data);
+        if (result.status === 'empty') {
+          setMoveFeedback('That library export is empty.');
+          return;
+        }
+        if (result.status === 'cap-exceeded') {
+          setMoveFeedback(
+            result.available === 0
+              ? `That library has ${result.required} collections, but you have no slots left.`
+              : `That library has ${result.required} collections, but only ${result.available} slot${
+                  result.available === 1 ? '' : 's'
+                } remain.`,
+          );
+          return;
+        }
+        setMoveFeedback(
+          `Imported library: ${result.importedCollectionCount} collection${
+            result.importedCollectionCount === 1 ? '' : 's'
+          } (${result.importedPaperCount} paper${
+            result.importedPaperCount === 1 ? '' : 's'
+          }).`,
+        );
+        return;
+      }
+
+      // Single collection.
+      const result = importCollection(parsed.data);
+      if (result.status === 'cap-reached') {
+        setMoveFeedback('Delete a collection before importing another one.');
+        return;
+      }
+      setMoveFeedback(
+        `Imported "${result.name}" (${result.importedPaperCount} paper${
+          result.importedPaperCount === 1 ? '' : 's'
+        }).`,
+      );
+    } catch (err) {
+      console.error('[PinSidebar] import failed', err);
+      setMoveFeedback("Couldn't import that file.");
+    }
+  };
+
+  // CSV export is one-way (spreadsheet-friendly) and can't be re-imported,
+  // so it's gated behind a confirmation modal. This runs only after the
+  // user confirms in that modal.
+  const handleConfirmExportCsv = () => {
+    setShowCsvConfirm(false);
+    const exported = exportActiveCollectionCsv();
+    if (!exported) {
+      setMoveFeedback("Couldn't export that collection");
+      return;
+    }
+    triggerDownload(exported.contents, exported.filename, PIN_CSV_MIME);
+    setMoveFeedback(`Exported "${exported.name}" as CSV`);
   };
 
   // Resize, selection, and drag-drop behavior live in dedicated hooks
@@ -1039,7 +1135,7 @@ export default function PinSidebar({
               so it deserves the visible spot. The popover offers two
               destinations: just this collection (shareable) or the
               whole library (personal backup). */}
-          <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
+          <div className='relative flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]'>
             <span className='relative group inline-flex'>
               <button
                 onClick={clearPins}
@@ -1086,42 +1182,6 @@ export default function PinSidebar({
                   }`}
                 />
               </button>
-              {exportMenuOpen && (
-                <div
-                  ref={exportMenuRef}
-                  role='menu'
-                  aria-label='Export'
-                  className='absolute right-0 top-full mt-1 surface-panel border border-app rounded-md shadow-lg z-50 overflow-hidden min-w-[12rem]'
-                >
-                  <button
-                    onClick={handleExportCollection}
-                    disabled={pinnedPapers.length === 0}
-                    className='w-full text-left px-3 py-2 text-[11px] text-stone-700 hover:bg-[var(--surface-muted)] disabled:text-stone-300 disabled:cursor-not-allowed transition flex items-center gap-2'
-                    title={
-                      pinnedPapers.length === 0
-                        ? 'This collection is empty'
-                        : 'Export this collection to a shareable file'
-                    }
-                  >
-                    <Download size={12} className='flex-shrink-0' />
-                    <span className='flex-1 truncate'>
-                      {activeCollection?.name
-                        ? `This collection (${activeCollection.name})`
-                        : 'This collection'}
-                    </span>
-                  </button>
-                  <button
-                    onClick={handleExportAllCollections}
-                    className='w-full text-left px-3 py-2 text-[11px] text-stone-700 hover:bg-[var(--surface-muted)] transition flex items-center gap-2 border-t border-app'
-                    title='Export every collection as a single backup file'
-                  >
-                    <Library size={12} className='flex-shrink-0' />
-                    <span className='flex-1'>
-                      All collections ({collections.length})
-                    </span>
-                  </button>
-                </div>
-              )}
               {pinnedPapers.length === 0 && (
                 <span className={disabledHintClass}>{disabledHintText}</span>
               )}
@@ -1134,6 +1194,88 @@ export default function PinSidebar({
               <Upload size={12} />
               Import
             </button>
+
+            {/* Export dropdown. Fixed, compact width centered under the
+                action row (left-1/2 + translate) with max-w guarding the
+                narrowest sidebar — keeps it inside the panel without
+                spilling off either edge or stretching the full width. */}
+            {exportMenuOpen && (
+              <div
+                ref={exportMenuRef}
+                role='menu'
+                aria-label='Export'
+                className='absolute left-1/2 -translate-x-1/2 top-full mt-1 w-[15rem] max-w-[calc(100%-1rem)] surface-panel border border-app rounded-md shadow-lg z-50 overflow-hidden'
+              >
+                {/* JSON section — the re-importable formats. The section
+                    label sets expectations before the user reads the
+                    individual rows. */}
+                <div className='px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-stone-400'>
+                  Save or share · can be re-imported
+                </div>
+                <button
+                  onClick={handleExportCollection}
+                  disabled={pinnedPapers.length === 0}
+                  className='w-full text-left px-3 py-2 hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50 transition flex items-start gap-2'
+                  title={
+                    pinnedPapers.length === 0
+                      ? 'This collection is empty'
+                      : 'Export this collection to a shareable file'
+                  }
+                >
+                  <Download size={13} className='flex-shrink-0 mt-0.5 text-stone-500' />
+                  <span className='flex-1 min-w-0'>
+                    <span className='block truncate text-[11px] text-stone-700'>
+                      This collection
+                      {activeCollection?.name ? ` · ${activeCollection.name}` : ''}
+                    </span>
+                    <span className='block text-[10px] leading-snug text-stone-400'>
+                      A JSON file to share or back up just this collection.
+                    </span>
+                  </span>
+                </button>
+                <button
+                  onClick={handleExportAllCollections}
+                  className='w-full text-left px-3 py-2 hover:bg-[var(--surface-muted)] transition flex items-start gap-2'
+                  title='Export every collection as a single backup file'
+                >
+                  <Library size={13} className='flex-shrink-0 mt-0.5 text-stone-500' />
+                  <span className='flex-1 min-w-0'>
+                    <span className='block text-[11px] text-stone-700'>
+                      All collections ({collections.length})
+                    </span>
+                    <span className='block text-[10px] leading-snug text-stone-400'>
+                      One JSON backup of your whole library.
+                    </span>
+                  </span>
+                </button>
+
+                {/* CSV section — clearly separated and labelled as a
+                    one-way, spreadsheet-only export. Opening it pops a
+                    confirmation modal rather than downloading immediately. */}
+                <div className='border-t border-app px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-stone-400'>
+                  Open in a spreadsheet · one-way
+                </div>
+                <button
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    setShowCsvConfirm(true);
+                  }}
+                  disabled={pinnedPapers.length === 0}
+                  className='w-full text-left px-3 py-2 hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50 transition flex items-start gap-2'
+                  title='Export this collection as a CSV for spreadsheets'
+                >
+                  <Download size={13} className='flex-shrink-0 mt-0.5 text-stone-500' />
+                  <span className='flex-1 min-w-0'>
+                    <span className='block text-[11px] text-stone-700'>
+                      Export as CSV (Excel)
+                    </span>
+                    <span className='block text-[10px] leading-snug text-stone-400'>
+                      For Excel or Sheets. Can&rsquo;t be re-imported.
+                    </span>
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
 
           {selectionMode && pinnedPapers.length >= 2 && (
@@ -1363,9 +1505,19 @@ export default function PinSidebar({
         </div>
       )}
 
-      {/* Import explainer. There's no in-app file picker — importing is
-          purely drag-and-drop (handled globally by CollectionImportDropzone),
-          so this modal just teaches the gesture. */}
+      {/* Hidden file input backing both the Import button's "Choose file"
+          action. Drag-and-drop is still handled globally by
+          CollectionImportDropzone. */}
+      <input
+        ref={importFileInputRef}
+        type='file'
+        accept='.json,application/json'
+        className='hidden'
+        onChange={handleImportFileSelected}
+      />
+
+      {/* Import explainer. Offers both ways in: pick a file, or drag and
+          drop it anywhere (handled globally by CollectionImportDropzone). */}
       {showImportInfo && (
         <div
           className='fixed inset-0 overlay-soft flex items-center justify-center z-[60]'
@@ -1390,21 +1542,30 @@ export default function PinSidebar({
                   Import a collection
                 </h3>
                 <p className='mt-1.5 text-xs text-stone-600 leading-relaxed'>
-                  Just drag and drop your exported{' '}
+                  Choose your exported{' '}
                   <span className='font-medium text-stone-800'>.json</span> file
-                  anywhere onto this page and Paperazzi will load the collection
-                  for you.
+                  below, or just drag and drop it anywhere onto this page.
+                  Paperazzi will load the collection for you.
                 </p>
               </div>
             </div>
 
-            <div className='mt-4 flex justify-end'>
+            <div className='mt-4 flex justify-end gap-2'>
               <button
                 onClick={() => setShowImportInfo(false)}
+                className='px-3 py-1.5 text-xs button-ghost rounded transition'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowImportInfo(false);
+                  importFileInputRef.current?.click();
+                }}
                 autoFocus
                 className='px-3 py-1.5 text-xs button-primary rounded transition'
               >
-                Got it
+                Choose file
               </button>
             </div>
           </div>
@@ -1454,6 +1615,70 @@ export default function PinSidebar({
                 className='px-3 py-1.5 text-xs button-primary rounded transition'
               >
                 Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV export confirmation. CSV is a one-way export, so the user
+          confirms here before the download starts. */}
+      {showCsvConfirm && (
+        <div
+          className='fixed inset-0 overlay-soft flex items-center justify-center z-[60]'
+          onClick={() => setShowCsvConfirm(false)}
+          role='dialog'
+          aria-modal='true'
+          aria-labelledby='csv-confirm-title'
+        >
+          <div
+            className='surface-card rounded-lg border border-app p-5 max-w-sm w-full mx-4 shadow-lg'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex items-start gap-3'>
+              <div className='flex-shrink-0 mt-0.5 text-warning'>
+                <AlertTriangle size={18} />
+              </div>
+              <div className='min-w-0 flex-1'>
+                <h3
+                  id='csv-confirm-title'
+                  className='text-sm font-semibold text-stone-900'
+                >
+                  Export as CSV?
+                </h3>
+                <p className='mt-1.5 text-xs text-stone-600 leading-relaxed'>
+                  This file is for spreadsheets like Excel or Google Sheets.{' '}
+                  <span className='font-medium text-stone-800'>
+                    You will not be able to re-import it into Paperazzi.
+                  </span>{' '}
+                  To keep a file you can load back later, use a JSON export
+                  instead.
+                </p>
+                <p className='mt-2 text-[11px] text-stone-500 leading-relaxed'>
+                  It opens directly in Excel (double-click). In Google Sheets,
+                  delete the first <code className='text-stone-600'>sep=,</code>{' '}
+                  row if it appears. If columns still look merged, use{' '}
+                  <span className='text-stone-600'>
+                    Data → From Text/CSV
+                  </span>{' '}
+                  and choose comma as the separator.
+                </p>
+              </div>
+            </div>
+
+            <div className='mt-4 flex justify-end gap-2'>
+              <button
+                onClick={() => setShowCsvConfirm(false)}
+                className='px-3 py-1.5 text-xs button-ghost rounded transition'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmExportCsv}
+                autoFocus
+                className='px-3 py-1.5 text-xs button-primary rounded transition'
+              >
+                Export CSV
               </button>
             </div>
           </div>

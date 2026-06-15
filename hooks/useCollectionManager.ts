@@ -19,6 +19,10 @@ import {
   buildCollectionTransferFilename,
   buildLibraryTransfer,
   buildLibraryTransferFilename,
+  buildCollectionCsv,
+  buildCollectionCsvFilename,
+  buildLibraryCsv,
+  buildLibraryCsvFilename,
   type ImportedPinCollection,
   serializeCollectionTransfer,
   serializeLibraryTransfer,
@@ -97,6 +101,8 @@ export interface CollectionManagerHandle {
   collectionsAtCap: boolean;
   exportActiveCollection: () => ExportCollectionResult | null;
   exportAllCollections: () => ExportLibraryResult | null;
+  exportActiveCollectionCsv: () => ExportCollectionResult | null;
+  exportAllCollectionsCsv: () => ExportLibraryResult | null;
   importCollection: (collection: ImportedPinCollection) => ImportCollectionResult;
   importLibrary: (collections: ImportedPinCollection[]) => ImportLibraryResult;
 }
@@ -328,6 +334,46 @@ export function useCollectionManager({
     };
   }, [index.collections, index.activeId, flushPending, pinnedRef, groupsRef]);
 
+  // CSV variants — flat, spreadsheet-friendly, one-way exports. Same data
+  // sources as the JSON exports above; only the serialisation differs.
+  const exportActiveCollectionCsv =
+    useCallback((): ExportCollectionResult | null => {
+      const active = index.collections.find((c) => c.id === index.activeId);
+      if (!active) return null;
+      return {
+        name: active.name,
+        filename: buildCollectionCsvFilename(active.name),
+        contents: buildCollectionCsv(
+          active.name,
+          pinnedRef.current,
+          groupsRef.current,
+        ),
+      };
+    }, [index.collections, index.activeId, pinnedRef, groupsRef]);
+
+  const exportAllCollectionsCsv = useCallback((): ExportLibraryResult | null => {
+    if (index.collections.length === 0) return null;
+    flushPending();
+
+    const bundles = index.collections.map((collection) => {
+      if (collection.id === index.activeId) {
+        return {
+          name: collection.name,
+          papers: pinnedRef.current,
+          groups: groupsRef.current,
+        };
+      }
+      const loaded = loadCollection(collection.id);
+      return { name: collection.name, papers: loaded.papers, groups: loaded.groups };
+    });
+
+    return {
+      filename: buildLibraryCsvFilename(),
+      contents: buildLibraryCsv(bundles),
+      collectionCount: bundles.length,
+    };
+  }, [index.collections, index.activeId, flushPending, pinnedRef, groupsRef]);
+
   const importCollection = useCallback(
     (collection: ImportedPinCollection): ImportCollectionResult => {
       if (index.collections.length >= MAX_COLLECTIONS) {
@@ -458,6 +504,8 @@ export function useCollectionManager({
     collectionsAtCap: index.collections.length >= MAX_COLLECTIONS,
     exportActiveCollection,
     exportAllCollections,
+    exportActiveCollectionCsv,
+    exportAllCollectionsCsv,
     importCollection,
     importLibrary,
   };
