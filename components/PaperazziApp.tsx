@@ -528,6 +528,16 @@ function PaperazziAppContent() {
         journalFilterMode: filters.journalFilterMode,
       }));
 
+      // Stay in the citation-network view when committing filters from it.
+      // `network` isn't a Filters field, so buildURLParams doesn't carry it
+      // — without this, pressing Enter to apply a Wide/Specific journal
+      // filter would drop the `network` param and kick the user out to a
+      // standard search instead of re-filtering the graph. useNetworkView
+      // already re-fetches refs/cites through the journal filter, so
+      // preserving the param is all that's needed.
+      const network = searchParams.get('network');
+      if (network) params.set('network', network);
+
       router.push(`/search?${params.toString()}`);
     };
 
@@ -870,13 +880,17 @@ function PaperazziAppContent() {
           // Adding any manual journal auto-switches to specific mode.
           const nextMode: NonNullable<Filters['journalFilterMode']> =
             selected.length > 0 ? 'specific' : filters.journalFilterMode || 'off';
+          // Queue the change like authors / institutions: update the live
+          // `filters` only, which turns the navbar submit button green. We
+          // deliberately do NOT push the URL here — an eager push rebuilds
+          // the URL from the *committed* query and would drop any keyword
+          // the user has typed but not yet submitted. The user commits
+          // journals + keyword together with Enter / the Search button.
           setFilters((prev) => ({
             ...prev,
             journals: selected,
             journalFilterMode: nextMode,
           }));
-          const params = buildURLParams({ journals: selected, page: 1 });
-          router.push(`/search?${params.toString()}`);
         }}
       />
 

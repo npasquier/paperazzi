@@ -25,6 +25,10 @@ function NavBarContent() {
   const isSearchPage = pathname?.startsWith('/search') || false;
 
   const [query, setQuery] = useState('');
+  // Collapsed (single row, "+N more") vs expanded (wrapping overlay) layout.
+  // Only "+N more" toggles this on — focusing the input to edit the keyword
+  // must NOT expand the pills. Leaving the bar collapses it again.
+  const [pillsExpanded, setPillsExpanded] = useState(false);
   // Stored-data viewer modal — direct trigger in the navbar.
   const [showStorage, setShowStorage] = useState(false);
 
@@ -206,6 +210,11 @@ function NavBarContent() {
         return;
       }
     }
+    // Escape with the dropdown closed: leave the bar (collapses the overlay).
+    if (e.key === 'Escape') {
+      e.currentTarget.blur();
+      return;
+    }
     if (
       e.key === 'Backspace' &&
       query === '' &&
@@ -231,6 +240,60 @@ function NavBarContent() {
       handleSearch();
     }
   };
+
+  // ── Chip display model ───────────────────────────────────────────────
+  // All three chip types flattened into one render list so the collapsed
+  // bar can show the first few and summarize the rest as "+N more".
+  const chipItems = [
+    ...chips.map((chip) => ({
+      key: `a-${chip.id}`,
+      label: `@${chip.name || chip.id}`,
+      title: `Filtering by author: ${chip.name || chip.id}`,
+      ariaLabel: `Remove ${chip.name || chip.id} author filter`,
+      bg: 'var(--success-bg)',
+      border: 'var(--success-border)',
+      fg: 'var(--success-foreground)',
+      hoverClass: 'hover:bg-[var(--success-border)]',
+      onRemove: () => removeAuthorChip(chip.id),
+    })),
+    ...journalChips.map((chip) => {
+      const abbrev = abbrevForIssn(chip.issn);
+      return {
+        key: `j-${chip.issn}`,
+        label: `#${abbrev || chip.name || chip.issn}`,
+        title: chip.name
+          ? `Filtering by journal: ${chip.name}${abbrev ? ` (#${abbrev})` : ''}`
+          : `Filtering by journal: ${chip.issn}`,
+        ariaLabel: `Remove ${chip.name || chip.issn} journal filter`,
+        bg: 'var(--analysis-bg)',
+        border: 'var(--analysis-border)',
+        fg: 'var(--analysis-foreground)',
+        hoverClass: 'hover:bg-[var(--analysis-border)]',
+        onRemove: () => removeJournalChip(chip.issn),
+      };
+    }),
+    ...institutionChips.map((chip) => ({
+      key: `i-${chip.id}`,
+      label: `~${chip.display_name}`,
+      title: `Filtering by institution: ${chip.display_name}`,
+      ariaLabel: `Remove ${chip.display_name} institution filter`,
+      bg: 'var(--warning-bg)',
+      border: 'var(--warning-border)',
+      fg: 'var(--warning-foreground)',
+      hoverClass: 'hover:bg-[var(--warning-border)]',
+      onRemove: () => removeInstitutionChip(chip.id),
+    })),
+  ];
+
+  // Collapsed: single row, first N chips + "+N more" summary, input always
+  // visible. Expanded (focused): chips wrap in an overlay capped at two
+  // rows (scrolls beyond) so the navbar itself never changes height.
+  const COLLAPSED_CHIP_LIMIT = 2;
+  const searchExpanded = pillsExpanded;
+  const visibleChips = searchExpanded
+    ? chipItems
+    : chipItems.slice(0, COLLAPSED_CHIP_LIMIT);
+  const hiddenChipCount = chipItems.length - visibleChips.length;
 
   return (
     <nav className='surface-panel border-app border-b h-16 shrink-0'>
@@ -267,141 +330,107 @@ function NavBarContent() {
 
         {isSearchPage ? (
           <div className='flex-1 max-w-2xl ml-auto mr-auto group'>
-            <div className='relative'>
-              {/* Chip facade — chips + real text input share one focus-ring container. */}
+            {/* Fixed-height anchor — the bar overlays content below when it
+                expands, so the 64px navbar itself never changes height. */}
+            <div className='relative h-11'>
               <div
-                onClick={() => inputRef.current?.focus()}
-                className='w-full flex flex-wrap items-center gap-1.5 px-4 py-1.5 min-h-[44px] rounded-full cursor-text overflow-hidden shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)]'
+                className='absolute inset-x-0 top-0 z-40'
+                onBlurCapture={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                    setPillsExpanded(false);
+                  }
+                }}
               >
-                {/* Author chips — green (success palette). */}
-                {chips.map((chip) => (
-                  <span
-                    key={`a-${chip.id}`}
-                    className='inline-flex items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
-                    style={{
-                      background: 'var(--success-bg)',
-                      borderColor: 'var(--success-border)',
-                      color: 'var(--success-foreground)',
-                    }}
-                    title={`Filtering by author: ${chip.name || chip.id}`}
+                <div className='relative'>
+                  {/* Chip facade — chips + real text input share one focus-ring
+                      container. Collapsed: single row, first chips + "+N more".
+                      Expanded (focused): wraps up to two rows, scrolls beyond. */}
+                  <div
+                    onClick={() => inputRef.current?.focus()}
+                    className={`w-full flex items-center gap-1.5 pl-4 pr-12 py-1.5 min-h-[44px] cursor-text shadow-sm transition focus-within-accent bg-[var(--background-card)] border border-[var(--border-muted)] ${
+                      searchExpanded
+                        ? 'flex-wrap rounded-[22px] max-h-[76px] overflow-y-auto'
+                        : 'flex-nowrap rounded-full overflow-hidden'
+                    }`}
                   >
-                    <span className='truncate max-w-[180px]'>@{chip.name || chip.id}</span>
-                    <button
-                      type='button'
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeAuthorChip(chip.id);
-                      }}
-                      className='rounded-full p-0.5 transition hover:bg-[var(--success-border)]'
-                      aria-label={`Remove ${chip.name || chip.id} author filter`}
-                      title='Remove'
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
+                    {visibleChips.map((c) => (
+                      <span
+                        key={c.key}
+                        className='inline-flex flex-shrink-0 items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
+                        style={{ background: c.bg, borderColor: c.border, color: c.fg }}
+                        title={c.title}
+                      >
+                        <span className='truncate max-w-[180px]'>{c.label}</span>
+                        <button
+                          type='button'
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            c.onRemove();
+                          }}
+                          className={`rounded-full p-0.5 transition ${c.hoverClass}`}
+                          aria-label={c.ariaLabel}
+                          title='Remove'
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
 
-                {/* Journal chips — purple (analysis palette). */}
-                {journalChips.map((chip) => {
-                  const abbrev = abbrevForIssn(chip.issn);
-                  const label = abbrev || chip.name || chip.issn;
-                  const tooltip = chip.name
-                    ? `Filtering by journal: ${chip.name}${abbrev ? ` (#${abbrev})` : ''}`
-                    : `Filtering by journal: ${chip.issn}`;
-                  return (
-                    <span
-                      key={`j-${chip.issn}`}
-                      className='inline-flex items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
-                      style={{
-                        background: 'var(--analysis-bg)',
-                        borderColor: 'var(--analysis-border)',
-                        color: 'var(--analysis-foreground)',
-                      }}
-                      title={tooltip}
-                    >
-                      <span className='truncate max-w-[180px]'>#{label}</span>
+                    {/* Overflow summary — click to expand and see everything. */}
+                    {!searchExpanded && hiddenChipCount > 0 && (
                       <button
                         type='button'
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => {
                           e.stopPropagation();
-                          removeJournalChip(chip.issn);
+                          setPillsExpanded(true);
                         }}
-                        className='rounded-full p-0.5 transition hover:bg-[var(--analysis-border)]'
-                        aria-label={`Remove ${chip.name || chip.issn} journal filter`}
-                        title='Remove'
+                        className='inline-flex flex-shrink-0 items-center h-7 px-2 rounded-md text-xs font-medium border border-[var(--border-muted)] bg-[var(--surface-muted)] text-app-soft hover:text-app transition'
+                        title={`${hiddenChipCount} more filter${hiddenChipCount > 1 ? 's' : ''} — click to show all`}
+                        aria-label={`Show ${hiddenChipCount} more filters`}
                       >
-                        <X size={12} />
+                        +{hiddenChipCount} more
                       </button>
-                    </span>
-                  );
-                })}
+                    )}
 
-                {/* Institution chips — amber (warning palette). */}
-                {institutionChips.map((chip) => (
-                  <span
-                    key={`i-${chip.id}`}
-                    className='inline-flex items-center gap-1 pl-2 pr-1 h-7 rounded-md text-xs font-medium border'
-                    style={{
-                      background: 'var(--warning-bg)',
-                      borderColor: 'var(--warning-border)',
-                      color: 'var(--warning-foreground)',
-                    }}
-                    title={`Filtering by institution: ${chip.display_name}`}
+                    <input
+                      ref={inputRef}
+                      type='text'
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      onBlur={handleInputBlur}
+                      placeholder={
+                        chipItems.length > 0
+                          ? ''
+                          : 'Search papers, @surname+firstname, #journals, ~institutions…'
+                      }
+                      className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
+                    />
+                  </div>
+
+                  {/* Submit affordance — pinned to the bar's top-right pill end
+                      so it stays put when the bar expands. */}
+                  <button
+                    type='button'
+                    onClick={() => handleSearch()}
+                    className={`absolute right-0 top-0 h-11 w-11 rounded-r-full inline-flex items-center justify-center transition ${
+                      isDirty
+                        ? ''
+                        : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)]'
+                    }`}
+                    style={
+                      isDirty
+                        ? { background: 'var(--success-bg)', color: 'var(--success-foreground)' }
+                        : undefined
+                    }
+                    title={isDirty ? 'Apply pending changes (Enter)' : 'Search (Enter)'}
+                    aria-label={isDirty ? 'Apply pending changes' : 'Search'}
                   >
-                    <span className='truncate max-w-[180px]'>~{chip.display_name}</span>
-                    <button
-                      type='button'
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeInstitutionChip(chip.id);
-                      }}
-                      className='rounded-full p-0.5 transition hover:bg-[var(--warning-border)]'
-                      aria-label={`Remove ${chip.display_name} institution filter`}
-                      title='Remove'
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-
-                <input
-                  ref={inputRef}
-                  type='text'
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={handleInputBlur}
-                  placeholder={
-                    chips.length > 0 || journalChips.length > 0 || institutionChips.length > 0
-                      ? ''
-                      : 'Search papers, @surname+firstname, #journals, ~institutions…'
-                  }
-                  className='flex-1 min-w-[80px] outline-none border-none bg-transparent text-sm py-1 placeholder:text-app-soft'
-                />
-
-                {/* Submit affordance — integrated into the bar's right pill end. */}
-                <button
-                  type='button'
-                  onClick={() => handleSearch()}
-                  className={`-my-1.5 -mr-4 flex-shrink-0 h-11 w-11 rounded-r-full inline-flex items-center justify-center transition ${
-                    isDirty
-                      ? ''
-                      : 'text-app-soft hover:text-app hover:bg-[var(--surface-muted)]'
-                  }`}
-                  style={
-                    isDirty
-                      ? { background: 'var(--success-bg)', color: 'var(--success-foreground)' }
-                      : undefined
-                  }
-                  title={isDirty ? 'Apply pending changes (Enter)' : 'Search (Enter)'}
-                  aria-label={isDirty ? 'Apply pending changes' : 'Search'}
-                >
-                  <Search size={18} />
-                </button>
-              </div>
+                    <Search size={18} />
+                  </button>
+                </div>
 
               {/* @-mention autocomplete dropdown. */}
               {mentionOpen && mentionSuggestions.length > 0 && (
@@ -409,7 +438,7 @@ function NavBarContent() {
                   role='listbox'
                   aria-label='Shortcut suggestions'
                   onScroll={handleMentionListScroll}
-                  className='absolute left-0 right-0 top-full mt-1 surface-panel border border-app rounded-lg shadow-lg z-50 overflow-y-auto overscroll-contain max-h-80'
+                  className='mt-1 surface-panel border border-app rounded-lg shadow-lg overflow-y-auto overscroll-contain max-h-80'
                 >
                   {mentionSuggestions.map((sug, idx) => {
                     const active = idx === mentionIdx;
@@ -482,6 +511,7 @@ function NavBarContent() {
                     )}
                 </div>
               )}
+              </div>
             </div>
           </div>
         ) : (
